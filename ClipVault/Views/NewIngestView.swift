@@ -32,8 +32,13 @@ struct NewIngestView: View {
           Button("Choose Source") { vm.chooseSource(settings: settings) }
           Text(vm.sourceURL?.path ?? "No source selected").lineLimit(1)
         }
-        Label(vm.detectedCardType.summary, systemImage: vm.detectedCardType == .generic ? "folder" : "checkmark.seal.fill")
-          .foregroundStyle(vm.detectedCardType == .generic ? .secondary : .green)
+        if vm.detectedCardType == .generic {
+          Label(vm.detectedCardType.summary, systemImage: "folder")
+            .foregroundStyle(.secondary)
+        } else {
+          Label(vm.detectedCardType.summary, systemImage: "checkmark.seal.fill")
+            .foregroundStyle(.green)
+        }
       }
     }
   }
