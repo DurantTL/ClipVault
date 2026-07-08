@@ -19,7 +19,7 @@ final class SourceScanner {
       for root in roots {
         guard
           let e = fm.enumerator(
-            at: root, includingPropertiesForKeys: [.isHiddenKey, .fileSizeKey, .creationDateKey],
+            at: root, includingPropertiesForKeys: [.isHiddenKey, .fileSizeKey, .creationDateKey, .contentModificationDateKey],
             options: [.skipsHiddenFiles, .skipsPackageDescendants])
         else { continue }
         for case let url as URL in e {
@@ -27,13 +27,13 @@ final class SourceScanner {
             continue
           }
           guard Self.supported.contains(url.pathExtension.lowercased()) else { continue }
-          let rv = try url.resourceValues(forKeys: [.isHiddenKey, .fileSizeKey, .creationDateKey])
+          let rv = try url.resourceValues(forKeys: [.isHiddenKey, .fileSizeKey, .creationDateKey, .contentModificationDateKey])
           if rv.isHidden == true || url.lastPathComponent.hasPrefix(".") { continue }
           let relBase = source.standardizedFileURL.path
           let rel = url.standardizedFileURL.path.replacingOccurrences(of: relBase + "/", with: "")
           out.append(
             SourceVideo(
-              url: url, relativePath: rel, size: Int64(rv.fileSize ?? 0), createdAt: rv.creationDate
+              url: url, relativePath: rel, size: Int64(rv.fileSize ?? 0), createdAt: rv.creationDate, modifiedAt: rv.contentModificationDate, sonyCardFolderPath: fm.fileExists(atPath: sonyClip.path) ? sonyClip.path : nil
             ))
         }
       }

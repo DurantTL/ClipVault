@@ -8,13 +8,12 @@ struct SidebarView: View {
 
   var body: some View {
     List(selection: $vm.filter) {
-      Section("Library") {
-        ForEach(built, id: \.self) {
-          Text($0)
-            .tag($0)
-        }
+      Section {
+        Text("Home").tag("All Clips")
       }
-
+      Section("Library Filters") {
+        ForEach(built, id: \.self) { Text($0).tag($0) }
+      }
       Section("Custom Folders") {
         ForEach(vm.project.customFolders, id: \.self) { folder in
           Text(folder)
@@ -25,14 +24,17 @@ struct SidebarView: View {
               return true
             }
         }
-
         HStack {
           TextField("New folder", text: $newFolder)
-
           Button("+") {
             vm.addFolder(newFolder)
             newFolder = ""
           }
+        }
+      }
+      Section("Production Tags") {
+        ForEach(vm.productionTags, id: \.self) { tag in
+          Text(tag).tag(tag)
         }
       }
     }

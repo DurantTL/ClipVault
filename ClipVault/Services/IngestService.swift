@@ -10,7 +10,7 @@ final class IngestService {
   private let copyService = StreamingCopyService()
   func cancel() { cancelled = true }
   func ingest(
-    name: String, source: URL, destination: URL, videos: [SourceVideo], bookmarks: (Data?, Data?),
+    name: String, shootName: String, source: URL, destination: URL, videos: [SourceVideo], bookmarks: (Data?, Data?),
     settings: AppSettings, progress: @escaping @MainActor (IngestProgress) -> Void
   ) async throws -> ClipVaultProject {
     cancelled = false
@@ -40,7 +40,9 @@ final class IngestService {
               totalCount: videos.count, copiedBytes: done, totalBytes: total,
               bytesPerSecond: Double(done) / max(1, Date().timeIntervalSince(started)),
               message: "Copying"))
-          let rel = settings.preserveSourceStructure ? v.relativePath : v.url.lastPathComponent
+          let cleanShootName = SafeFilename.safeFolderName(shootName)
+          let flatRelativePath = cleanShootName.isEmpty ? v.url.lastPathComponent : "\(cleanShootName)/\(v.url.lastPathComponent)"
+          let rel = settings.preserveSourceStructure ? v.relativePath : flatRelativePath
           let destURL = SafeFilename.uniqueURL(for: projectFolder.appendingPathComponent(rel))
           try FileManager.default.createDirectory(
             at: destURL.deletingLastPathComponent(), withIntermediateDirectories: true)
@@ -48,7 +50,7 @@ final class IngestService {
             originalSourcePath: v.url.path, originalFilename: v.url.lastPathComponent,
             currentPath: destURL.path, currentFilename: destURL.lastPathComponent,
             relativePath: destURL.path.replacingOccurrences(of: projectFolder.path + "/", with: ""),
-            fileSize: v.size, createdAt: v.createdAt)
+            fileSize: v.size, createdAt: v.createdAt, modifiedAt: v.modifiedAt, ingestDate: Date(), sonyCardFolderPath: v.sonyCardFolderPath, cardVolumeName: source.lastPathComponent)
           do {
             _ = try await copyService.copy(
               from: v.url, to: destURL, alreadyCopiedBytes: done, totalBytes: total

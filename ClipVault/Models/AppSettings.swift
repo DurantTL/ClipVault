@@ -2,7 +2,7 @@ import SwiftUI
 
 final class AppSettings: ObservableObject {
   @AppStorage("verificationMode") var verificationModeRaw = VerificationMode.fast.rawValue
-  @AppStorage("preserveSourceStructure") var preserveSourceStructure = true
+  @AppStorage("preserveSourceStructure") var preserveSourceStructure = false
   @AppStorage("thumbnailQuality") var thumbnailQualityRaw = ThumbnailQuality.balanced.rawValue
   @AppStorage("showTechnicalDetails") var showTechnicalDetails = false
   @AppStorage("includeProxyFiles") var includeProxyFiles = false

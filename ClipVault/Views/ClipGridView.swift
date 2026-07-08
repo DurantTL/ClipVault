@@ -2,16 +2,78 @@ import SwiftUI
 
 struct ClipGridView: View {
   @ObservedObject var vm: LibraryViewModel
-  let cols = [GridItem(.adaptive(minimum: 180), spacing: 16)]
+
+  var columns: [GridItem] {
+    [GridItem(.adaptive(minimum: vm.thumbnailSize), spacing: 16)]
+  }
+
   var body: some View {
-    ScrollView {
-      LazyVGrid(columns: cols, spacing: 16) {
-        ForEach(vm.filteredClips) { clip in
-          ClipCardView(clip: clip, selected: vm.selectedClipID == clip.id).onTapGesture {
-            vm.selectedClipID = clip.id
-          }.onTapGesture(count: 2) { vm.previewClip = clip }.draggable(clip)
+    VStack(spacing: 0) {
+      KeyboardLegend()
+      ScrollView {
+        LazyVGrid(columns: columns, spacing: 16) {
+          ForEach(vm.filteredClips) { clip in
+            ClipCardView(clip: clip, selected: vm.selectedClipID == clip.id)
+              .onTapGesture { vm.selectedClipID = clip.id }
+              .onTapGesture(count: 2) {
+                vm.selectedClipID = clip.id
+                vm.previewSelected()
+              }
+              .draggable(clip)
+          }
         }
-      }.padding()
-    }.focusable().onDeleteCommand { vm.setStatus(.reject) }
+        .padding()
+      }
+    }
+    .background(KeyboardShortcutCatcher { event in handle(event) }.frame(width: 0, height: 0))
+    .focusable()
+    .onDeleteCommand { vm.setStatus(.reject) }
+  }
+
+  private func handle(_ event: NSEvent) -> Bool {
+    if NSApp.keyWindow?.firstResponder is NSTextView { return false }
+    if event.modifierFlags.contains(.command), event.charactersIgnoringModifiers?.lowercased() == "r" {
+      vm.reveal()
+      return true
+    }
+    switch event.keyCode {
+    case 49:
+      vm.previewSelected()
+    case 53:
+      vm.closePreview()
+    case 124:
+      vm.selectNext()
+    case 123:
+      vm.selectPrevious()
+    default:
+      switch event.charactersIgnoringModifiers {
+      case "5": vm.setStatus(.keep)
+      case "3": vm.setStatus(.maybe)
+      case "1": vm.setStatus(.reject)
+      case "0": vm.setStatus(.unrated)
+      default: return false
+      }
+    }
+    return true
+  }
+}
+
+struct KeyboardLegend: View {
+  var body: some View {
+    HStack(spacing: 14) {
+      Label("Space Preview", systemImage: "space")
+      Text("5 Keep")
+      Text("3 Maybe")
+      Text("1 Reject")
+      Text("0 Clear")
+      Text("←/→ Select")
+      Text("⌘R Reveal")
+      Text("Esc Close")
+    }
+    .font(.caption)
+    .foregroundStyle(.secondary)
+    .padding(8)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .background(.thinMaterial)
   }
 }
