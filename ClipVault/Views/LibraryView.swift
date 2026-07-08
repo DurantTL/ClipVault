@@ -1,3 +1,27 @@
 import SwiftUI
-struct LibraryView: View { @StateObject var viewModel: LibraryViewModel; @State private var newFolder = ""
- var body: some View { NavigationSplitView { SidebarView(vm:viewModel, newFolder:$newFolder) } content: { ClipGridView(vm:viewModel) } detail: { ClipInspectorView(clip:viewModel.selectedClip, vm:viewModel) } .toolbar { Button("Open Library"){}; Button("Undo Last Move"){viewModel.undoMove()}; Button("Reveal in Finder"){viewModel.reveal()} } .sheet(item:$viewModel.previewClip){ PlayerPreviewView(clip:$0) }.onReceive(NotificationCenter.default.publisher(for:.clipKeep)){_ in viewModel.setStatus(.keep)}.onReceive(NotificationCenter.default.publisher(for:.clipMaybe)){_ in viewModel.setStatus(.maybe)}.onReceive(NotificationCenter.default.publisher(for:.clipReject)){_ in viewModel.setStatus(.reject)}.onReceive(NotificationCenter.default.publisher(for:.clipReveal)){_ in viewModel.reveal()} } }
+
+struct LibraryView: View {
+  @StateObject var viewModel: LibraryViewModel
+  @State private var newFolder = ""
+  var body: some View {
+    NavigationSplitView {
+      SidebarView(vm: viewModel, newFolder: $newFolder)
+    } content: {
+      ClipGridView(vm: viewModel)
+    } detail: {
+      ClipInspectorView(clip: viewModel.selectedClip, vm: viewModel)
+    }.toolbar {
+      Button("Open Library") {}
+      Button("Undo Last Move") { viewModel.undoMove() }
+      Button("Reveal in Finder") { viewModel.reveal() }
+    }.sheet(item: $viewModel.previewClip) { PlayerPreviewView(clip: $0) }.onReceive(
+      NotificationCenter.default.publisher(for: .clipKeep)
+    ) { _ in viewModel.setStatus(.keep) }.onReceive(
+      NotificationCenter.default.publisher(for: .clipMaybe)
+    ) { _ in viewModel.setStatus(.maybe) }.onReceive(
+      NotificationCenter.default.publisher(for: .clipReject)
+    ) { _ in viewModel.setStatus(.reject) }.onReceive(
+      NotificationCenter.default.publisher(for: .clipReveal)
+    ) { _ in viewModel.reveal() }
+  }
+}

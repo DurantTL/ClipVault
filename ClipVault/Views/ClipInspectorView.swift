@@ -1,3 +1,29 @@
 import SwiftUI
-struct ClipInspectorView: View { let clip: Clip?; @ObservedObject var vm: LibraryViewModel
- var body: some View { VStack(alignment:.leading,spacing:12){ if let c=clip { Text(c.currentFilename).font(.title2.bold()); Picker("Cull", selection: Binding(get:{c.cullStatus}, set:{vm.setStatus($0)})){ ForEach(CullStatus.allCases){ Text($0.label).tag($0) } }; Button("Preview / Play"){vm.previewClip=c}; Button("Reveal in Finder"){vm.reveal()}; Divider(); Text("Size: \(FileSizeFormatterUtil.string(c.fileSize))"); Text("Duration: \(DurationFormatterUtil.string(c.duration))"); Text("Resolution: \(c.width.map(String.init) ?? "?") × \(c.height.map(String.init) ?? "?")"); Text("Frame rate: \(c.frameRate.map{String(format:"%.2f",$0)} ?? "?")"); Text("Codec: \(c.codec ?? "Unavailable")"); Text("Source: \(c.originalSourcePath)").font(.caption).textSelection(.enabled); if let e=c.errorMessage { Text(e).foregroundStyle(.red) } } else { Text("Select a clip") }; Spacer() }.padding().frame(minWidth:260) } }
+
+struct ClipInspectorView: View {
+  let clip: Clip?
+  @ObservedObject var vm: LibraryViewModel
+  var body: some View {
+    VStack(alignment: .leading, spacing: 12) {
+      if let c = clip {
+        Text(c.currentFilename).font(.title2.bold())
+        Picker("Cull", selection: Binding(get: { c.cullStatus }, set: { vm.setStatus($0) })) {
+          ForEach(CullStatus.allCases) { Text($0.label).tag($0) }
+        }
+        Button("Preview / Play") { vm.previewClip = c }
+        Button("Reveal in Finder") { vm.reveal() }
+        Divider()
+        Text("Size: \(FileSizeFormatterUtil.string(c.fileSize))")
+        Text("Duration: \(DurationFormatterUtil.string(c.duration))")
+        Text("Resolution: \(c.width.map(String.init) ?? "?") × \(c.height.map(String.init) ?? "?")")
+        Text("Frame rate: \(c.frameRate.map{String(format:"%.2f",$0)} ?? "?")")
+        Text("Codec: \(c.codec ?? "Unavailable")")
+        Text("Source: \(c.originalSourcePath)").font(.caption).textSelection(.enabled)
+        if let e = c.errorMessage { Text(e).foregroundStyle(.red) }
+      } else {
+        Text("Select a clip")
+      }
+      Spacer()
+    }.padding().frame(minWidth: 260)
+  }
+}
