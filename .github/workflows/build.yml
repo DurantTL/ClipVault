@@ -1,0 +1,40 @@
+name: Build ClipVault
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+jobs:
+  build:
+    name: Build macOS App
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Show Xcode version
+        run: |
+          xcodebuild -version
+          xcode-select -p
+
+      - name: Generate icons if script exists
+        run: |
+          if [ -f Scripts/generate_app_icon.py ]; then
+            python3 Scripts/generate_app_icon.py
+          fi
+
+      - name: List schemes
+        run: |
+          xcodebuild -list -project ClipVault.xcodeproj
+
+      - name: Build
+        run: |
+          xcodebuild \
+            -project ClipVault.xcodeproj \
+            -scheme ClipVault \
+            -configuration Debug \
+            -destination 'platform=macOS' \
+            CODE_SIGNING_ALLOWED=NO \
+            build
