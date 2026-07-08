@@ -147,7 +147,7 @@ final class IngestService {
             copiedBytes: total, totalBytes: total, message: "Complete"))
         project.ingestIncomplete = false
         project.ingestStatus = project.failedClipCount > 0 ? .incomplete : .complete
-        project.canResumeIngest = project.ingestStatus != .complete
+        project.canResumeIngest = project.ingestStatus.canResume
         self.refreshCounts(&project)
         try self.store.save(project)
         return project
