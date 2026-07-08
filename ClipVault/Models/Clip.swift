@@ -150,6 +150,7 @@ struct Clip: Identifiable, Codable, Equatable, Transferable {
     case whiteBalanceKelvin, whiteBalanceTint, whiteBalanceConfidence, whiteBalanceSource
     case largestFaceCoveragePercent, bestFaceFrameTime, possibleGroupShot, lowFaceVisibility
     case facePartiallyVisible, uniqueFaceConfidence, shakeScore, motionScore, highMotion
+    case verified
   }
 
   init(
@@ -202,7 +203,8 @@ struct Clip: Identifiable, Codable, Equatable, Transferable {
     relativePath = try c.decodeIfPresent(String.self, forKey: .relativePath) ?? destinationRelativePath
     fileSize = try c.decodeIfPresent(Int64.self, forKey: .fileSize) ?? expectedFileSize
     copyStatus = try c.decodeIfPresent(ClipCopyStatus.self, forKey: .copyStatus) ?? (currentPath.isEmpty ? .pending : .copied)
-    verificationStatus = try c.decodeIfPresent(VerificationStatus.self, forKey: .verificationStatus) ?? (currentPath.isEmpty ? .pending : .copied)
+    let legacyVerified = try c.decodeIfPresent(Bool.self, forKey: .verified) ?? false
+    verificationStatus = try c.decodeIfPresent(VerificationStatus.self, forKey: .verificationStatus) ?? (legacyVerified ? .verified : .pending)
     cullStatus = try c.decodeIfPresent(CullStatus.self, forKey: .cullStatus) ?? .unrated
     thumbnailStatus = try c.decodeIfPresent(ThumbnailStatus.self, forKey: .thumbnailStatus) ?? .pending
     analysisStatus = try c.decodeIfPresent(AnalysisStatus.self, forKey: .analysisStatus) ?? .notAnalyzed

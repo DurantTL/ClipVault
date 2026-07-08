@@ -38,3 +38,14 @@ jobs:
             -destination 'platform=macOS' \
             CODE_SIGNING_ALLOWED=NO \
             build
+
+
+      - name: Test
+        run: |
+          xcodebuild \
+            -project ClipVault.xcodeproj \
+            -scheme ClipVault \
+            -configuration Debug \
+            -destination 'platform=macOS' \
+            CODE_SIGNING_ALLOWED=NO \
+            test
