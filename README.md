@@ -168,3 +168,33 @@ python3 Scripts/generate_app_icon.py
 ```
 
 The generated PNG files are ignored by git at `ClipVault/Assets.xcassets/AppIcon.appiconset/*.png`. The SwiftUI in-app logo remains available without generated binary assets.
+
+## Session-based ingest review
+
+ClipVault now reviews source media as detected sessions before copying. Sessions are grouped by recording/creation date with a 90-minute gap split so a day with multiple shoots can be selected in chunks. Session cards show the date/time range, clip count, total size, camera/card type (Sony, Canon/DCF, or Generic), and a lightweight thumbnail strip placeholder before ingest starts.
+
+The ingest panel keeps rename off by default. When enabled, files are copied as `[Project Name]-[YYYY][MM][DD]-[Sequence].EXT`, and the original filename remains stored in `.clipvault-project.json`. Start Ingest stays disabled until there is a destination, project name, and at least one selected clip/session.
+
+Parallel options include thumbnail generation during ingest, local analysis after ingest, and contact-sheet preparation toggles. Analysis remains local-only and runs only after files are safely copied into the destination project.
+
+## Local analysis details and disclaimers
+
+Local analysis uses Apple APIs only: AVFoundation samples a small number of frames, Core Graphics/Core Image-style pixel metrics estimate focus, exposure, contrast, white balance, and motion, and Vision detects face rectangles. Fast mode samples 3 frames, Balanced samples 5 frames or roughly every 10 seconds, and Detailed samples every 2–5 seconds with a cap; ClipVault never analyzes every frame.
+
+- **Focus:** sharpness is estimated from luminance edge energy. “Possibly Out of Focus” is advisory and can be wrong for intentional soft focus, background shots, haze, or low-detail scenes.
+- **Exposure/contrast:** brightness, dark pixels, bright pixels, and contrast spread are estimated from sampled frames. Tags such as Dark Clip, Bright Clip, Low Contrast, and Balanced Exposure are organizational hints only.
+- **White balance:** ClipVault stores an approximate Kelvin-style value when camera metadata is unavailable. Estimated values are shown as “Approx.” with confidence because true camera white balance is often not present in MP4/MOV metadata.
+- **Faces and privacy:** Vision detects face presence, approximate counts, close faces, group shots, low visibility, and an anonymous unique-face appearance estimate. ClipVault does not identify people, does not assign names, and does not upload face data.
+- **Stability:** motion and shake are estimated from sampled frame differences. “Possibly Shaky” is advisory and may flag intentional handheld movement or fast pans.
+
+## App icon generation
+
+Binary PNG icon files are intentionally ignored so text-only changes can build in source control. To generate local Xcode app icons on a Mac, run:
+
+```bash
+python3 Scripts/generate_app_icon.py
+# or
+make icons
+```
+
+The script writes `ClipVault/Assets.xcassets/AppIcon.appiconset/icon_16.png` through `icon_1024.png` plus `Contents.json`. If PNGs are missing, Xcode can still use a generic app icon; generated PNGs are ignored by git.
