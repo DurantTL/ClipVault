@@ -65,7 +65,9 @@ struct PlayerPreviewView: View {
       }
     }.frame(width: 0, height: 0))
     .onAppear { loadActiveClip(autoplay: true) }
-    .onChange(of: library.selectedClipID) { loadActiveClip(autoplay: true) }
+    .onChange(of: library.selectedClipID) {
+      loadActiveClip(autoplay: true)
+    }
     .onDisappear { vm.stop() }
   }
 
