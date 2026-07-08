@@ -1,0 +1,2 @@
+import SwiftUI
+struct IngestProgressView: View { let progress: IngestProgress; var body: some View { VStack(alignment:.leading){ ProgressView(value: progress.fraction); Text("\(progress.message) \(progress.currentIndex)/\(progress.totalCount) \(progress.currentFilename)"); Text("\(FileSizeFormatterUtil.string(progress.copiedBytes)) of \(FileSizeFormatterUtil.string(progress.totalBytes)) • \(FileSizeFormatterUtil.string(Int64(progress.bytesPerSecond)))/s").font(.caption).foregroundStyle(.secondary) } } }
