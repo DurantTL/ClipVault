@@ -30,6 +30,13 @@ enum ProjectIngestStatus: String, Codable, CaseIterable {
     case .failed: return "Failed"
     }
   }
+
+  var canResume: Bool {
+    self == .canceled ||
+      self == .incomplete ||
+      self == .paused ||
+      self == .failed
+  }
 }
 
 enum ClipCopyStatus: String, Codable, CaseIterable {

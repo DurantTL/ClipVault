@@ -87,6 +87,7 @@ struct ClipVaultProject: Identifiable, Codable {
     case lastIngestDate, canResumeIngest, sourceSessions, selectedSessionIDs, customFolders, clips
     case projectTitle, productionName, clientOrOrganization, eventName, eventDate, location
     case cameraOperator, cameraModel, notes, defaultTags
+    case isComplete, complete, isInProgress, wasCanceled
   }
 
   init(from decoder: Decoder) throws {
@@ -101,14 +102,40 @@ struct ClipVaultProject: Identifiable, Codable {
     projectFolderPath = try c.decode(String.self, forKey: .projectFolderPath)
     ingestIncomplete = try c.decodeIfPresent(Bool.self, forKey: .ingestIncomplete) ?? false
     clips = try c.decodeIfPresent([Clip].self, forKey: .clips) ?? []
-    ingestStatus = try c.decodeIfPresent(ProjectIngestStatus.self, forKey: .ingestStatus) ?? (clips.allSatisfy { $0.verificationStatus == .verified } ? .complete : .incomplete)
+    let decodedIngestStatus = try? c.decodeIfPresent(
+      ProjectIngestStatus.self,
+      forKey: .ingestStatus
+    )
+    let legacyIsComplete = try c.decodeIfPresent(Bool.self, forKey: .isComplete)
+    let legacyComplete = try c.decodeIfPresent(Bool.self, forKey: .complete)
+    let legacyIsInProgress = try c.decodeIfPresent(Bool.self, forKey: .isInProgress)
+    let legacyWasCanceled = try c.decodeIfPresent(Bool.self, forKey: .wasCanceled)
+    let legacyCanResumeIngest = try c.decodeIfPresent(Bool.self, forKey: .canResumeIngest)
+    let inferredStatus = Self.inferIngestStatus(
+      from: clips,
+      ingestIncomplete: ingestIncomplete
+    )
+
+    if let decodedIngestStatus {
+      ingestStatus = decodedIngestStatus
+    } else if legacyWasCanceled == true {
+      ingestStatus = .canceled
+    } else if legacyIsInProgress == true {
+      ingestStatus = .inProgress
+    } else if legacyIsComplete == true || legacyComplete == true {
+      ingestStatus = .complete
+    } else if legacyCanResumeIngest == true || ingestIncomplete {
+      ingestStatus = .incomplete
+    } else {
+      ingestStatus = inferredStatus
+    }
     totalSelectedClips = try c.decodeIfPresent(Int.self, forKey: .totalSelectedClips) ?? clips.count
     copiedClipCount = try c.decodeIfPresent(Int.self, forKey: .copiedClipCount) ?? clips.filter { $0.copyStatus == .copied || $0.verificationStatus == .verified }.count
     verifiedClipCount = try c.decodeIfPresent(Int.self, forKey: .verifiedClipCount) ?? clips.filter { $0.verificationStatus == .verified }.count
     failedClipCount = try c.decodeIfPresent(Int.self, forKey: .failedClipCount) ?? clips.filter { $0.copyStatus == .failed || $0.verificationStatus == .failed }.count
     pendingClipCount = try c.decodeIfPresent(Int.self, forKey: .pendingClipCount) ?? max(0, totalSelectedClips - copiedClipCount - failedClipCount)
     lastIngestDate = try c.decodeIfPresent(Date.self, forKey: .lastIngestDate)
-    canResumeIngest = try c.decodeIfPresent(Bool.self, forKey: .canResumeIngest) ?? ingestStatus != .complete
+    canResumeIngest = legacyCanResumeIngest ?? ingestStatus.canResume
     sourceSessions = try c.decodeIfPresent([IngestSession].self, forKey: .sourceSessions) ?? []
     selectedSessionIDs = try c.decodeIfPresent([UUID].self, forKey: .selectedSessionIDs) ?? []
     customFolders = try c.decodeIfPresent([String].self, forKey: .customFolders) ?? ["Sermon", "B-Roll", "Social Media", "Archive", "Review Later"]
@@ -122,5 +149,28 @@ struct ClipVaultProject: Identifiable, Codable {
     cameraModel = try c.decodeIfPresent(String.self, forKey: .cameraModel) ?? ""
     notes = try c.decodeIfPresent(String.self, forKey: .notes) ?? ""
     defaultTags = try c.decodeIfPresent([String].self, forKey: .defaultTags) ?? []
+  }
+
+  private static func inferIngestStatus(
+    from clips: [Clip],
+    ingestIncomplete: Bool
+  ) -> ProjectIngestStatus {
+    guard !clips.isEmpty else {
+      return ingestIncomplete ? .incomplete : .notStarted
+    }
+
+    if clips.allSatisfy({ $0.verificationStatus == .verified }) {
+      return .complete
+    }
+
+    let copiedOrVerifiedClipCount = clips.filter {
+      $0.copyStatus == .copied || $0.verificationStatus == .copied || $0.verificationStatus == .verified
+    }.count
+
+    if copiedOrVerifiedClipCount > 0 || ingestIncomplete {
+      return .incomplete
+    }
+
+    return .notStarted
   }
 }

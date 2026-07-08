@@ -193,7 +193,7 @@ enum ClipSortOption: String, CaseIterable, Identifiable {
       }
       refreshProjectCounts()
       project.ingestStatus = project.pendingClipCount == 0 && project.failedClipCount == 0 ? .complete : .incomplete
-      project.canResumeIngest = project.ingestStatus != .complete
+      project.canResumeIngest = project.ingestStatus.canResume
       save()
     }
   }
