@@ -138,7 +138,8 @@ struct Clip: Identifiable, Codable, Equatable, Transferable {
     case id, originalSourcePath, sourcePath, sourceBookmarkData, originalFilename, sourceRelativePath
     case expectedFileSize, currentPath, currentFilename, destinationRelativePath, relativePath, fileSize
     case copyStatus, duration, width, height, frameRate, codec, bitDepth, hasAudio, audioChannelCount
-    case orientation, estimatedBitrate, createdAt, modifiedAt, ingestDate, sonyCardFolderPath, cardVolumeName
+    case orientation, estimatedBitrate, createdAt, modifiedAt, capturedAt, shotStartTime, manualShotTime
+    case shotTimeSource, ingestDate, sonyCardFolderPath, cardVolumeName
     case checksum, verificationStatus, cullStatus, assignedFolder, thumbnailPath, thumbnailStatus, errorMessage
     case previewUnavailable, title, description, productionTags, people, location, scene, shotType, camera
     case lens, audioNotes, transcriptNotes, usageNotes, colorLabel, favorite, isBroll, isSermon
@@ -206,7 +207,30 @@ struct Clip: Identifiable, Codable, Equatable, Transferable {
     thumbnailStatus = try c.decodeIfPresent(ThumbnailStatus.self, forKey: .thumbnailStatus) ?? .pending
     analysisStatus = try c.decodeIfPresent(AnalysisStatus.self, forKey: .analysisStatus) ?? .notAnalyzed
     // Decode remaining optional/simple fields with defaults.
-    duration = try c.decodeIfPresent(Double.self, forKey: .duration); width = try c.decodeIfPresent(Int.self, forKey: .width); height = try c.decodeIfPresent(Int.self, forKey: .height); frameRate = try c.decodeIfPresent(Double.self, forKey: .frameRate); codec = try c.decodeIfPresent(String.self, forKey: .codec); bitDepth = try c.decodeIfPresent(Int.self, forKey: .bitDepth); hasAudio = try c.decodeIfPresent(Bool.self, forKey: .hasAudio); audioChannelCount = try c.decodeIfPresent(Int.self, forKey: .audioChannelCount); orientation = try c.decodeIfPresent(String.self, forKey: .orientation); estimatedBitrate = try c.decodeIfPresent(Double.self, forKey: .estimatedBitrate); createdAt = try c.decodeIfPresent(Date.self, forKey: .createdAt); modifiedAt = try c.decodeIfPresent(Date.self, forKey: .modifiedAt); capturedAt = try c.decodeIfPresent(Date.self, forKey: .capturedAt); shotStartTime = try c.decodeIfPresent(Date.self, forKey: .shotStartTime); manualShotTime = try c.decodeIfPresent(Date.self, forKey: .manualShotTime); shotTimeSource = try c.decodeIfPresent(ShotTimeSource.self, forKey: .shotTimeSource) ?? .unavailable; ingestDate = try c.decodeIfPresent(Date.self, forKey: .ingestDate); sonyCardFolderPath = try c.decodeIfPresent(String.self, forKey: .sonyCardFolderPath); cardVolumeName = try c.decodeIfPresent(String.self, forKey: .cardVolumeName); checksum = try c.decodeIfPresent(String.self, forKey: .checksum); assignedFolder = try c.decodeIfPresent(String.self, forKey: .assignedFolder); thumbnailPath = try c.decodeIfPresent(String.self, forKey: .thumbnailPath); errorMessage = try c.decodeIfPresent(String.self, forKey: .errorMessage); previewUnavailable = try c.decodeIfPresent(Bool.self, forKey: .previewUnavailable) ?? false
+    duration = try c.decodeIfPresent(Double.self, forKey: .duration)
+    width = try c.decodeIfPresent(Int.self, forKey: .width)
+    height = try c.decodeIfPresent(Int.self, forKey: .height)
+    frameRate = try c.decodeIfPresent(Double.self, forKey: .frameRate)
+    codec = try c.decodeIfPresent(String.self, forKey: .codec)
+    bitDepth = try c.decodeIfPresent(Int.self, forKey: .bitDepth)
+    hasAudio = try c.decodeIfPresent(Bool.self, forKey: .hasAudio)
+    audioChannelCount = try c.decodeIfPresent(Int.self, forKey: .audioChannelCount)
+    orientation = try c.decodeIfPresent(String.self, forKey: .orientation)
+    estimatedBitrate = try c.decodeIfPresent(Double.self, forKey: .estimatedBitrate)
+    createdAt = try c.decodeIfPresent(Date.self, forKey: .createdAt)
+    modifiedAt = try c.decodeIfPresent(Date.self, forKey: .modifiedAt)
+    capturedAt = try c.decodeIfPresent(Date.self, forKey: .capturedAt)
+    shotStartTime = try c.decodeIfPresent(Date.self, forKey: .shotStartTime)
+    manualShotTime = try c.decodeIfPresent(Date.self, forKey: .manualShotTime)
+    shotTimeSource = try c.decodeIfPresent(ShotTimeSource.self, forKey: .shotTimeSource) ?? .unavailable
+    ingestDate = try c.decodeIfPresent(Date.self, forKey: .ingestDate)
+    sonyCardFolderPath = try c.decodeIfPresent(String.self, forKey: .sonyCardFolderPath)
+    cardVolumeName = try c.decodeIfPresent(String.self, forKey: .cardVolumeName)
+    checksum = try c.decodeIfPresent(String.self, forKey: .checksum)
+    assignedFolder = try c.decodeIfPresent(String.self, forKey: .assignedFolder)
+    thumbnailPath = try c.decodeIfPresent(String.self, forKey: .thumbnailPath)
+    errorMessage = try c.decodeIfPresent(String.self, forKey: .errorMessage)
+    previewUnavailable = try c.decodeIfPresent(Bool.self, forKey: .previewUnavailable) ?? false
     title = try c.decodeIfPresent(String.self, forKey: .title) ?? ""
     description = try c.decodeIfPresent(String.self, forKey: .description) ?? ""
     productionTags = try c.decodeIfPresent([String].self, forKey: .productionTags) ?? []
@@ -257,6 +281,101 @@ struct Clip: Identifiable, Codable, Equatable, Transferable {
     shakeScore = try c.decodeIfPresent(Double.self, forKey: .shakeScore)
     motionScore = try c.decodeIfPresent(Double.self, forKey: .motionScore)
     highMotion = try c.decodeIfPresent(Bool.self, forKey: .highMotion) ?? false
+  }
+
+  func encode(to encoder: Encoder) throws {
+    var c = encoder.container(keyedBy: CodingKeys.self)
+    try c.encode(id, forKey: .id)
+    try c.encode(originalSourcePath, forKey: .originalSourcePath)
+    try c.encode(sourcePath, forKey: .sourcePath)
+    try c.encodeIfPresent(sourceBookmarkData, forKey: .sourceBookmarkData)
+    try c.encode(originalFilename, forKey: .originalFilename)
+    try c.encode(sourceRelativePath, forKey: .sourceRelativePath)
+    try c.encode(expectedFileSize, forKey: .expectedFileSize)
+    try c.encode(currentPath, forKey: .currentPath)
+    try c.encode(currentFilename, forKey: .currentFilename)
+    try c.encode(destinationRelativePath, forKey: .destinationRelativePath)
+    try c.encode(relativePath, forKey: .relativePath)
+    try c.encode(fileSize, forKey: .fileSize)
+    try c.encode(copyStatus, forKey: .copyStatus)
+    try c.encodeIfPresent(duration, forKey: .duration)
+    try c.encodeIfPresent(width, forKey: .width)
+    try c.encodeIfPresent(height, forKey: .height)
+    try c.encodeIfPresent(frameRate, forKey: .frameRate)
+    try c.encodeIfPresent(codec, forKey: .codec)
+    try c.encodeIfPresent(bitDepth, forKey: .bitDepth)
+    try c.encodeIfPresent(hasAudio, forKey: .hasAudio)
+    try c.encodeIfPresent(audioChannelCount, forKey: .audioChannelCount)
+    try c.encodeIfPresent(orientation, forKey: .orientation)
+    try c.encodeIfPresent(estimatedBitrate, forKey: .estimatedBitrate)
+    try c.encodeIfPresent(createdAt, forKey: .createdAt)
+    try c.encodeIfPresent(modifiedAt, forKey: .modifiedAt)
+    try c.encodeIfPresent(capturedAt, forKey: .capturedAt)
+    try c.encodeIfPresent(shotStartTime, forKey: .shotStartTime)
+    try c.encodeIfPresent(manualShotTime, forKey: .manualShotTime)
+    try c.encode(shotTimeSource, forKey: .shotTimeSource)
+    try c.encodeIfPresent(ingestDate, forKey: .ingestDate)
+    try c.encodeIfPresent(sonyCardFolderPath, forKey: .sonyCardFolderPath)
+    try c.encodeIfPresent(cardVolumeName, forKey: .cardVolumeName)
+    try c.encodeIfPresent(checksum, forKey: .checksum)
+    try c.encode(verificationStatus, forKey: .verificationStatus)
+    try c.encode(cullStatus, forKey: .cullStatus)
+    try c.encodeIfPresent(assignedFolder, forKey: .assignedFolder)
+    try c.encodeIfPresent(thumbnailPath, forKey: .thumbnailPath)
+    try c.encode(thumbnailStatus, forKey: .thumbnailStatus)
+    try c.encodeIfPresent(errorMessage, forKey: .errorMessage)
+    try c.encode(previewUnavailable, forKey: .previewUnavailable)
+    try c.encode(title, forKey: .title)
+    try c.encode(description, forKey: .description)
+    try c.encode(productionTags, forKey: .productionTags)
+    try c.encode(people, forKey: .people)
+    try c.encode(location, forKey: .location)
+    try c.encode(scene, forKey: .scene)
+    try c.encode(shotType, forKey: .shotType)
+    try c.encode(camera, forKey: .camera)
+    try c.encode(lens, forKey: .lens)
+    try c.encode(audioNotes, forKey: .audioNotes)
+    try c.encode(transcriptNotes, forKey: .transcriptNotes)
+    try c.encode(usageNotes, forKey: .usageNotes)
+    try c.encode(colorLabel, forKey: .colorLabel)
+    try c.encode(favorite, forKey: .favorite)
+    try c.encode(isBroll, forKey: .isBroll)
+    try c.encode(isSermon, forKey: .isSermon)
+    try c.encode(isInterview, forKey: .isInterview)
+    try c.encode(isSocialClipCandidate, forKey: .isSocialClipCandidate)
+    try c.encode(customNotes, forKey: .customNotes)
+    try c.encode(automaticTags, forKey: .automaticTags)
+    try c.encode(analysisStatus, forKey: .analysisStatus)
+    try c.encodeIfPresent(focusScore, forKey: .focusScore)
+    try c.encodeIfPresent(focusConfidence, forKey: .focusConfidence)
+    try c.encodeIfPresent(sampledFrameCount, forKey: .sampledFrameCount)
+    try c.encode(focusWarning, forKey: .focusWarning)
+    try c.encodeIfPresent(maxFaceCount, forKey: .maxFaceCount)
+    try c.encodeIfPresent(averageFaceCount, forKey: .averageFaceCount)
+    try c.encode(hasFaces, forKey: .hasFaces)
+    try c.encode(hasCloseFace, forKey: .hasCloseFace)
+    try c.encodeIfPresent(faceVisibilityScore, forKey: .faceVisibilityScore)
+    try c.encodeIfPresent(uniqueFaceAppearanceCount, forKey: .uniqueFaceAppearanceCount)
+    try c.encodeIfPresent(stabilityScore, forKey: .stabilityScore)
+    try c.encode(possiblyShaky, forKey: .possiblyShaky)
+    try c.encodeIfPresent(brightnessScore, forKey: .brightnessScore)
+    try c.encodeIfPresent(contrastScore, forKey: .contrastScore)
+    try c.encodeIfPresent(darkFramePercentage, forKey: .darkFramePercentage)
+    try c.encodeIfPresent(brightFramePercentage, forKey: .brightFramePercentage)
+    try c.encode(exposureWarning, forKey: .exposureWarning)
+    try c.encodeIfPresent(whiteBalanceKelvin, forKey: .whiteBalanceKelvin)
+    try c.encodeIfPresent(whiteBalanceTint, forKey: .whiteBalanceTint)
+    try c.encodeIfPresent(whiteBalanceConfidence, forKey: .whiteBalanceConfidence)
+    try c.encode(whiteBalanceSource, forKey: .whiteBalanceSource)
+    try c.encodeIfPresent(largestFaceCoveragePercent, forKey: .largestFaceCoveragePercent)
+    try c.encodeIfPresent(bestFaceFrameTime, forKey: .bestFaceFrameTime)
+    try c.encode(possibleGroupShot, forKey: .possibleGroupShot)
+    try c.encode(lowFaceVisibility, forKey: .lowFaceVisibility)
+    try c.encode(facePartiallyVisible, forKey: .facePartiallyVisible)
+    try c.encodeIfPresent(uniqueFaceConfidence, forKey: .uniqueFaceConfidence)
+    try c.encodeIfPresent(shakeScore, forKey: .shakeScore)
+    try c.encodeIfPresent(motionScore, forKey: .motionScore)
+    try c.encode(highMotion, forKey: .highMotion)
   }
 
   var effectiveShotTime: Date? { manualShotTime ?? shotStartTime ?? capturedAt ?? createdAt ?? modifiedAt }
