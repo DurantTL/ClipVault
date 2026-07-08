@@ -33,7 +33,7 @@ struct NewIngestView: View {
         .lineLimit(3)
       Label(vm.detectedCardType.summary, systemImage: vm.detectedCardType == .generic ? "folder" : "checkmark.seal.fill")
         .font(.caption)
-        .foregroundStyle(vm.detectedCardType == .generic ? .secondary : .green)
+        .foregroundStyle(vm.detectedCardType == .generic ? Color.secondary : Color.green)
       Spacer()
     }
     .padding(20)

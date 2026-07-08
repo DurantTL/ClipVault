@@ -93,7 +93,7 @@ struct LibraryView: View {
         }
       )
     }
-    .onChange(of: viewModel.previewClip) { clip in
+    .onChange(of: viewModel.previewClip) { _, clip in
       showingPreview = clip != nil
     }
     .onReceive(NotificationCenter.default.publisher(for: .clipKeep)) { _ in viewModel.setStatus(.keep) }
