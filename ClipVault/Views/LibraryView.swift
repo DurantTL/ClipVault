@@ -15,29 +15,86 @@ struct LibraryView: View {
       ClipInspectorView(clip: viewModel.selectedClip, vm: viewModel)
     }
     .toolbar {
-      Button("New Ingest") { showingIngest = true }
-      Button("Open Library") {}
-      Button("Reveal in Finder") { viewModel.reveal() }
-      Button("Undo Last Move") { viewModel.undoMove() }
-      Slider(value: $viewModel.thumbnailSize, in: 130...320) { Text("Thumbnail Size") }
-        .frame(width: 160)
-      Menu("Filter") {
-        ForEach(["All Clips", "Unrated", "Keep", "Maybe", "Reject"], id: \.self) { filter in
-          Button(filter) { viewModel.filter = filter }
+      ToolbarItemGroup {
+        Button { showingIngest = true } label: {
+          Label("New Ingest", systemImage: "tray.and.arrow.down.fill")
+        }
+        .buttonStyle(.borderedProminent)
+
+        Button { viewModel.revealProject() } label: {
+          Label("Open Library", systemImage: "folder")
+        }
+
+        Button { viewModel.reveal() } label: {
+          Label("Reveal in Finder", systemImage: "arrow.up.forward.app")
+        }
+
+        Button { viewModel.undoMove() } label: {
+          Label("Undo Last Move", systemImage: "arrow.uturn.backward")
         }
       }
-      Button("Settings") { showingSettings = true }
+
+      ToolbarItemGroup {
+        Label("Thumbnail Size", systemImage: "rectangle.grid.2x2")
+        Slider(value: $viewModel.thumbnailSize, in: 140...340)
+          .frame(width: 160)
+      }
+
+      ToolbarItemGroup {
+        Picker("Filter", selection: $viewModel.filter) {
+          ForEach(["All Clips", "Unrated", "Keep", "Maybe", "Reject", "Verified", "Failed", "Has Audio", "No Audio", "4K", "60p", "Short Clip", "Long Clip"], id: \.self) { filter in
+            Text(filter).tag(filter)
+          }
+        }
+        .pickerStyle(.menu)
+
+        Picker("Sort", selection: $viewModel.sortOption) {
+          ForEach(ClipSortOption.allCases) { option in
+            Text(option.rawValue).tag(option)
+          }
+        }
+        .pickerStyle(.menu)
+
+        Menu("Batch") {
+          Button("Mark selected as Keep") { viewModel.setStatus(.keep) }
+          Button("Mark selected as Maybe") { viewModel.setStatus(.maybe) }
+          Button("Mark selected as Reject") { viewModel.setStatus(.reject) }
+          Button("Clear rating") { viewModel.setStatus(.unrated) }
+          Divider()
+          Button("Copy filenames to clipboard") { viewModel.copySelectedFilenames() }
+          Button("Reveal selected in Finder") { viewModel.reveal() }
+        }
+
+        Menu("Export") {
+          Button("Export Clip Report CSV") { viewModel.exportClipReport() }
+          Button("Export Keep List CSV") { viewModel.exportClipReport(keepsOnly: true) }
+          Button("Export Project Metadata JSON") { viewModel.exportProjectMetadata() }
+          Divider()
+          Button("Analyze Locally") { viewModel.analyzeLocally() }
+        }
+
+        Button { showingSettings = true } label: {
+          Label("Settings", systemImage: "gearshape")
+        }
+      }
     }
     .sheet(isPresented: $showingIngest) {
-      NewIngestView { _ in }.frame(width: 860, height: 760)
+      NewIngestView { _ in }
+        .frame(width: 900, height: 820)
     }
     .sheet(isPresented: $showingSettings) { SettingsView() }
     .sheet(item: $viewModel.previewClip) { clip in
       PlayerPreviewView(
         clip: clip,
         onClose: { viewModel.closePreview() },
-        onNext: { viewModel.selectNext(); viewModel.previewSelected() },
-        onPrevious: { viewModel.selectPrevious(); viewModel.previewSelected() }
+        onNext: {
+          viewModel.selectNext()
+          viewModel.previewSelected()
+        },
+        onPrevious: {
+          viewModel.selectPrevious()
+          viewModel.previewSelected()
+        }
       )
     }
     .onReceive(NotificationCenter.default.publisher(for: .clipKeep)) { _ in viewModel.setStatus(.keep) }

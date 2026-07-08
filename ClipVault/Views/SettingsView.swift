@@ -2,20 +2,37 @@ import SwiftUI
 
 struct SettingsView: View {
   @EnvironmentObject var settings: AppSettings
+
   var body: some View {
     Form {
-      Picker("Verification mode", selection: $settings.verificationModeRaw) {
-        ForEach(VerificationMode.allCases) { Text($0.label).tag($0.rawValue) }
+      Section("Ingest") {
+        Picker("Default verification mode", selection: $settings.verificationModeRaw) {
+          ForEach(VerificationMode.allCases) { Text($0.label).tag($0.rawValue) }
+        }
+        Toggle("Preserve source folder structure", isOn: $settings.preserveSourceStructure)
+        Toggle("Include Sony proxies by default", isOn: $settings.includeProxyFiles)
+        Picker("Thumbnail quality", selection: $settings.thumbnailQualityRaw) {
+          ForEach(ThumbnailQuality.allCases) { Text($0.rawValue.capitalized).tag($0.rawValue) }
+        }
       }
-      Text(
-        "Fast size check is the default and avoids rereading the SD card after copy. Strong SHA256 is safer, but much slower for large Sony a7R V 4K60 4:2:2 10-bit footage because it hashes both source and destination."
-      ).font(.caption).foregroundStyle(.secondary)
-      Toggle("Preserve source folder structure", isOn: $settings.preserveSourceStructure)
-      Picker("Thumbnail quality", selection: $settings.thumbnailQualityRaw) {
-        ForEach(ThumbnailQuality.allCases) { Text($0.rawValue.capitalized).tag($0.rawValue) }
+
+      Section("Culling") {
+        Toggle("Auto-advance after rating", isOn: $settings.autoAdvanceAfterRating)
+        Toggle("Skip already rated clips", isOn: $settings.skipAlreadyRatedClips)
+        Toggle("Loop at end", isOn: $settings.loopAtEnd)
+        Toggle("Advance direction: Previous", isOn: $settings.advanceDirectionPrevious)
       }
-      Toggle("Show hidden technical details", isOn: $settings.showTechnicalDetails)
-      Toggle("Include Proxy Files", isOn: $settings.includeProxyFiles)
-    }.padding().frame(width: 420)
+
+      Section("Analysis and Export") {
+        Picker("Local analysis mode", selection: $settings.localAnalysisMode) {
+          ForEach(["Off", "Fast", "Balanced", "Detailed"], id: \.self) { Text($0).tag($0) }
+        }
+        Toggle("Show technical details", isOn: $settings.showTechnicalDetails)
+        Toggle("Finder tags export", isOn: $settings.finderTagsExport)
+        Toggle("XMP sidecar export", isOn: $settings.xmpSidecarExport)
+      }
+    }
+    .padding()
+    .frame(width: 500)
   }
 }
