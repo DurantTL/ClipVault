@@ -1,6 +1,9 @@
 import Foundation
 
 struct ClipVaultProject: Identifiable, Codable {
+  static let currentSchemaVersion = 1
+
+  var schemaVersion: Int = Self.currentSchemaVersion
   var id = UUID()
   var name: String
   var createdAt = Date()
@@ -57,6 +60,7 @@ struct ClipVaultProject: Identifiable, Codable {
     customFolders: [String] = ["Sermon", "B-Roll", "Social Media", "Archive", "Review Later"],
     clips: [Clip] = []
   ) {
+    self.schemaVersion = Self.currentSchemaVersion
     self.id = id
     self.name = name
     self.createdAt = createdAt
@@ -81,7 +85,7 @@ struct ClipVaultProject: Identifiable, Codable {
   }
 
   enum CodingKeys: String, CodingKey {
-    case id, name, createdAt, lastOpenedAt, sourceBookmarkData, destinationBookmarkData
+    case schemaVersion, id, name, createdAt, lastOpenedAt, sourceBookmarkData, destinationBookmarkData
     case projectFolderBookmarkData, projectFolderPath, ingestIncomplete, ingestStatus
     case totalSelectedClips, copiedClipCount, verifiedClipCount, failedClipCount, pendingClipCount
     case lastIngestDate, canResumeIngest, sourceSessions, selectedSessionIDs, customFolders, clips
@@ -92,6 +96,7 @@ struct ClipVaultProject: Identifiable, Codable {
 
   init(from decoder: Decoder) throws {
     let c = try decoder.container(keyedBy: CodingKeys.self)
+    schemaVersion = try c.decodeIfPresent(Int.self, forKey: .schemaVersion) ?? 0
     id = try c.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
     name = try c.decode(String.self, forKey: .name)
     createdAt = try c.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
@@ -154,6 +159,7 @@ struct ClipVaultProject: Identifiable, Codable {
   func encode(to encoder: Encoder) throws {
     var container = encoder.container(keyedBy: CodingKeys.self)
 
+    try container.encode(schemaVersion, forKey: .schemaVersion)
     try container.encode(id, forKey: .id)
     try container.encode(name, forKey: .name)
     try container.encode(createdAt, forKey: .createdAt)

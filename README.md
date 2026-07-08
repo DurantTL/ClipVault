@@ -233,3 +233,9 @@ The script writes `ClipVault/Assets.xcassets/AppIcon.appiconset/icon_16.png` thr
 - ClipVault continues to use Apple APIs only and does not require FFmpeg.
 - Source media and SD-card contents are never modified or deleted.
 - App metadata remains in `.clipvault-project.json`; ClipVault does not write metadata into MP4/MOV files by default.
+
+## Project JSON Compatibility
+
+ClipVault stores project metadata in `.clipvault-project.json` files inside project folders. The project JSON now includes a `schemaVersion` field so future migrations can be detected and handled safely while preserving existing media and metadata.
+
+Older project files that do not include `schemaVersion` should remain openable with backward-compatible defaults for newer ingest, session, and metadata fields. Codable unit tests protect project and clip JSON from breaking changes, including partial or canceled ingests that must remain reopenable.
