@@ -1,7 +1,7 @@
 import Foundation
 
 final class ProjectStore {
-  static let metadataName = ".clipvault-project.json"
+  static let metadataName = AppBrand.metadataFileName
   private let security = SecurityScopedBookmarkManager()
   func save(_ project: ClipVaultProject) throws {
     let folder = security.projectFolderURL(for: project)

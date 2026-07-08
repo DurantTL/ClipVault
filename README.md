@@ -49,3 +49,60 @@ The MVP is focused on Sony a7R V/XAVC-style workflows: `PRIVATE/M4ROOT/CLIP` pri
 - Preview, metadata, and thumbnail support depends on AVFoundation codecs available on the user's Mac.
 - The first version generates one cached thumbnail per clip, not filmstrips/contact sheets.
 - Recent projects can only reopen automatically while the project folder, external SSD, or NAS mount is available at the expected location or resolvable by its bookmark.
+
+## Current ClipVault polish pass
+
+ClipVault is a native macOS SwiftUI ingest and culling app focused on safe copy, verification, preview, and fast keyboard-based review.
+
+### Current features
+
+- Project dashboard with recent project cards, cover thumbnails, clip counts, total size, cull counts, and quick Open / Reveal / Remove actions.
+- Guided ingest flow for source selection, destination selection, project naming, scan summary, copy progress, cancel state, and Sony card detection.
+- Project library with smart filters, custom folders, production tags, thumbnail size controls, sort controls, batch rating actions, and CSV/JSON export entry points.
+- Metadata inspector with clip summary, culling status, technical metadata, production metadata, automatic tags, and source/destination paths.
+- Local rule-based analysis foundation for automatic tags such as 4K, 60p, Has Audio, No Audio, Short Clip, Long Clip, Large File, and Sony.
+
+### Ingest workflow
+
+1. Choose an SD card, mounted drive, or folder as the source.
+2. ClipVault scans common video formats and prioritizes Sony `PRIVATE/M4ROOT/CLIP` folders when found.
+3. Choose a destination parent folder and enter a project folder name plus an optional shoot/subfolder name.
+4. Pick flat or source-preserving folder structure, proxy inclusion, verification mode, and thumbnail quality.
+5. Start copy and keep the SD card and destination drive connected until ingest completes.
+
+### Keyboard shortcuts
+
+- Space: Preview selected clip.
+- 5: Mark Keep.
+- 3: Mark Maybe.
+- 1: Mark Reject.
+- 0: Clear rating / Unrated.
+- Left / Right Arrow: Select previous or next clip.
+- Command-R: Reveal selected clip in Finder.
+- Escape: Close preview.
+
+### Sony a7R V workflow
+
+ClipVault detects Sony-style media layouts and surfaces `PRIVATE/M4ROOT/CLIP` as the primary video folder. Proxy inclusion can be enabled for workflows that need Sony proxy files from adjacent proxy folders. Strong SHA256 verification is available, but fast size verification is the default for large 4K60 10-bit footage because hashing source and destination can be slow.
+
+### Safety rules
+
+- ClipVault copies by default; it does not delete camera originals.
+- Export-to-edit actions should copy files and avoid overwriting existing filenames.
+- Production metadata is saved to the ClipVault project JSON, not written into MP4 or MOV media files.
+- Keep cards and drives connected until ingest completion and verification are finished.
+
+### Metadata behavior
+
+Project and clip metadata are stored in `.clipvault-project.json`. Clip metadata includes cull status, production tags, people, location, scene, shot type, notes, favorites, B-roll, sermon, interview, and social candidate flags. Automatic tags are rule-based and local only.
+
+### Export behavior
+
+ClipVault includes menu actions for Clip Report CSV, Keep List CSV, and Project Metadata JSON. CSV reports include filenames, cull status, duration, file size, resolution, frame rate, codec, tags, notes, source path, and destination path.
+
+### Known limitations
+
+- The logo is a polished SwiftUI placeholder and not a final brand asset.
+- Copy Keeps to Edit Folder is planned but not fully implemented in this pass.
+- Local analysis is rule-based only; no cloud AI and no heavy Core ML model are included.
+- Folder delete removes the folder assignment from the project metadata only; it does not delete media files.

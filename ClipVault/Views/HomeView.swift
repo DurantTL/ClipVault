@@ -16,11 +16,9 @@ struct HomeView: View {
     } detail: {
       ScrollView {
         VStack(spacing: 24) {
-          Image(systemName: "play.rectangle.on.rectangle.circle.fill")
-            .font(.system(size: 72))
-            .foregroundStyle(.blue)
-          Text("ClipVault").font(.largeTitle.bold())
-          Text("Copy. Verify. Cull. Organize.").font(.title3).foregroundStyle(.secondary)
+          LogoMarkView(size: 96)
+          Text(AppBrand.appName).font(.largeTitle.bold())
+          Text(AppBrand.tagline).font(.title3).foregroundStyle(.secondary)
           HStack {
             Button("New Ingest") { showingIngest = true }
               .buttonStyle(.borderedProminent)
@@ -35,6 +33,15 @@ struct HomeView: View {
             .controlSize(.large)
           }
           if let error = vm.error { Text(error).foregroundStyle(.red).multilineTextAlignment(.center) }
+          if vm.summaries.isEmpty {
+            CardContainer {
+              ContentUnavailableView(
+                "No projects yet",
+                systemImage: "externaldrive.badge.plus",
+                description: Text("Start by ingesting footage from an SD card or folder.")
+              )
+            }
+          }
           LazyVGrid(columns: [GridItem(.adaptive(minimum: 260), spacing: 18)], spacing: 18) {
             ForEach(vm.summaries) { summary in
               ProjectCard(summary: summary, open: {
@@ -81,6 +88,9 @@ struct ProjectCard: View {
       Text(summary.name).font(.headline).lineLimit(1)
       Text("\(summary.clipCount) clips • \(FileSizeFormatterUtil.string(summary.totalSize))")
       Text("Keep \(summary.kept)  Maybe \(summary.maybe)  Reject \(summary.rejected)")
+      Text("Verification: ready / review failed clips in library")
+        .font(.caption)
+        .foregroundStyle(.secondary)
       Text("Created \(date(summary.createdAt)) • Opened \(date(summary.lastOpenedAt))")
         .font(.caption)
         .foregroundStyle(.secondary)
@@ -93,8 +103,8 @@ struct ProjectCard: View {
       }
     }
     .padding()
-    .background(Color(nsColor: .controlBackgroundColor))
-    .clipShape(RoundedRectangle(cornerRadius: 14))
+    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+    .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(.quaternary))
   }
 
   private func date(_ date: Date?) -> String {

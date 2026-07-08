@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 struct ClipGridView: View {
@@ -9,14 +10,25 @@ struct ClipGridView: View {
 
   var body: some View {
     VStack(spacing: 0) {
-      KeyboardLegend()
+      KeyboardLegend(autoAdvance: AppSettings.autoAdvanceAfterRating)
       ScrollView {
         LazyVGrid(columns: columns, spacing: 16) {
           ForEach(vm.filteredClips) { clip in
-            ClipCardView(clip: clip, selected: vm.selectedClipID == clip.id)
-              .onTapGesture { vm.selectedClipID = clip.id }
+            ClipCardView(
+              clip: clip,
+              selected: vm.selectedClipIDs.contains(clip.id),
+              preview: {
+                vm.select(clip)
+                vm.previewSelected()
+              },
+              rate: { status in
+                vm.select(clip)
+                vm.setStatus(status)
+              }
+            )
+              .onTapGesture { vm.select(clip) }
               .onTapGesture(count: 2) {
-                vm.selectedClipID = clip.id
+                vm.select(clip)
                 vm.previewSelected()
               }
               .draggable(clip)
@@ -59,6 +71,8 @@ struct ClipGridView: View {
 }
 
 struct KeyboardLegend: View {
+  let autoAdvance: Bool
+
   var body: some View {
     HStack(spacing: 14) {
       Label("Space Preview", systemImage: "space")
@@ -69,6 +83,10 @@ struct KeyboardLegend: View {
       Text("←/→ Select")
       Text("⌘R Reveal")
       Text("Esc Close")
+      if autoAdvance {
+        Label("Auto-advance: On", systemImage: "forward.fill")
+          .foregroundStyle(.blue)
+      }
     }
     .font(.caption)
     .foregroundStyle(.secondary)
