@@ -122,6 +122,16 @@ import Foundation
 
   var selectedTotalSize: Int64 { selectedVideos.reduce(0) { $0 + $1.size } }
 
+  var statusMessage: String {
+    if let error { return error }
+    if let canceledSummary { return canceledSummary }
+    if sourceURL == nil { return "No source selected" }
+    if destinationURL == nil { return "Destination not selected" }
+    if sessions.isEmpty { return "No sessions scanned" }
+    if selectedVideos.isEmpty { return "No sessions selected" }
+    return "Ready to ingest"
+  }
+
   func selectAllSessions() { for index in sessions.indices { sessions[index].selected = true } }
   func clearSessionSelection() { for index in sessions.indices { sessions[index].selected = false } }
   func selectTodaySessions() {

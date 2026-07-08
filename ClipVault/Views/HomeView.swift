@@ -58,7 +58,7 @@ struct HomeView: View {
       }
     }
     .sheet(isPresented: $showingIngest) {
-      NewIngestView(openProject: openProject).frame(width: 860, height: 760)
+      NewIngestView(openProject: openProject).frame(minWidth: 1100, idealWidth: 1200, minHeight: 720, idealHeight: 780)
     }
   }
 
@@ -88,9 +88,9 @@ struct ProjectCard: View {
       Text(summary.name).font(.headline).lineLimit(1)
       Text("\(summary.clipCount) clips • \(FileSizeFormatterUtil.string(summary.totalSize))")
       Text("Keep \(summary.kept)  Maybe \(summary.maybe)  Reject \(summary.rejected)")
-      Text("Verification: ready / review failed clips in library")
-        .font(.caption)
-        .foregroundStyle(.secondary)
+      Text("Status: \(summary.statusLabel)")
+        .font(.caption.bold())
+        .foregroundStyle(summary.isPartial ? Color.orange : Color.secondary)
       Text("Created \(date(summary.createdAt)) • Opened \(date(summary.lastOpenedAt))")
         .font(.caption)
         .foregroundStyle(.secondary)

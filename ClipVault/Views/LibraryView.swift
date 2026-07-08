@@ -11,7 +11,12 @@ struct LibraryView: View {
     NavigationSplitView {
       SidebarView(vm: viewModel, newFolder: $newFolder)
     } content: {
-      ClipGridView(vm: viewModel)
+      VStack(spacing: 0) {
+        if viewModel.project.ingestStatus != .complete {
+          partialBanner
+        }
+        ClipGridView(vm: viewModel)
+      }
     } detail: {
       ClipInspectorView(clip: viewModel.selectedClip, vm: viewModel)
     }
@@ -81,7 +86,7 @@ struct LibraryView: View {
     }
     .sheet(isPresented: $showingIngest) {
       NewIngestView { _ in }
-        .frame(width: 900, height: 820)
+        .frame(minWidth: 1100, idealWidth: 1200, minHeight: 720, idealHeight: 780)
     }
     .sheet(isPresented: $showingSettings) { SettingsView() }
     .sheet(isPresented: $showingPreview) {
@@ -115,5 +120,22 @@ struct LibraryView: View {
       viewModel.closePreview()
       showingPreview = false
     }
+  }
+
+  private var partialBanner: some View {
+    HStack(spacing: 12) {
+      Label(
+        "Partial ingest — \(viewModel.project.copiedClipCount) of \(viewModel.project.totalSelectedClips) clips copied.",
+        systemImage: "exclamationmark.triangle.fill"
+      )
+      .foregroundStyle(.orange)
+      Spacer()
+      Button("Resume Ingest") { viewModel.resumeIngest() }
+      Button("Retry Failed") { viewModel.resumeIngest() }
+      Button("Reveal Project Folder") { viewModel.revealProject() }
+    }
+    .padding(.horizontal, 16)
+    .padding(.vertical, 10)
+    .background(Color.orange.opacity(0.12))
   }
 }

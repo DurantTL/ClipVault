@@ -15,6 +15,8 @@ struct RecentProjectSummary: Identifiable {
   var kept: Int { project?.clips.filter { $0.cullStatus == .keep }.count ?? 0 }
   var maybe: Int { project?.clips.filter { $0.cullStatus == .maybe }.count ?? 0 }
   var rejected: Int { project?.clips.filter { $0.cullStatus == .reject }.count ?? 0 }
+  var statusLabel: String { project?.ingestStatus.label ?? "Unavailable" }
+  var isPartial: Bool { project.map { $0.ingestStatus != .complete } ?? false }
 }
 
 @MainActor final class HomeViewModel: ObservableObject {
