@@ -12,7 +12,7 @@ final class MetadataService {
         let duration = try await asset.load(.duration)
         clip.duration = (duration.isValid && !duration.isIndefinite && duration.seconds.isFinite) ? duration.seconds : nil
         if let creationDateItem = try? await asset.load(.creationDate),
-          let metadataDate = creationDateItem?.dateValue {
+          let metadataDate = creationDateItem.dateValue {
           clip.capturedAt = metadataDate
           clip.shotStartTime = metadataDate
           if clip.manualShotTime == nil {
