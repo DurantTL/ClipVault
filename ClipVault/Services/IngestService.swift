@@ -16,11 +16,11 @@ final class IngestService {
     name: String, shootName: String, source: URL, destination: URL, videos: [SourceVideo], bookmarks: (Data?, Data?),
     settings: AppSettings, progress: @escaping @MainActor (IngestProgress) -> Void
   ) async throws -> ClipVaultProject {
-    cancelled = false
-    copyService.isCancelled = { [weak self] in self?.cancelled ?? false }
-    copyService.isPaused = { [weak self] in self?.paused ?? false }
-    return try await security.withAccessAsync(to: source) {
-      try await security.withAccessAsync(to: destination) {
+    self.cancelled = false
+    self.copyService.isCancelled = { [weak self] in self?.cancelled ?? false }
+    self.copyService.isPaused = { [weak self] in self?.paused ?? false }
+    return try await self.security.withAccessAsync(to: source) {
+      try await self.security.withAccessAsync(to: destination) {
         let projectFolder = SafeFilename.uniqueURL(
           for: destination.appendingPathComponent(name, isDirectory: true))
         try FileManager.default.createDirectory(
@@ -33,9 +33,9 @@ final class IngestService {
         var done: Int64 = 0
         let started = Date()
         for (idx, v) in videos.enumerated() {
-          if cancelled {
+          if self.cancelled {
             project.ingestIncomplete = true
-            try store.save(project)
+            try self.store.save(project)
             return project
           }
           await progress(
@@ -43,7 +43,7 @@ final class IngestService {
               currentFilename: v.url.lastPathComponent, currentIndex: idx + 1,
               totalCount: videos.count, copiedBytes: done, totalBytes: total,
               bytesPerSecond: Double(done) / max(1, Date().timeIntervalSince(started)),
-              message: paused ? "Paused" : "Copying"))
+              message: self.paused ? "Paused" : "Copying"))
           let cleanShootName = SafeFilename.safeFolderName(shootName)
           let flatRelativePath = cleanShootName.isEmpty ? v.url.lastPathComponent : "\(cleanShootName)/\(v.url.lastPathComponent)"
           let rel = settings.preserveSourceStructure ? v.relativePath : flatRelativePath
@@ -56,7 +56,7 @@ final class IngestService {
             relativePath: destURL.path.replacingOccurrences(of: projectFolder.path + "/", with: ""),
             fileSize: v.size, createdAt: v.createdAt, modifiedAt: v.modifiedAt, ingestDate: Date(), sonyCardFolderPath: v.sonyCardFolderPath, cardVolumeName: source.lastPathComponent)
           do {
-            _ = try await copyService.copy(
+            _ = try await self.copyService.copy(
               from: v.url, to: destURL, alreadyCopiedBytes: done, totalBytes: total
             ) { copied in
               progress(
@@ -64,14 +64,14 @@ final class IngestService {
                   currentFilename: v.url.lastPathComponent, currentIndex: idx + 1,
                   totalCount: videos.count, copiedBytes: copied, totalBytes: total,
                   bytesPerSecond: Double(copied) / max(1, Date().timeIntervalSince(started)),
-                  message: paused ? "Paused" : "Copying"))
+                  message: self.paused ? "Paused" : "Copying"))
             }
             clip.verificationStatus = .copied
-            try await verifier.verify(
+            try await self.verifier.verify(
               source: v.url, destination: destURL, mode: settings.verificationMode)
             clip.verificationStatus = .verified
             do {
-              try await copyBackupsIfNeeded(
+              try await self.copyBackupsIfNeeded(
                 primaryFile: destURL,
                 projectFolder: projectFolder,
                 relativePath: clip.relativePath,
@@ -86,15 +86,15 @@ final class IngestService {
             clip.errorMessage = "Ingest canceled during copy."
             project.clips.append(clip)
             project.ingestIncomplete = true
-            try store.save(project)
+            try self.store.save(project)
             return project
           } catch {
             clip.verificationStatus = .failed
             clip.errorMessage = error.localizedDescription
           }
           if clip.verificationStatus == .verified {
-            await metadata.enrich(&clip)
-            if let thumb = try? await thumbnails.generate(
+            await self.metadata.enrich(&clip)
+            if let thumb = try? await self.thumbnails.generate(
               for: clip, projectFolder: projectFolder, quality: settings.thumbnailQuality)
             {
               clip.thumbnailPath = thumb
@@ -102,13 +102,13 @@ final class IngestService {
           }
           project.clips.append(clip)
           done += v.size
-          try store.save(project)
+          try self.store.save(project)
         }
         await progress(
           IngestProgress(
             currentFilename: "", currentIndex: videos.count, totalCount: videos.count,
             copiedBytes: total, totalBytes: total, message: "Complete"))
-        try store.save(project)
+        try self.store.save(project)
         return project
       }
     }
@@ -148,7 +148,7 @@ final class IngestService {
       )
       let size = Int64((try? primaryFile.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
       await progress(IngestProgress(currentFilename: primaryFile.lastPathComponent, copiedBytes: 0, totalBytes: size, message: "Copying Backup \(index + 1)"))
-      _ = try await copyService.copy(
+      _ = try await self.copyService.copy(
         from: primaryFile,
         to: destination,
         alreadyCopiedBytes: 0,
@@ -156,7 +156,7 @@ final class IngestService {
       ) { copied in
         progress(IngestProgress(currentFilename: primaryFile.lastPathComponent, copiedBytes: copied, totalBytes: size, message: "Verifying Backup \(index + 1)"))
       }
-      try await verifier.verify(source: primaryFile, destination: destination, mode: settings.verificationMode)
+      try await self.verifier.verify(source: primaryFile, destination: destination, mode: settings.verificationMode)
     }
   }
 }
