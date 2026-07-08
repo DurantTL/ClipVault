@@ -150,10 +150,61 @@ enum ClipSortOption: String, CaseIterable, Identifiable {
   }
 
   func reveal() {
-    let urls = activeSelectionIDs.compactMap { id in
-      project.clips.first { $0.id == id }.map { URL(fileURLWithPath: $0.currentPath) }
+    let urls = activeSelectionIDs.compactMap { id -> URL? in
+      guard let path = project.clips.first(where: { $0.id == id })?.currentPath, !path.isEmpty else { return nil }
+      return URL(fileURLWithPath: path)
     }
     NSWorkspace.shared.activateFileViewerSelecting(urls.isEmpty ? [security.projectFolderURL(for: project)] : urls)
+  }
+
+  func resumeIngest() {
+    Task {
+      project.ingestStatus = .inProgress
+      project.canResumeIngest = true
+      save()
+      for index in project.clips.indices {
+        guard project.clips[index].verificationStatus != .verified else { continue }
+        let sourcePath = project.clips[index].sourcePath.isEmpty ? project.clips[index].originalSourcePath : project.clips[index].sourcePath
+        guard !sourcePath.isEmpty, FileManager.default.fileExists(atPath: sourcePath) else {
+          project.clips[index].errorMessage = "Source is not connected. Reconnect the SD card or choose a new source folder to resume."
+          project.clips[index].copyStatus = .failed
+          save()
+          continue
+        }
+        do {
+          let destination = URL(fileURLWithPath: project.clips[index].currentPath)
+          try FileManager.default.createDirectory(
+            at: destination.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+          )
+          if !FileManager.default.fileExists(atPath: destination.path) {
+            try FileManager.default.copyItem(at: URL(fileURLWithPath: sourcePath), to: destination)
+          }
+          project.clips[index].copyStatus = .copied
+          project.clips[index].verificationStatus = .verified
+          project.clips[index].errorMessage = nil
+        } catch {
+          project.clips[index].copyStatus = .failed
+          project.clips[index].verificationStatus = .failed
+          project.clips[index].errorMessage = error.localizedDescription
+        }
+        refreshProjectCounts()
+        save()
+      }
+      refreshProjectCounts()
+      project.ingestStatus = project.pendingClipCount == 0 && project.failedClipCount == 0 ? .complete : .incomplete
+      project.canResumeIngest = project.ingestStatus != .complete
+      save()
+    }
+  }
+
+  private func refreshProjectCounts() {
+    project.totalSelectedClips = max(project.totalSelectedClips, project.clips.count)
+    project.copiedClipCount = project.clips.filter { $0.copyStatus == .copied || $0.verificationStatus == .verified }.count
+    project.verifiedClipCount = project.clips.filter { $0.verificationStatus == .verified }.count
+    project.failedClipCount = project.clips.filter { $0.copyStatus == .failed || $0.verificationStatus == .failed }.count
+    project.pendingClipCount = project.clips.filter { $0.copyStatus == .pending || $0.copyStatus == .copying }.count
+    project.lastIngestDate = Date()
   }
 
   func revealProject() {

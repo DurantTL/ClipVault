@@ -14,7 +14,7 @@ struct NewIngestView: View {
       Divider()
       ingestPanel
     }
-    .frame(minWidth: 1120, minHeight: 720)
+    .frame(minWidth: 1100, idealWidth: 1200, minHeight: 720, idealHeight: 780)
     .background(Color(nsColor: .windowBackgroundColor))
   }
 
@@ -37,7 +37,7 @@ struct NewIngestView: View {
       Spacer()
     }
     .padding(20)
-    .frame(width: 250)
+    .frame(width: 220)
   }
 
   private func volumeGroup(_ title: String, icon: String) -> some View {
@@ -82,7 +82,7 @@ struct NewIngestView: View {
       progressSection
     }
     .padding(22)
-    .frame(minWidth: 560)
+    .frame(minWidth: 500)
   }
 
   private var ingestPanel: some View {
@@ -125,6 +125,7 @@ struct NewIngestView: View {
         Divider()
         InfoRow("Total Selected Videos", "\(vm.selectedVideos.count)")
         InfoRow("Total Selected Size", FileSizeFormatterUtil.string(vm.selectedTotalSize))
+        statusArea
         Button("Start Ingest") {
           Task {
             if let project = await vm.start(settings: settings) {
@@ -139,7 +140,19 @@ struct NewIngestView: View {
       }
       .padding(20)
     }
-    .frame(width: 310)
+    .frame(width: 320)
+  }
+
+  @ViewBuilder private var statusArea: some View {
+    let message = vm.statusMessage
+    if !message.isEmpty {
+      Label(message, systemImage: vm.error == nil ? "info.circle" : "exclamationmark.triangle.fill")
+        .font(.caption)
+        .foregroundStyle(vm.error == nil ? Color.secondary : Color.red)
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background((vm.error == nil ? Color.secondary : Color.red).opacity(0.10), in: RoundedRectangle(cornerRadius: 10))
+    }
   }
 
   @ViewBuilder private var progressSection: some View {
@@ -157,8 +170,8 @@ struct NewIngestView: View {
         }
       }
     }
-    if let error = vm.error {
-      Text(error).foregroundStyle(.red)
+    if let summary = vm.canceledSummary {
+      Text(summary).foregroundStyle(.orange)
     }
   }
 }

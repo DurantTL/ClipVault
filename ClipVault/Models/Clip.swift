@@ -23,11 +23,17 @@ enum AnalysisStatus: String, Codable, CaseIterable {
 struct Clip: Identifiable, Codable, Equatable, Transferable {
   var id = UUID()
   var originalSourcePath: String
+  var sourcePath: String = ""
+  var sourceBookmarkData: Data?
   var originalFilename: String
+  var sourceRelativePath: String = ""
+  var expectedFileSize: Int64 = 0
   var currentPath: String
   var currentFilename: String
+  var destinationRelativePath: String = ""
   var relativePath: String
   var fileSize: Int64
+  var copyStatus: ClipCopyStatus = .copied
   var duration: Double?
   var width: Int?
   var height: Int?
@@ -48,6 +54,7 @@ struct Clip: Identifiable, Codable, Equatable, Transferable {
   var cullStatus: CullStatus = .unrated
   var assignedFolder: String?
   var thumbnailPath: String?
+  var thumbnailStatus: ThumbnailStatus = .pending
   var errorMessage: String?
   var previewUnavailable: Bool = false
 
@@ -103,6 +110,127 @@ struct Clip: Identifiable, Codable, Equatable, Transferable {
   var motionScore: Double?
   var highMotion: Bool = false
 
+  enum CodingKeys: String, CodingKey {
+    case id, originalSourcePath, sourcePath, sourceBookmarkData, originalFilename, sourceRelativePath
+    case expectedFileSize, currentPath, currentFilename, destinationRelativePath, relativePath, fileSize
+    case copyStatus, duration, width, height, frameRate, codec, bitDepth, hasAudio, audioChannelCount
+    case orientation, estimatedBitrate, createdAt, modifiedAt, ingestDate, sonyCardFolderPath, cardVolumeName
+    case checksum, verificationStatus, cullStatus, assignedFolder, thumbnailPath, thumbnailStatus, errorMessage
+    case previewUnavailable, title, description, productionTags, people, location, scene, shotType, camera
+    case lens, audioNotes, transcriptNotes, usageNotes, colorLabel, favorite, isBroll, isSermon
+    case isInterview, isSocialClipCandidate, customNotes, automaticTags, analysisStatus, focusScore
+    case focusConfidence, sampledFrameCount, focusWarning, maxFaceCount, averageFaceCount, hasFaces
+    case hasCloseFace, faceVisibilityScore, uniqueFaceAppearanceCount, stabilityScore, possiblyShaky
+    case brightnessScore, contrastScore, darkFramePercentage, brightFramePercentage, exposureWarning
+    case whiteBalanceKelvin, whiteBalanceTint, whiteBalanceConfidence, whiteBalanceSource
+    case largestFaceCoveragePercent, bestFaceFrameTime, possibleGroupShot, lowFaceVisibility
+    case facePartiallyVisible, uniqueFaceConfidence, shakeScore, motionScore, highMotion
+  }
+
+  init(
+    id: UUID = UUID(),
+    originalSourcePath: String,
+    originalFilename: String,
+    currentPath: String,
+    currentFilename: String,
+    relativePath: String,
+    fileSize: Int64,
+    createdAt: Date? = nil,
+    modifiedAt: Date? = nil,
+    ingestDate: Date? = nil,
+    sonyCardFolderPath: String? = nil,
+    cardVolumeName: String? = nil
+  ) {
+    self.id = id
+    self.originalSourcePath = originalSourcePath
+    self.sourcePath = originalSourcePath
+    self.originalFilename = originalFilename
+    self.sourceRelativePath = relativePath
+    self.expectedFileSize = fileSize
+    self.currentPath = currentPath
+    self.currentFilename = currentFilename
+    self.destinationRelativePath = relativePath
+    self.relativePath = relativePath
+    self.fileSize = fileSize
+    self.createdAt = createdAt
+    self.modifiedAt = modifiedAt
+    self.ingestDate = ingestDate
+    self.sonyCardFolderPath = sonyCardFolderPath
+    self.cardVolumeName = cardVolumeName
+  }
+
+  init(from decoder: Decoder) throws {
+    let c = try decoder.container(keyedBy: CodingKeys.self)
+    id = try c.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+    originalSourcePath = try c.decodeIfPresent(String.self, forKey: .originalSourcePath) ?? ""
+    sourcePath = try c.decodeIfPresent(String.self, forKey: .sourcePath) ?? originalSourcePath
+    sourceBookmarkData = try c.decodeIfPresent(Data.self, forKey: .sourceBookmarkData)
+    originalFilename = try c.decodeIfPresent(String.self, forKey: .originalFilename) ?? URL(fileURLWithPath: sourcePath).lastPathComponent
+    sourceRelativePath = try c.decodeIfPresent(String.self, forKey: .sourceRelativePath) ?? ""
+    expectedFileSize = try c.decodeIfPresent(Int64.self, forKey: .expectedFileSize) ?? 0
+    currentPath = try c.decodeIfPresent(String.self, forKey: .currentPath) ?? ""
+    currentFilename = try c.decodeIfPresent(String.self, forKey: .currentFilename) ?? (currentPath.isEmpty ? originalFilename : URL(fileURLWithPath: currentPath).lastPathComponent)
+    destinationRelativePath = try c.decodeIfPresent(String.self, forKey: .destinationRelativePath) ?? ""
+    relativePath = try c.decodeIfPresent(String.self, forKey: .relativePath) ?? destinationRelativePath
+    fileSize = try c.decodeIfPresent(Int64.self, forKey: .fileSize) ?? expectedFileSize
+    copyStatus = try c.decodeIfPresent(ClipCopyStatus.self, forKey: .copyStatus) ?? (currentPath.isEmpty ? .pending : .copied)
+    verificationStatus = try c.decodeIfPresent(VerificationStatus.self, forKey: .verificationStatus) ?? (currentPath.isEmpty ? .pending : .copied)
+    cullStatus = try c.decodeIfPresent(CullStatus.self, forKey: .cullStatus) ?? .unrated
+    thumbnailStatus = try c.decodeIfPresent(ThumbnailStatus.self, forKey: .thumbnailStatus) ?? .pending
+    analysisStatus = try c.decodeIfPresent(AnalysisStatus.self, forKey: .analysisStatus) ?? .notAnalyzed
+    // Decode remaining optional/simple fields with defaults.
+    duration = try c.decodeIfPresent(Double.self, forKey: .duration); width = try c.decodeIfPresent(Int.self, forKey: .width); height = try c.decodeIfPresent(Int.self, forKey: .height); frameRate = try c.decodeIfPresent(Double.self, forKey: .frameRate); codec = try c.decodeIfPresent(String.self, forKey: .codec); bitDepth = try c.decodeIfPresent(Int.self, forKey: .bitDepth); hasAudio = try c.decodeIfPresent(Bool.self, forKey: .hasAudio); audioChannelCount = try c.decodeIfPresent(Int.self, forKey: .audioChannelCount); orientation = try c.decodeIfPresent(String.self, forKey: .orientation); estimatedBitrate = try c.decodeIfPresent(Double.self, forKey: .estimatedBitrate); createdAt = try c.decodeIfPresent(Date.self, forKey: .createdAt); modifiedAt = try c.decodeIfPresent(Date.self, forKey: .modifiedAt); ingestDate = try c.decodeIfPresent(Date.self, forKey: .ingestDate); sonyCardFolderPath = try c.decodeIfPresent(String.self, forKey: .sonyCardFolderPath); cardVolumeName = try c.decodeIfPresent(String.self, forKey: .cardVolumeName); checksum = try c.decodeIfPresent(String.self, forKey: .checksum); assignedFolder = try c.decodeIfPresent(String.self, forKey: .assignedFolder); thumbnailPath = try c.decodeIfPresent(String.self, forKey: .thumbnailPath); errorMessage = try c.decodeIfPresent(String.self, forKey: .errorMessage); previewUnavailable = try c.decodeIfPresent(Bool.self, forKey: .previewUnavailable) ?? false
+    title = try c.decodeIfPresent(String.self, forKey: .title) ?? ""
+    description = try c.decodeIfPresent(String.self, forKey: .description) ?? ""
+    productionTags = try c.decodeIfPresent([String].self, forKey: .productionTags) ?? []
+    people = try c.decodeIfPresent([String].self, forKey: .people) ?? []
+    location = try c.decodeIfPresent(String.self, forKey: .location) ?? ""
+    scene = try c.decodeIfPresent(String.self, forKey: .scene) ?? ""
+    shotType = try c.decodeIfPresent(String.self, forKey: .shotType) ?? ""
+    camera = try c.decodeIfPresent(String.self, forKey: .camera) ?? ""
+    lens = try c.decodeIfPresent(String.self, forKey: .lens) ?? ""
+    audioNotes = try c.decodeIfPresent(String.self, forKey: .audioNotes) ?? ""
+    transcriptNotes = try c.decodeIfPresent(String.self, forKey: .transcriptNotes) ?? ""
+    usageNotes = try c.decodeIfPresent(String.self, forKey: .usageNotes) ?? ""
+    colorLabel = try c.decodeIfPresent(String.self, forKey: .colorLabel) ?? ""
+    favorite = try c.decodeIfPresent(Bool.self, forKey: .favorite) ?? false
+    isBroll = try c.decodeIfPresent(Bool.self, forKey: .isBroll) ?? false
+    isSermon = try c.decodeIfPresent(Bool.self, forKey: .isSermon) ?? false
+    isInterview = try c.decodeIfPresent(Bool.self, forKey: .isInterview) ?? false
+    isSocialClipCandidate = try c.decodeIfPresent(Bool.self, forKey: .isSocialClipCandidate) ?? false
+    customNotes = try c.decodeIfPresent(String.self, forKey: .customNotes) ?? ""
+    automaticTags = try c.decodeIfPresent([String].self, forKey: .automaticTags) ?? []
+    focusScore = try c.decodeIfPresent(Double.self, forKey: .focusScore)
+    focusConfidence = try c.decodeIfPresent(Double.self, forKey: .focusConfidence)
+    sampledFrameCount = try c.decodeIfPresent(Int.self, forKey: .sampledFrameCount)
+    focusWarning = try c.decodeIfPresent(Bool.self, forKey: .focusWarning) ?? false
+    maxFaceCount = try c.decodeIfPresent(Int.self, forKey: .maxFaceCount)
+    averageFaceCount = try c.decodeIfPresent(Double.self, forKey: .averageFaceCount)
+    hasFaces = try c.decodeIfPresent(Bool.self, forKey: .hasFaces) ?? false
+    hasCloseFace = try c.decodeIfPresent(Bool.self, forKey: .hasCloseFace) ?? false
+    faceVisibilityScore = try c.decodeIfPresent(Double.self, forKey: .faceVisibilityScore)
+    uniqueFaceAppearanceCount = try c.decodeIfPresent(Int.self, forKey: .uniqueFaceAppearanceCount)
+    stabilityScore = try c.decodeIfPresent(Double.self, forKey: .stabilityScore)
+    possiblyShaky = try c.decodeIfPresent(Bool.self, forKey: .possiblyShaky) ?? false
+    brightnessScore = try c.decodeIfPresent(Double.self, forKey: .brightnessScore)
+    contrastScore = try c.decodeIfPresent(Double.self, forKey: .contrastScore)
+    darkFramePercentage = try c.decodeIfPresent(Double.self, forKey: .darkFramePercentage)
+    brightFramePercentage = try c.decodeIfPresent(Double.self, forKey: .brightFramePercentage)
+    exposureWarning = try c.decodeIfPresent(Bool.self, forKey: .exposureWarning) ?? false
+    whiteBalanceKelvin = try c.decodeIfPresent(Int.self, forKey: .whiteBalanceKelvin)
+    whiteBalanceTint = try c.decodeIfPresent(Double.self, forKey: .whiteBalanceTint)
+    whiteBalanceConfidence = try c.decodeIfPresent(Double.self, forKey: .whiteBalanceConfidence)
+    whiteBalanceSource = try c.decodeIfPresent(String.self, forKey: .whiteBalanceSource) ?? "unavailable"
+    largestFaceCoveragePercent = try c.decodeIfPresent(Double.self, forKey: .largestFaceCoveragePercent)
+    bestFaceFrameTime = try c.decodeIfPresent(Double.self, forKey: .bestFaceFrameTime)
+    possibleGroupShot = try c.decodeIfPresent(Bool.self, forKey: .possibleGroupShot) ?? false
+    lowFaceVisibility = try c.decodeIfPresent(Bool.self, forKey: .lowFaceVisibility) ?? false
+    facePartiallyVisible = try c.decodeIfPresent(Bool.self, forKey: .facePartiallyVisible) ?? false
+    uniqueFaceConfidence = try c.decodeIfPresent(Double.self, forKey: .uniqueFaceConfidence)
+    shakeScore = try c.decodeIfPresent(Double.self, forKey: .shakeScore)
+    motionScore = try c.decodeIfPresent(Double.self, forKey: .motionScore)
+    highMotion = try c.decodeIfPresent(Bool.self, forKey: .highMotion) ?? false
+  }
 
   static var transferRepresentation: some TransferRepresentation {
     CodableRepresentation(contentType: .data)

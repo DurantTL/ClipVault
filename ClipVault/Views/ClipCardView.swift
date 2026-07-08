@@ -79,9 +79,9 @@ struct ClipCardView: View {
         RoundedRectangle(cornerRadius: 14, style: .continuous)
           .fill(.quaternary)
         VStack(spacing: 8) {
-          Image(systemName: clip.errorMessage == nil ? "video.badge.exclamationmark" : "exclamationmark.triangle.fill")
+          Image(systemName: clip.copyStatus == .pending ? "clock" : (clip.errorMessage == nil ? "video.badge.exclamationmark" : "exclamationmark.triangle.fill"))
             .font(.system(size: 34, weight: .semibold))
-          Text(clip.errorMessage == nil ? "Preview unavailable" : "Thumbnail failed")
+          Text(clip.copyStatus == .pending ? "Not copied yet" : (clip.errorMessage == nil ? "Preview unavailable" : "Thumbnail failed"))
             .font(.caption)
         }
         .foregroundStyle(.secondary)
