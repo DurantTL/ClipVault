@@ -44,8 +44,11 @@ enum ClipSortOption: String, CaseIterable, Identifiable {
   var smartFolders: [String] {
     [
       "All Clips", "Unrated", "Keep", "Maybe", "Reject", "4K", "60p", "Has Audio", "No Audio",
-      "Short Clips", "Long Clips", "Large Files", "Sony", "Recently Ingested", "Failed Preview",
-      "Failed Verification", "Social Candidates", "Interviews", "B-Roll", "Sermon"
+      "Short Clips", "Long Clips", "Large Files", "Sony", "Canon/DCF", "Recently Ingested", "Failed Preview",
+      "Failed Verification", "Social Candidates", "Interviews", "B-Roll", "Sermon",
+      "Possibly Out of Focus", "Faces", "Group Shots", "Close Faces", "Low Face Visibility",
+      "Possibly Shaky", "Stable Clips", "High Motion", "Dark Clips", "Bright Clips",
+      "Low Contrast", "Failed Analysis"
     ]
   }
 
@@ -171,11 +174,23 @@ enum ClipSortOption: String, CaseIterable, Identifiable {
     }
   }
 
-  func analyzeLocally() {
-    for index in project.clips.indices {
-      project.clips[index].automaticTags = analysis.tags(for: project.clips[index])
+  func analyzeLocally(mode: LocalAnalysisMode = LocalAnalysisMode(rawValue: UserDefaults.standard.string(forKey: "localAnalysisMode") ?? "Off") ?? .off) {
+    guard mode != .off else { return }
+    Task {
+      for index in project.clips.indices {
+        project.clips[index] = await analysis.analyzed(project.clips[index], mode: mode)
+        save()
+      }
     }
-    save()
+  }
+
+  func analyzeSelectedClip() {
+    guard let selectedClipID, let index = project.clips.firstIndex(where: { $0.id == selectedClipID }) else { return }
+    let mode = LocalAnalysisMode(rawValue: UserDefaults.standard.string(forKey: "localAnalysisMode") ?? "Fast") ?? .fast
+    Task {
+      project.clips[index] = await analysis.analyzed(project.clips[index], mode: mode)
+      save()
+    }
   }
 
   func exportClipReport(keepsOnly: Bool = false) {
@@ -225,6 +240,8 @@ enum ClipSortOption: String, CaseIterable, Identifiable {
     case "Large Files": return clip.fileSize >= 5_000_000_000 || clip.automaticTags.contains("Large File")
     case "Recently Ingested": return clip.ingestDate.map { Calendar.current.dateComponents([.day], from: $0, to: Date()).day ?? 99 <= 7 } ?? false
     case "Failed Preview": return clip.previewUnavailable || clip.thumbnailPath == nil
+    case "Canon/DCF": return clip.automaticTags.contains("Canon/DCF") || clip.originalSourcePath.localizedCaseInsensitiveContains("/DCIM/")
+    case "Possibly Out of Focus", "Faces", "Group Shots", "Close Faces", "Low Face Visibility", "Possibly Shaky", "Stable Clips", "High Motion", "Dark Clips", "Bright Clips", "Low Contrast", "Failed Analysis": return clip.automaticTags.contains(filter)
     case "Social Candidates": return clip.isSocialClipCandidate
     case "Interviews": return clip.isInterview
     case "B-Roll": return clip.isBroll || clip.assignedFolder == filter

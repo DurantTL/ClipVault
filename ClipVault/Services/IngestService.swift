@@ -7,14 +7,18 @@ final class IngestService {
   let store = ProjectStore()
   let security = SecurityScopedBookmarkManager()
   var cancelled = false
+  var paused = false
   private let copyService = StreamingCopyService()
   func cancel() { cancelled = true }
+  func pause() { paused = true }
+  func resume() { paused = false }
   func ingest(
     name: String, shootName: String, source: URL, destination: URL, videos: [SourceVideo], bookmarks: (Data?, Data?),
     settings: AppSettings, progress: @escaping @MainActor (IngestProgress) -> Void
   ) async throws -> ClipVaultProject {
     cancelled = false
     copyService.isCancelled = { [weak self] in self?.cancelled ?? false }
+    copyService.isPaused = { [weak self] in self?.paused ?? false }
     return try await security.withAccessAsync(to: source) {
       try await security.withAccessAsync(to: destination) {
         let projectFolder = SafeFilename.uniqueURL(
@@ -39,7 +43,7 @@ final class IngestService {
               currentFilename: v.url.lastPathComponent, currentIndex: idx + 1,
               totalCount: videos.count, copiedBytes: done, totalBytes: total,
               bytesPerSecond: Double(done) / max(1, Date().timeIntervalSince(started)),
-              message: "Copying"))
+              message: paused ? "Paused" : "Copying"))
           let cleanShootName = SafeFilename.safeFolderName(shootName)
           let flatRelativePath = cleanShootName.isEmpty ? v.url.lastPathComponent : "\(cleanShootName)/\(v.url.lastPathComponent)"
           let rel = settings.preserveSourceStructure ? v.relativePath : flatRelativePath
@@ -60,12 +64,23 @@ final class IngestService {
                   currentFilename: v.url.lastPathComponent, currentIndex: idx + 1,
                   totalCount: videos.count, copiedBytes: copied, totalBytes: total,
                   bytesPerSecond: Double(copied) / max(1, Date().timeIntervalSince(started)),
-                  message: "Copying"))
+                  message: paused ? "Paused" : "Copying"))
             }
             clip.verificationStatus = .copied
             try await verifier.verify(
               source: v.url, destination: destURL, mode: settings.verificationMode)
             clip.verificationStatus = .verified
+            do {
+              try await copyBackupsIfNeeded(
+                primaryFile: destURL,
+                projectFolder: projectFolder,
+                relativePath: clip.relativePath,
+                settings: settings,
+                progress: progress
+              )
+            } catch {
+              clip.errorMessage = "Primary verified. Backup warning: \(error.localizedDescription)"
+            }
           } catch is CancellationError {
             clip.verificationStatus = .failed
             clip.errorMessage = "Ingest canceled during copy."
@@ -96,6 +111,52 @@ final class IngestService {
         try store.save(project)
         return project
       }
+    }
+  }
+
+  private func copyBackupsIfNeeded(
+    primaryFile: URL,
+    projectFolder: URL,
+    relativePath: String,
+    settings: AppSettings,
+    progress: @escaping @MainActor (IngestProgress) -> Void
+  ) async throws {
+    let backupPaths: [String]
+    switch settings.backupTransferMode {
+    case "Primary + Backup 1":
+      backupPaths = [settings.backupDestination1Path]
+    case "Primary + Backup 1 + Backup 2":
+      backupPaths = [settings.backupDestination1Path, settings.backupDestination2Path]
+    default:
+      backupPaths = []
+    }
+
+    for (index, path) in backupPaths.enumerated() where !path.isEmpty {
+      let root = URL(fileURLWithPath: path, isDirectory: true)
+      guard FileManager.default.fileExists(atPath: root.path) else {
+        await progress(IngestProgress(message: "Backup \(index + 1) unavailable; primary remains verified"))
+        continue
+      }
+      let destination = SafeFilename.uniqueURL(
+        for: root
+          .appendingPathComponent(projectFolder.lastPathComponent, isDirectory: true)
+          .appendingPathComponent(relativePath)
+      )
+      try FileManager.default.createDirectory(
+        at: destination.deletingLastPathComponent(),
+        withIntermediateDirectories: true
+      )
+      let size = Int64((try? primaryFile.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
+      await progress(IngestProgress(currentFilename: primaryFile.lastPathComponent, copiedBytes: 0, totalBytes: size, message: "Copying Backup \(index + 1)"))
+      _ = try await copyService.copy(
+        from: primaryFile,
+        to: destination,
+        alreadyCopiedBytes: 0,
+        totalBytes: size
+      ) { copied in
+        progress(IngestProgress(currentFilename: primaryFile.lastPathComponent, copiedBytes: copied, totalBytes: size, message: "Verifying Backup \(index + 1)"))
+      }
+      try await verifier.verify(source: primaryFile, destination: destination, mode: settings.verificationMode)
     }
   }
 }

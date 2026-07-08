@@ -2,6 +2,24 @@ import CoreTransferable
 import Foundation
 import UniformTypeIdentifiers
 
+enum AnalysisStatus: String, Codable, CaseIterable {
+  case notAnalyzed
+  case analyzing
+  case complete
+  case failed
+  case canceled
+
+  var label: String {
+    switch self {
+    case .notAnalyzed: return "Not Analyzed"
+    case .analyzing: return "Analyzing"
+    case .complete: return "Complete"
+    case .failed: return "Failed Analysis"
+    case .canceled: return "Canceled"
+    }
+  }
+}
+
 struct Clip: Identifiable, Codable, Equatable, Transferable {
   var id = UUID()
   var originalSourcePath: String
@@ -53,6 +71,22 @@ struct Clip: Identifiable, Codable, Equatable, Transferable {
   var isSocialClipCandidate: Bool = false
   var customNotes: String = ""
   var automaticTags: [String] = []
+  var analysisStatus: AnalysisStatus = .notAnalyzed
+  var focusScore: Double?
+  var focusConfidence: Double?
+  var sampledFrameCount: Int?
+  var focusWarning: Bool = false
+  var maxFaceCount: Int?
+  var averageFaceCount: Double?
+  var hasFaces: Bool = false
+  var hasCloseFace: Bool = false
+  var faceVisibilityScore: Double?
+  var uniqueFaceAppearanceCount: Int?
+  var stabilityScore: Double?
+  var possiblyShaky: Bool = false
+  var brightnessScore: Double?
+  var contrastScore: Double?
+
 
   static var transferRepresentation: some TransferRepresentation {
     CodableRepresentation(contentType: .data)

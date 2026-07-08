@@ -11,7 +11,7 @@ import Foundation
   @Published var error: String?
   @Published var isIngesting = false
   @Published var canceledSummary: String?
-  @Published var isSonyCard = false
+  @Published var detectedCardType: DetectedCardType = .generic
   @Published var destinationFreeSpace: Int64?
 
   let scanner = SourceScanner()
@@ -46,6 +46,14 @@ import Foundation
     updateFreeSpace()
   }
 
+  func chooseBackup1(settings: AppSettings) {
+    settings.backupDestination1Path = pickFolder(canCreateDirectories: true)?.path ?? ""
+  }
+
+  func chooseBackup2(settings: AppSettings) {
+    settings.backupDestination2Path = pickFolder(canCreateDirectories: true)?.path ?? ""
+  }
+
   func pickFolder(canCreateDirectories: Bool) -> URL? {
     let panel = NSOpenPanel()
     panel.canChooseDirectories = true
@@ -57,7 +65,7 @@ import Foundation
 
   func detectSonyCard() {
     guard let sourceURL else { return }
-    isSonyCard = FileManager.default.fileExists(atPath: sourceURL.appendingPathComponent("PRIVATE/M4ROOT/CLIP").path)
+    detectedCardType = scanner.detectCardType(source: sourceURL)
   }
 
   func scan(settings: AppSettings) {

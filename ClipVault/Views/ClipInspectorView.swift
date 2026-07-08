@@ -73,6 +73,24 @@ struct ClipInspectorView: View {
       Toggle("Social Clip Candidate", isOn: bind(\.isSocialClipCandidate))
     }
 
+    inspectorCard("Analysis", systemImage: "waveform.and.magnifyingglass") {
+      InfoRow("Analysis Status", clip.analysisStatus.label)
+      InfoRow("Focus Score", clip.focusScore.map { String(format: "%.0f / 100", $0) } ?? "Not analyzed")
+      InfoRow("Face Visibility", clip.faceVisibilityScore.map { String(format: "%.0f / 100", $0) } ?? "Not analyzed")
+      InfoRow("Face Count", clip.maxFaceCount.map(String.init) ?? "Not analyzed")
+      InfoRow("Unique Face Appearances", clip.uniqueFaceAppearanceCount.map(String.init) ?? "Future local clustering")
+      InfoRow("Stability Score", clip.stabilityScore.map { String(format: "%.0f / 100", $0) } ?? "Not analyzed")
+      InfoRow("Brightness", clip.brightnessScore.map { String(format: "%.0f / 100", $0) } ?? "Not analyzed")
+      InfoRow("Contrast", clip.contrastScore.map { String(format: "%.0f / 100", $0) } ?? "Not analyzed")
+      HStack {
+        Button("Analyze This Clip") { vm.analyzeSelectedClip() }
+        Button("Reanalyze This Clip") { vm.analyzeSelectedClip() }
+      }
+      Text("Local analysis is offline and may flag intentionally soft, dark, or moving shots as possible issues.")
+        .font(.caption)
+        .foregroundStyle(.secondary)
+    }
+
     inspectorCard("Automatic Tags", systemImage: "sparkles") {
       TagCloud(tags: clip.automaticTags)
     }

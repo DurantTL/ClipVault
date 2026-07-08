@@ -11,6 +11,9 @@ final class AppSettings: ObservableObject {
   @AppStorage("loopAtEnd") var loopAtEnd = false
   @AppStorage("advanceDirectionPrevious") var advanceDirectionPrevious = false
   @AppStorage("localAnalysisMode") var localAnalysisMode = "Off"
+  @AppStorage("backupTransferMode") var backupTransferMode = "Primary only"
+  @AppStorage("backupDestination1Path") var backupDestination1Path = ""
+  @AppStorage("backupDestination2Path") var backupDestination2Path = ""
   @AppStorage("finderTagsExport") var finderTagsExport = false
   @AppStorage("xmpSidecarExport") var xmpSidecarExport = false
 

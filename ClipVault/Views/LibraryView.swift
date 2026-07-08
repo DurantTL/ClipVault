@@ -5,6 +5,7 @@ struct LibraryView: View {
   @State private var newFolder = ""
   @State private var showingIngest = false
   @State private var showingSettings = false
+  @State private var showingPreview = false
 
   var body: some View {
     NavigationSplitView {
@@ -83,28 +84,36 @@ struct LibraryView: View {
         .frame(width: 900, height: 820)
     }
     .sheet(isPresented: $showingSettings) { SettingsView() }
-    .sheet(item: $viewModel.previewClip) { clip in
+    .sheet(isPresented: $showingPreview) {
       PlayerPreviewView(
-        clip: clip,
-        onClose: { viewModel.closePreview() },
-        onNext: {
-          viewModel.selectNext()
-          viewModel.previewSelected()
-        },
-        onPrevious: {
-          viewModel.selectPrevious()
-          viewModel.previewSelected()
+        library: viewModel,
+        onClose: {
+          viewModel.closePreview()
+          showingPreview = false
         }
       )
+    }
+    .onChange(of: viewModel.previewClip) { clip in
+      showingPreview = clip != nil
     }
     .onReceive(NotificationCenter.default.publisher(for: .clipKeep)) { _ in viewModel.setStatus(.keep) }
     .onReceive(NotificationCenter.default.publisher(for: .clipMaybe)) { _ in viewModel.setStatus(.maybe) }
     .onReceive(NotificationCenter.default.publisher(for: .clipReject)) { _ in viewModel.setStatus(.reject) }
     .onReceive(NotificationCenter.default.publisher(for: .clipUnrated)) { _ in viewModel.setStatus(.unrated) }
     .onReceive(NotificationCenter.default.publisher(for: .clipReveal)) { _ in viewModel.reveal() }
-    .onReceive(NotificationCenter.default.publisher(for: .clipPreview)) { _ in viewModel.previewSelected() }
+    .onReceive(NotificationCenter.default.publisher(for: .clipPreview)) { _ in
+      if showingPreview {
+        // Space toggles playback inside PlayerPreviewView; keep the preview selection-bound.
+      } else {
+        viewModel.previewSelected()
+        showingPreview = viewModel.selectedClip != nil
+      }
+    }
     .onReceive(NotificationCenter.default.publisher(for: .clipNext)) { _ in viewModel.selectNext() }
     .onReceive(NotificationCenter.default.publisher(for: .clipPrevious)) { _ in viewModel.selectPrevious() }
-    .onReceive(NotificationCenter.default.publisher(for: .clipClosePreview)) { _ in viewModel.closePreview() }
+    .onReceive(NotificationCenter.default.publisher(for: .clipClosePreview)) { _ in
+      viewModel.closePreview()
+      showingPreview = false
+    }
   }
 }
