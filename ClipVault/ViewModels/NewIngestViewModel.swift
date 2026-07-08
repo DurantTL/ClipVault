@@ -5,51 +5,107 @@ import Foundation
   @Published var sourceURL: URL?
   @Published var destinationURL: URL?
   @Published var projectName = ""
+  @Published var shootName = ""
   @Published var videos: [SourceVideo] = []
   @Published var progress = IngestProgress()
   @Published var error: String?
   @Published var isIngesting = false
+  @Published var canceledSummary: String?
+  @Published var isSonyCard = false
+  @Published var destinationFreeSpace: Int64?
+
   let scanner = SourceScanner()
   let bookmarks = SecurityScopedBookmarkManager()
   let ingestService = IngestService()
+
   init() {
-    let f = DateFormatter()
-    f.dateFormat = "yyyy-MM-dd"
-    projectName = "\(f.string(from: Date())) Video Ingest"
+    let formatter = DateFormatter()
+    formatter.dateFormat = "yyyy-MM-dd"
+    projectName = "\(formatter.string(from: Date())) Video Ingest"
   }
+
+  var finalOutputURL: URL? {
+    guard let destinationURL else { return nil }
+    var url = destinationURL.appendingPathComponent(projectName, isDirectory: true)
+    if !shootName.trimmingCharacters(in: .whitespaces).isEmpty {
+      url.appendPathComponent(SafeFilename.safeFolderName(shootName), isDirectory: true)
+    }
+    return url
+  }
+
   func chooseSource(settings: AppSettings) {
-    if let u = pickFolder() {
-      sourceURL = u
+    if let url = pickFolder(canCreateDirectories: false) {
+      sourceURL = url
+      detectSonyCard()
       scan(settings: settings)
     }
   }
-  func chooseDestination() { destinationURL = pickFolder() }
-  func pickFolder() -> URL? {
-    let p = NSOpenPanel()
-    p.canChooseDirectories = true
-    p.canChooseFiles = false
-    p.allowsMultipleSelection = false
-    return p.runModal() == .OK ? p.url : nil
+
+  func chooseDestination() {
+    destinationURL = pickFolder(canCreateDirectories: true)
+    updateFreeSpace()
   }
+
+  func pickFolder(canCreateDirectories: Bool) -> URL? {
+    let panel = NSOpenPanel()
+    panel.canChooseDirectories = true
+    panel.canChooseFiles = false
+    panel.allowsMultipleSelection = false
+    panel.canCreateDirectories = canCreateDirectories
+    return panel.runModal() == .OK ? panel.url : nil
+  }
+
+  func detectSonyCard() {
+    guard let sourceURL else { return }
+    isSonyCard = FileManager.default.fileExists(atPath: sourceURL.appendingPathComponent("PRIVATE/M4ROOT/CLIP").path)
+  }
+
   func scan(settings: AppSettings) {
     guard let sourceURL else { return }
     do {
+      detectSonyCard()
       videos = try scanner.scan(source: sourceURL, includeProxyFiles: settings.includeProxyFiles)
+      updateFreeSpace()
     } catch { self.error = error.localizedDescription }
   }
+
+  func createProjectFolder() {
+    guard let url = finalOutputURL else { return }
+    try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+  }
+
+  func revealDestination() {
+    guard let url = finalOutputURL ?? destinationURL else { return }
+    NSWorkspace.shared.activateFileViewerSelecting([url])
+  }
+
   func start(settings: AppSettings) async -> ClipVaultProject? {
-    guard let s = sourceURL, let d = destinationURL else { return nil }
+    guard let source = sourceURL, let destination = destinationURL else { return nil }
     isIngesting = true
+    canceledSummary = nil
     defer { isIngesting = false }
     do {
       return try await ingestService.ingest(
-        name: projectName, source: s, destination: d, videos: videos,
-        bookmarks: (try? bookmarks.bookmark(for: s), try? bookmarks.bookmark(for: d)),
+        name: projectName,
+        shootName: shootName,
+        source: source,
+        destination: destination,
+        videos: videos,
+        bookmarks: (try? bookmarks.bookmark(for: source), try? bookmarks.bookmark(for: destination)),
         settings: settings
       ) { self.progress = $0 }
+    } catch is CancellationError {
+      canceledSummary = "Ingest canceled. \(progress.currentIndex) of \(progress.totalCount) files copied."
+      return nil
     } catch {
       self.error = error.localizedDescription
       return nil
     }
+  }
+
+  private func updateFreeSpace() {
+    guard let destinationURL else { return }
+    destinationFreeSpace = try? destinationURL.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])
+      .volumeAvailableCapacityForImportantUsage
   }
 }

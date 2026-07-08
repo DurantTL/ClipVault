@@ -6,6 +6,8 @@ struct SourceVideo: Identifiable, Hashable {
   let relativePath: String
   let size: Int64
   let createdAt: Date?
+  let modifiedAt: Date?
+  let sonyCardFolderPath: String?
 }
 
 struct IngestProgress: Equatable {

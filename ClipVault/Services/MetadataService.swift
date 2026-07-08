@@ -3,35 +3,59 @@ import Foundation
 
 final class MetadataService {
   private let security = SecurityScopedBookmarkManager()
+
   func enrich(_ clip: inout Clip) async {
     let url = URL(fileURLWithPath: clip.currentPath)
     await security.withAccessAsync(to: url) {
       let asset = AVURLAsset(url: url)
       do {
         let duration = try await asset.load(.duration)
-        clip.duration =
-          (duration.isValid && !duration.isIndefinite && duration.seconds.isFinite)
-          ? duration.seconds : nil
+        clip.duration = (duration.isValid && !duration.isIndefinite && duration.seconds.isFinite) ? duration.seconds : nil
+        if let duration = clip.duration, duration > 0 {
+          clip.estimatedBitrate = Double(clip.fileSize * 8) / duration
+        }
       } catch {
         clip.previewUnavailable = true
-        clip.errorMessage = error.localizedDescription
+        clip.errorMessage = "Copied and verified — preview unavailable on this Mac."
       }
       do {
         let tracks = try await asset.loadTracks(withMediaType: .video)
-        if let t = tracks.first {
-          let size = try await t.load(.naturalSize).applying(try await t.load(.preferredTransform))
+        if let track = tracks.first {
+          let size = try await track.load(.naturalSize).applying(try await track.load(.preferredTransform))
           clip.width = Int(abs(size.width))
           clip.height = Int(abs(size.height))
-          clip.frameRate = Double(try await t.load(.nominalFrameRate))
-          if let desc = try await t.load(.formatDescriptions).first {
+          clip.frameRate = Double(try await track.load(.nominalFrameRate))
+          if let desc = try await track.load(.formatDescriptions).first {
             clip.codec = CMFormatDescriptionGetMediaSubType(desc).fourCC
           }
+          clip.orientation = abs(size.height) > abs(size.width) ? "Portrait" : "Landscape"
         }
-        clip.hasAudio = !(try await asset.loadTracks(withMediaType: .audio)).isEmpty
-      } catch { clip.previewUnavailable = true }
+        let audioTracks = try await asset.loadTracks(withMediaType: .audio)
+        clip.hasAudio = !audioTracks.isEmpty
+        if let audioDescription = try await audioTracks.first?.load(.formatDescriptions).first,
+          let layout = CMAudioFormatDescriptionGetStreamBasicDescription(audioDescription) {
+          clip.audioChannelCount = Int(layout.pointee.mChannelsPerFrame)
+        }
+      } catch {
+        clip.previewUnavailable = true
+      }
+      clip.automaticTags = automaticTags(for: clip)
     }
   }
+
+  private func automaticTags(for clip: Clip) -> [String] {
+    var tags: [String] = []
+    if clip.sonyCardFolderPath != nil || clip.originalSourcePath.contains("PRIVATE/M4ROOT") { tags.append("Sony") }
+    if (clip.width ?? 0) >= 3840 || (clip.height ?? 0) >= 2160 { tags.append("4K") }
+    if let frameRate = clip.frameRate, frameRate >= 59, frameRate <= 61 { tags.append("60p") }
+    if clip.hasAudio == false { tags.append("No Audio") }
+    if clip.fileSize > 4 * 1024 * 1024 * 1024 { tags.append("Large File") }
+    if let duration = clip.duration, duration < 15 { tags.append("Short Clip") }
+    if let duration = clip.duration, duration > 10 * 60 { tags.append("Long Clip") }
+    return Array(Set(tags)).sorted()
+  }
 }
+
 extension FourCharCode {
   var fourCC: String {
     String(
