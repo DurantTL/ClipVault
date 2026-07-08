@@ -5,7 +5,7 @@ struct ClipVaultApp: App {
   @StateObject private var settings = AppSettings()
 
   var body: some Scene {
-    WindowGroup("ClipVault") {
+    WindowGroup(AppBrand.appName) {
       RootView()
         .environmentObject(settings)
     }

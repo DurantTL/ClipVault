@@ -8,6 +8,7 @@ struct SourceVideo: Identifiable, Hashable {
   let createdAt: Date?
   let modifiedAt: Date?
   let sonyCardFolderPath: String?
+  let cardType: String
 }
 
 struct IngestProgress: Equatable {
@@ -18,5 +19,6 @@ struct IngestProgress: Equatable {
   var totalBytes: Int64 = 0
   var bytesPerSecond: Double = 0
   var message = "Ready"
+  var backupMessage = "Primary only"
   var fraction: Double { totalBytes == 0 ? 0 : min(1, Double(copiedBytes) / Double(totalBytes)) }
 }

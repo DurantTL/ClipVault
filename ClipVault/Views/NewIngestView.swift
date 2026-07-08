@@ -32,8 +32,8 @@ struct NewIngestView: View {
           Button("Choose Source") { vm.chooseSource(settings: settings) }
           Text(vm.sourceURL?.path ?? "No source selected").lineLimit(1)
         }
-        Label(vm.isSonyCard ? "Sony card detected: PRIVATE/M4ROOT/CLIP" : "Generic folder", systemImage: vm.isSonyCard ? "checkmark.seal.fill" : "folder")
-          .foregroundStyle(vm.isSonyCard ? .green : .secondary)
+        Label(vm.detectedCardType.summary, systemImage: vm.detectedCardType == .generic ? "folder" : "checkmark.seal.fill")
+          .foregroundStyle(vm.detectedCardType == .generic ? .secondary : .green)
       }
     }
   }
@@ -41,12 +41,31 @@ struct NewIngestView: View {
   private var destinationSection: some View {
     CardContainer {
       VStack(alignment: .leading, spacing: 10) {
-        Label("Destination", systemImage: "folder.badge.plus")
+        Label("Primary Destination Parent Folder", systemImage: "folder.badge.plus")
           .font(.headline)
+        Text("Destination can be a local folder, external SSD, mounted NAS, or cloud-synced folder.")
+          .font(.caption)
+          .foregroundStyle(.secondary)
         HStack {
-          Button("Choose Destination Parent Folder") { vm.chooseDestination() }
+          Button("Choose Primary Destination") { vm.chooseDestination() }
           Text(vm.destinationURL?.path ?? "No destination selected").lineLimit(1)
         }
+        Picker("Backup Transfer Mode", selection: $settings.backupTransferMode) {
+          Text("Primary only").tag("Primary only")
+          Text("Primary + Backup 1").tag("Primary + Backup 1")
+          Text("Primary + Backup 1 + Backup 2").tag("Primary + Backup 1 + Backup 2")
+        }
+        HStack {
+          Button("Choose Optional Backup Destination 1") { vm.chooseBackup1(settings: settings) }
+          Text(settings.backupDestination1Path.isEmpty ? "No backup 1 selected" : settings.backupDestination1Path).lineLimit(1)
+        }
+        HStack {
+          Button("Choose Optional Backup Destination 2") { vm.chooseBackup2(settings: settings) }
+          Text(settings.backupDestination2Path.isEmpty ? "No backup 2 selected" : settings.backupDestination2Path).lineLimit(1)
+        }
+        Text("NAS and cloud-synced folders are supported as mounted local folders. NAS disconnects or permission failures can pause or fail backup retries without failing a verified primary copy.")
+          .font(.caption)
+          .foregroundStyle(.orange)
         TextField("Project Folder Name", text: $vm.projectName)
           .textFieldStyle(.roundedBorder)
         TextField("Shoot/Subfolder Name (optional)", text: $vm.shootName)
@@ -100,7 +119,7 @@ struct NewIngestView: View {
               .foregroundStyle(.red)
           }
         }
-        Text(vm.isSonyCard ? "Sony card detected; CLIP is prioritized." : "No Sony card structure detected.")
+        Text(vm.detectedCardType.summary)
           .font(.caption)
           .foregroundStyle(.secondary)
         Text("Final copy mode: \(settings.preserveSourceStructure ? "Preserve Source Structure" : "Flat")")
@@ -121,7 +140,11 @@ struct NewIngestView: View {
           Text("Keep the SD card and destination drive connected until ingest finishes.")
             .font(.caption)
             .foregroundStyle(.secondary)
-          Button("Cancel") { vm.ingestService.cancel() }
+          HStack {
+            Button("Pause") { vm.ingestService.pause() }
+            Button("Resume") { vm.ingestService.resume() }
+            Button("Cancel") { vm.ingestService.cancel() }
+          }
         }
       }
     } else {

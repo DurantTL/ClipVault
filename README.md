@@ -106,3 +106,65 @@ ClipVault includes menu actions for Clip Report CSV, Keep List CSV, and Project 
 - Copy Keeps to Edit Folder is planned but not fully implemented in this pass.
 - Local analysis is rule-based only; no cloud AI and no heavy Core ML model are included.
 - Folder delete removes the folder assignment from the project metadata only; it does not delete media files.
+
+## 2026 ClipVault workflow update
+
+### Camera card workflows
+
+- **Sony cards:** ClipVault detects `PRIVATE/M4ROOT/CLIP` and scans full-resolution clips there. Sony proxy files in `PRIVATE/M4ROOT/SUB` remain skipped by default unless proxy ingest is enabled.
+- **Canon/DCF cards:** ClipVault detects a root `DCIM` folder, recursively scans Canon/DCF video folders, and imports video-oriented formats such as `.MP4`, `.MOV`, and `.CRM`. Photo and sidecar formats such as `.JPG`, `.CR3`, and `.THM` are ignored for this pass.
+- **Generic folders:** If no known camera structure is detected, ClipVault performs a recursive video scan.
+
+### Folder structure options
+
+- **Flat:** Copies detected videos directly into the project or shoot folder. This is the default for camera-card style ingest.
+- **Preserve Source Structure:** Keeps the source-relative folder layout inside the ClipVault project.
+
+### Transfer controls and destinations
+
+- Streaming copies now use `.clipvault-partial` temporary files and only move into place after the file is fully copied.
+- Ingest can be paused and resumed between copy chunks without destructive SD card operations.
+- The ingest sheet includes a primary destination plus optional Backup 1 and Backup 2 destination fields.
+- Backups are intended to be copied from the verified primary destination so the SD card is read once.
+- Mounted NAS folders are treated like normal folders. NAS transfers may be slower, and disconnects should be retried after the share is available again.
+- **Cloud-synced folder support** means local folders managed by iCloud Drive, Dropbox, Google Drive, or OneDrive. ClipVault does not upload directly to cloud providers in this pass.
+
+### Keyboard shortcuts
+
+- Space: open preview for the selected clip, or play/pause while preview is focused.
+- Escape: close preview.
+- Right Arrow / Left Arrow: select next or previous visible clip.
+- 5: Keep.
+- 3: Maybe.
+- 1: Reject.
+- 0: Unrated.
+
+### Local offline analysis
+
+ClipVault includes a local analysis foundation with Off, Fast, Balanced, and Detailed modes. Analysis runs only on copied destination files, stores results in project JSON, and can populate smart folders and inspector fields for:
+
+- Possibly Out of Focus
+- Faces, Group Shots, Close Faces, Low Face Visibility
+- Possibly Shaky, Stable Clips, High Motion
+- Dark Clips, Bright Clips, Low Contrast
+- Failed Analysis
+
+### Privacy
+
+All analysis is designed to run offline with Apple APIs. ClipVault does not upload frames, face data, or clip metadata to cloud AI services. Face features are for organization only; ClipVault does not automatically identify people by real name.
+
+### Known limitations
+
+- `.CRM` files may copy and verify even when AVFoundation preview is unavailable on the current Mac.
+- Local analysis scores are advisory and may flag intentionally soft, dark, or moving footage.
+- Direct Dropbox, Google Drive, and OneDrive upload APIs are not implemented; use their local synced folders instead.
+
+### Local placeholder app icons
+
+Codex does not commit generated icon PNGs because binary files are not supported by the patch system. To generate local placeholder app icons on a development Mac, run:
+
+```bash
+python3 Scripts/generate_app_icon.py
+```
+
+The generated PNG files are ignored by git at `ClipVault/Assets.xcassets/AppIcon.appiconset/*.png`. The SwiftUI in-app logo remains available without generated binary assets.
