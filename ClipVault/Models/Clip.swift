@@ -86,6 +86,22 @@ struct Clip: Identifiable, Codable, Equatable, Transferable {
   var possiblyShaky: Bool = false
   var brightnessScore: Double?
   var contrastScore: Double?
+  var darkFramePercentage: Double?
+  var brightFramePercentage: Double?
+  var exposureWarning: Bool = false
+  var whiteBalanceKelvin: Int?
+  var whiteBalanceTint: Double?
+  var whiteBalanceConfidence: Double?
+  var whiteBalanceSource: String = "unavailable"
+  var largestFaceCoveragePercent: Double?
+  var bestFaceFrameTime: Double?
+  var possibleGroupShot: Bool = false
+  var lowFaceVisibility: Bool = false
+  var facePartiallyVisible: Bool = false
+  var uniqueFaceConfidence: Double?
+  var shakeScore: Double?
+  var motionScore: Double?
+  var highMotion: Bool = false
 
 
   static var transferRepresentation: some TransferRepresentation {

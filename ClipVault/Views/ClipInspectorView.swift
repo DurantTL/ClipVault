@@ -75,16 +75,23 @@ struct ClipInspectorView: View {
 
     inspectorCard("Analysis", systemImage: "waveform.and.magnifyingglass") {
       InfoRow("Analysis Status", clip.analysisStatus.label)
-      InfoRow("Focus Score", clip.focusScore.map { String(format: "%.0f / 100", $0) } ?? "Not analyzed")
-      InfoRow("Face Visibility", clip.faceVisibilityScore.map { String(format: "%.0f / 100", $0) } ?? "Not analyzed")
-      InfoRow("Face Count", clip.maxFaceCount.map(String.init) ?? "Not analyzed")
-      InfoRow("Unique Face Appearances", clip.uniqueFaceAppearanceCount.map(String.init) ?? "Future local clustering")
-      InfoRow("Stability Score", clip.stabilityScore.map { String(format: "%.0f / 100", $0) } ?? "Not analyzed")
-      InfoRow("Brightness", clip.brightnessScore.map { String(format: "%.0f / 100", $0) } ?? "Not analyzed")
-      InfoRow("Contrast", clip.contrastScore.map { String(format: "%.0f / 100", $0) } ?? "Not analyzed")
+      InfoRow("Focus", analysisValue(clip.focusScore, suffix: clip.focusWarning ? " — Possibly Out of Focus" : " — Sharp/Usable"))
+      InfoRow("Stability", analysisValue(clip.stabilityScore, suffix: clip.possiblyShaky ? " — Possibly Shaky" : " — Stable"))
+      InfoRow("Brightness", analysisValue(clip.brightnessScore, suffix: exposureLabel(clip)))
+      InfoRow("Contrast", analysisValue(clip.contrastScore, suffix: (clip.contrastScore ?? 100) < 18 ? " — Low Contrast" : ""))
+      InfoRow("White Balance", whiteBalanceLabel(clip))
+      InfoRow("Faces", clip.maxFaceCount.map { "\($0) detected" } ?? "Not analyzed")
+      InfoRow("Unique Face Appearances", clip.uniqueFaceAppearanceCount.map { "\($0) estimated locally" } ?? "Not analyzed")
+      InfoRow("Face Visibility", analysisValue(clip.faceVisibilityScore, suffix: clip.lowFaceVisibility ? " — Low Face Visibility" : ""))
+      InfoRow("Sampled Frames", clip.sampledFrameCount.map(String.init) ?? "Not analyzed")
+      TagCloud(tags: analysisBadges(for: clip))
       HStack {
         Button("Analyze This Clip") { vm.analyzeSelectedClip() }
         Button("Reanalyze This Clip") { vm.analyzeSelectedClip() }
+      }
+      HStack {
+        Button("Analyze Visible Clips") { vm.analyzeVisibleClips() }
+        Button("Analyze All Clips") { vm.analyzeLocally(mode: .fast) }
       }
       Text("Local analysis is offline and may flag intentionally soft, dark, or moving shots as possible issues.")
         .font(.caption)
@@ -115,6 +122,37 @@ struct ClipInspectorView: View {
           .foregroundStyle(.red)
       }
     }
+  }
+
+  private func analysisValue(_ value: Double?, suffix: String = "") -> String {
+    guard let value else { return "Not analyzed" }
+    return String(format: "%.0f / 100%@", value, suffix)
+  }
+
+  private func whiteBalanceLabel(_ clip: Clip) -> String {
+    guard let kelvin = clip.whiteBalanceKelvin else { return "Unavailable" }
+    let confidence = clip.whiteBalanceConfidence ?? 0
+    let level = confidence >= 70 ? "High" : confidence >= 45 ? "Medium" : "Low"
+    let prefix = clip.whiteBalanceSource == "cameraMetadata" ? "" : "Approx. "
+    return "\(prefix)\(kelvin)K, \(level) Confidence"
+  }
+
+  private func exposureLabel(_ clip: Clip) -> String {
+    if (clip.brightnessScore ?? 50) < 25 { return " — Dark Clip" }
+    if (clip.brightnessScore ?? 50) > 82 { return " — Bright Clip" }
+    return " — Balanced Exposure"
+  }
+
+  private func analysisBadges(for clip: Clip) -> [String] {
+    [
+      clip.focusWarning ? "Possibly Out of Focus" : nil,
+      clip.possiblyShaky ? "Possibly Shaky" : "Stable",
+      clip.hasFaces ? "Faces" : nil,
+      clip.possibleGroupShot ? "Group Shot" : nil,
+      (clip.brightnessScore ?? 50) > 82 ? "Bright Clip" : nil,
+      (clip.contrastScore ?? 100) < 18 ? "Low Contrast" : nil,
+      clip.whiteBalanceKelvin == nil ? nil : "Approx. WB"
+    ].compactMap { $0 }
   }
 
   private func inspectorCard<Content: View>(

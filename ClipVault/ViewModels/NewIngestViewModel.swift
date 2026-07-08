@@ -7,6 +7,7 @@ import Foundation
   @Published var projectName = ""
   @Published var shootName = ""
   @Published var videos: [SourceVideo] = []
+  @Published var sessions: [IngestSession] = []
   @Published var progress = IngestProgress()
   @Published var error: String?
   @Published var isIngesting = false
@@ -73,6 +74,7 @@ import Foundation
     do {
       detectSonyCard()
       videos = try scanner.scan(source: sourceURL, includeProxyFiles: settings.includeProxyFiles)
+      sessions = buildSessions(from: videos, source: sourceURL)
       updateFreeSpace()
     } catch { self.error = error.localizedDescription }
   }
@@ -98,7 +100,7 @@ import Foundation
         shootName: shootName,
         source: source,
         destination: destination,
-        videos: videos,
+        videos: selectedVideos,
         bookmarks: (try? bookmarks.bookmark(for: source), try? bookmarks.bookmark(for: destination)),
         settings: settings
       ) { self.progress = $0 }
@@ -109,6 +111,65 @@ import Foundation
       self.error = error.localizedDescription
       return nil
     }
+  }
+
+  var selectedVideos: [SourceVideo] {
+    let selectedIDs = Set(sessions.filter { $0.selected }.flatMap { $0.clips.map(\.id) })
+    return videos.filter { video in
+      sessions.isEmpty || selectedIDs.contains(video.id)
+    }
+  }
+
+  var selectedTotalSize: Int64 { selectedVideos.reduce(0) { $0 + $1.size } }
+
+  func selectAllSessions() { for index in sessions.indices { sessions[index].selected = true } }
+  func clearSessionSelection() { for index in sessions.indices { sessions[index].selected = false } }
+  func selectTodaySessions() {
+    for index in sessions.indices { sessions[index].selected = Calendar.current.isDateInToday(sessions[index].date) }
+  }
+  func selectNewOnlySessions() { selectAllSessions() }
+
+  func setSession(_ session: IngestSession, selected: Bool) {
+    guard let index = sessions.firstIndex(where: { $0.id == session.id }) else { return }
+    sessions[index].selected = selected
+  }
+
+  private func buildSessions(from videos: [SourceVideo], source: URL) -> [IngestSession] {
+    let sorted = videos.sorted { ($0.createdAt ?? $0.modifiedAt ?? .distantPast) < ($1.createdAt ?? $1.modifiedAt ?? .distantPast) }
+    var groups: [[SourceVideo]] = []
+    for video in sorted {
+      let date = video.createdAt ?? video.modifiedAt ?? filenameDate(video.url.lastPathComponent) ?? .distantPast
+      if let lastGroup = groups.last, let previous = lastGroup.last {
+        let previousDate = previous.createdAt ?? previous.modifiedAt ?? filenameDate(previous.url.lastPathComponent) ?? .distantPast
+        if Calendar.current.isDate(date, inSameDayAs: previousDate) && date.timeIntervalSince(previousDate) <= 90 * 60 {
+          groups[groups.count - 1].append(video)
+        } else {
+          groups.append([video])
+        }
+      } else {
+        groups.append([video])
+      }
+    }
+    return groups.map { group in
+      let dates = group.map { $0.createdAt ?? $0.modifiedAt ?? filenameDate($0.url.lastPathComponent) ?? Date() }.sorted()
+      let scanned = group.map { video in
+        ScannedVideo(id: video.id, url: video.url, filename: video.url.lastPathComponent, fileSize: video.size, createdAt: video.createdAt, modifiedAt: video.modifiedAt, duration: nil, cameraType: video.cardType, sourceRelativePath: video.relativePath)
+      }
+      let start = dates.first ?? Date()
+      let formatter = DateFormatter()
+      formatter.dateStyle = .medium
+      formatter.timeStyle = .short
+      return IngestSession(title: formatter.string(from: start), date: start, startTime: start, endTime: dates.last ?? start, clips: scanned, totalSize: group.reduce(0) { $0 + $1.size }, cameraType: group.first?.cardType ?? detectedCardType.rawValue, sourceVolumeName: source.lastPathComponent)
+    }
+  }
+
+  private func filenameDate(_ filename: String) -> Date? {
+    let digits = filename.filter(\.isNumber)
+    guard digits.count >= 14 else { return nil }
+    let prefix = String(digits.prefix(14))
+    let formatter = DateFormatter()
+    formatter.dateFormat = "yyyyMMddHHmmss"
+    return formatter.date(from: prefix)
   }
 
   private func updateFreeSpace() {

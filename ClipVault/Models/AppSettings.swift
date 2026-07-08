@@ -16,6 +16,10 @@ final class AppSettings: ObservableObject {
   @AppStorage("backupDestination2Path") var backupDestination2Path = ""
   @AppStorage("finderTagsExport") var finderTagsExport = false
   @AppStorage("xmpSidecarExport") var xmpSidecarExport = false
+  @AppStorage("renameFilesDuringIngest") var renameFilesDuringIngest = false
+  @AppStorage("generateThumbnailsDuringIngest") var generateThumbnailsDuringIngest = true
+  @AppStorage("runAnalysisAfterIngest") var runAnalysisAfterIngest = false
+  @AppStorage("generateContactSheetsAfterIngest") var generateContactSheetsAfterIngest = false
 
   static var autoAdvanceAfterRating: Bool {
     UserDefaults.standard.bool(forKey: "autoAdvanceAfterRating")

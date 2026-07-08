@@ -40,6 +40,7 @@ def png(path, size):
     path.write_bytes(data)
 
 out=Path('ClipVault/Assets.xcassets/AppIcon.appiconset')
+out.mkdir(parents=True, exist_ok=True)
 items=[]
 for pts,scale,pixels in [(16,'1x',16),(16,'2x',32),(32,'1x',32),(32,'2x',64),(128,'1x',128),(128,'2x',256),(256,'1x',256),(256,'2x',512),(512,'1x',512),(512,'2x',1024)]:
     name=f'icon_{pixels}.png'

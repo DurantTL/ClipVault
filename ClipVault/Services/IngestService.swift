@@ -33,6 +33,7 @@ final class IngestService {
         var done: Int64 = 0
         let started = Date()
         for (idx, v) in videos.enumerated() {
+          let outputFilename = self.outputFilename(for: v, projectName: name, sequence: idx + 1, rename: settings.renameFilesDuringIngest)
           if self.cancelled {
             project.ingestIncomplete = true
             try self.store.save(project)
@@ -45,8 +46,8 @@ final class IngestService {
               bytesPerSecond: Double(done) / max(1, Date().timeIntervalSince(started)),
               message: self.paused ? "Paused" : "Copying"))
           let cleanShootName = SafeFilename.safeFolderName(shootName)
-          let flatRelativePath = cleanShootName.isEmpty ? v.url.lastPathComponent : "\(cleanShootName)/\(v.url.lastPathComponent)"
-          let rel = settings.preserveSourceStructure ? v.relativePath : flatRelativePath
+          let flatRelativePath = cleanShootName.isEmpty ? outputFilename : "\(cleanShootName)/\(outputFilename)"
+          let rel = settings.preserveSourceStructure && !settings.renameFilesDuringIngest ? v.relativePath : flatRelativePath
           let destURL = SafeFilename.uniqueURL(for: projectFolder.appendingPathComponent(rel))
           try FileManager.default.createDirectory(
             at: destURL.deletingLastPathComponent(), withIntermediateDirectories: true)
@@ -94,7 +95,7 @@ final class IngestService {
           }
           if clip.verificationStatus == .verified {
             await self.metadata.enrich(&clip)
-            if let thumb = try? await self.thumbnails.generate(
+            if settings.generateThumbnailsDuringIngest, let thumb = try? await self.thumbnails.generate(
               for: clip, projectFolder: projectFolder, quality: settings.thumbnailQuality)
             {
               clip.thumbnailPath = thumb
@@ -112,6 +113,15 @@ final class IngestService {
         return project
       }
     }
+  }
+
+  private func outputFilename(for video: SourceVideo, projectName: String, sequence: Int, rename: Bool) -> String {
+    guard rename else { return video.url.lastPathComponent }
+    let date = video.createdAt ?? video.modifiedAt ?? Date()
+    let formatter = DateFormatter()
+    formatter.dateFormat = "yyyyMMdd"
+    let safeProject = SafeFilename.safeFolderName(projectName)
+    return "\(safeProject)-\(formatter.string(from: date))-\(String(format: "%04d", sequence)).\(video.url.pathExtension)"
   }
 
   private func copyBackupsIfNeeded(
