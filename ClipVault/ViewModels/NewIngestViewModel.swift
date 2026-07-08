@@ -14,6 +14,10 @@ import Foundation
   @Published var canceledSummary: String?
   @Published var detectedCardType: DetectedCardType = .generic
   @Published var destinationFreeSpace: Int64?
+  @Published var groupingMode: IngestGroupingMode = .dateAndGap
+  @Published var timeGap: IngestTimeGap = .ninety
+  @Published var alreadyImportedMode: AlreadyImportedMode = .skipAlreadyCopied
+  @Published var selectDate = Date()
 
   let scanner = SourceScanner()
   let bookmarks = SecurityScopedBookmarkManager()
@@ -113,14 +117,15 @@ import Foundation
     }
   }
 
+  var selectedSessions: [IngestSession] { sessions.filter(\.selected) }
+
   var selectedVideos: [SourceVideo] {
-    let selectedIDs = Set(sessions.filter { $0.selected }.flatMap { $0.clips.map(\.id) })
-    return videos.filter { video in
-      sessions.isEmpty || selectedIDs.contains(video.id)
-    }
+    let selectedIDs = Set(sessions.flatMap { $0.selectedClips.map(\.id) })
+    return videos.filter { selectedIDs.contains($0.id) }
   }
 
-  var selectedTotalSize: Int64 { selectedVideos.reduce(0) { $0 + $1.size } }
+  var selectedTotalSize: Int64 { sessions.reduce(0) { $0 + $1.selectedSize } }
+  var selectedClipCount: Int { sessions.reduce(0) { $0 + $1.selectedClipCount } }
 
   var statusMessage: String {
     if let error { return error }
@@ -128,40 +133,82 @@ import Foundation
     if sourceURL == nil { return "No source selected" }
     if destinationURL == nil { return "Destination not selected" }
     if sessions.isEmpty { return "No sessions scanned" }
-    if selectedVideos.isEmpty { return "No sessions selected" }
+    if selectedVideos.isEmpty { return "Nothing selected" }
     return "Ready to ingest"
   }
 
-  func selectAllSessions() { for index in sessions.indices { sessions[index].selected = true } }
-  func clearSessionSelection() { for index in sessions.indices { sessions[index].selected = false } }
-  func selectTodaySessions() {
-    for index in sessions.indices { sessions[index].selected = Calendar.current.isDateInToday(sessions[index].date) }
+  func selectAllSessions() {
+    for index in sessions.indices { setSession(at: index, selected: true) }
   }
+
+  func clearSessionSelection() {
+    for index in sessions.indices { setSession(at: index, selected: false) }
+  }
+
+  func selectTodaySessions() {
+    for index in sessions.indices { setSession(at: index, selected: Calendar.current.isDateInToday(sessions[index].date)) }
+  }
+
+  func selectSessions(on date: Date) {
+    for index in sessions.indices { setSession(at: index, selected: Calendar.current.isDate(sessions[index].date, inSameDayAs: date)) }
+  }
+
   func selectNewOnlySessions() { selectAllSessions() }
 
   func setSession(_ session: IngestSession, selected: Bool) {
     guard let index = sessions.firstIndex(where: { $0.id == session.id }) else { return }
+    setSession(at: index, selected: selected)
+  }
+
+  func toggleSession(_ session: IngestSession) {
+    guard let index = sessions.firstIndex(where: { $0.id == session.id }) else { return }
+    setSession(at: index, selected: !sessions[index].selected)
+  }
+
+  func setClip(_ clip: ScannedVideo, in session: IngestSession, selected: Bool) {
+    guard let sessionIndex = sessions.firstIndex(where: { $0.id == session.id }),
+      let clipIndex = sessions[sessionIndex].clips.firstIndex(where: { $0.id == clip.id }) else { return }
+    sessions[sessionIndex].clips[clipIndex].selected = selected
+    sessions[sessionIndex].selected = sessions[sessionIndex].clips.contains { $0.selected }
+  }
+
+  private func setSession(at index: Int, selected: Bool) {
     sessions[index].selected = selected
+    for clipIndex in sessions[index].clips.indices {
+      sessions[index].clips[clipIndex].selected = selected
+    }
   }
 
   private func buildSessions(from videos: [SourceVideo], source: URL) -> [IngestSession] {
-    let sorted = videos.sorted { ($0.createdAt ?? $0.modifiedAt ?? .distantPast) < ($1.createdAt ?? $1.modifiedAt ?? .distantPast) }
-    var groups: [[SourceVideo]] = []
-    for video in sorted {
-      let date = video.createdAt ?? video.modifiedAt ?? filenameDate(video.url.lastPathComponent) ?? .distantPast
-      if let lastGroup = groups.last, let previous = lastGroup.last {
-        let previousDate = previous.createdAt ?? previous.modifiedAt ?? filenameDate(previous.url.lastPathComponent) ?? .distantPast
-        if Calendar.current.isDate(date, inSameDayAs: previousDate) && date.timeIntervalSince(previousDate) <= 90 * 60 {
-          groups[groups.count - 1].append(video)
+    let sorted = videos.sorted { bestShotTime(for: $0) < bestShotTime(for: $1) }
+    let groups: [[SourceVideo]]
+    switch groupingMode {
+    case .allFiles:
+      groups = sorted.isEmpty ? [] : [sorted]
+    case .sourceFolder:
+      groups = Dictionary(grouping: sorted) { URL(fileURLWithPath: $0.relativePath).deletingLastPathComponent().path }
+        .values.map { $0.sorted { bestShotTime(for: $0) < bestShotTime(for: $1) } }
+        .sorted { bestShotTime(for: $0.first!) < bestShotTime(for: $1.first!) }
+    case .date, .dateAndGap:
+      var built: [[SourceVideo]] = []
+      for video in sorted {
+        let date = bestShotTime(for: video)
+        if let lastGroup = built.last, let previous = lastGroup.last {
+          let previousDate = bestShotTime(for: previous)
+          let withinGap = groupingMode == .date || date.timeIntervalSince(previousDate) <= Double(timeGap.rawValue * 60)
+          if Calendar.current.isDate(date, inSameDayAs: previousDate) && withinGap {
+            built[built.count - 1].append(video)
+          } else {
+            built.append([video])
+          }
         } else {
-          groups.append([video])
+          built.append([video])
         }
-      } else {
-        groups.append([video])
       }
+      groups = built
     }
     return groups.map { group in
-      let dates = group.map { $0.createdAt ?? $0.modifiedAt ?? filenameDate($0.url.lastPathComponent) ?? Date() }.sorted()
+      let dates = group.map { bestShotTime(for: $0) }.sorted()
       let scanned = group.map { video in
         ScannedVideo(id: video.id, url: video.url, filename: video.url.lastPathComponent, fileSize: video.size, createdAt: video.createdAt, modifiedAt: video.modifiedAt, duration: nil, cameraType: video.cardType, sourceRelativePath: video.relativePath)
       }
@@ -171,6 +218,10 @@ import Foundation
       formatter.timeStyle = .short
       return IngestSession(title: formatter.string(from: start), date: start, startTime: start, endTime: dates.last ?? start, clips: scanned, totalSize: group.reduce(0) { $0 + $1.size }, cameraType: group.first?.cardType ?? detectedCardType.rawValue, sourceVolumeName: source.lastPathComponent)
     }
+  }
+
+  private func bestShotTime(for video: SourceVideo) -> Date {
+    video.createdAt ?? video.modifiedAt ?? filenameDate(video.url.lastPathComponent) ?? .distantPast
   }
 
   private func filenameDate(_ filename: String) -> Date? {

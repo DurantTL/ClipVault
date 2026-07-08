@@ -19,7 +19,9 @@ struct ClipInspectorView: View {
               HStack {
                 Button("Preview / Play", systemImage: "play.fill") { vm.previewSelected() }
                   .buttonStyle(.borderedProminent)
+                  .disabled(clip.currentPath.isEmpty)
                 Button("Reveal", systemImage: "arrow.up.forward.app") { vm.reveal() }
+                  .disabled(clip.currentPath.isEmpty)
               }
               Picker("Cull Status", selection: Binding(get: { clip.cullStatus }, set: { vm.setStatus($0) })) {
                 ForEach(CullStatus.allCases) { Text($0.label).tag($0) }
@@ -51,6 +53,8 @@ struct ClipInspectorView: View {
       InfoRow("Codec", clip.codec ?? "Unavailable")
       InfoRow("Verification", clip.verificationStatus.rawValue.capitalized)
       InfoRow("Audio", clip.hasAudio == true ? "Has Audio" : "No Audio / Unknown")
+      InfoRow("Shot Time", clip.effectiveShotTime.map { DateFormatter.localizedString(from: $0, dateStyle: .medium, timeStyle: .medium) } ?? "Unavailable")
+      InfoRow("Shot Time Source", clip.manualShotTime == nil ? clip.shotTimeSource.label : ShotTimeSource.manual.label)
     }
 
     inspectorCard("Production Metadata", systemImage: "tag") {
@@ -64,6 +68,18 @@ struct ClipInspectorView: View {
         ForEach(["", "Wide", "Medium", "Close-Up", "Detail", "Crowd", "Speaker", "Interview", "B-Roll", "Screen/Slides", "Other"], id: \.self) { value in
           Text(value.isEmpty ? "None" : value).tag(value)
         }
+      }
+      DatePicker(
+        "Manual Shot Time",
+        selection: Binding(
+          get: { clip.manualShotTime ?? clip.effectiveShotTime ?? Date() },
+          set: { value in vm.updateSelected { $0.manualShotTime = value; $0.shotTimeSource = .manual } }
+        )
+      )
+      HStack {
+        Button("Use Current Time") { vm.updateSelected { $0.manualShotTime = Date(); $0.shotTimeSource = .manual } }
+        Button("Clear Manual Shot Time") { vm.updateSelected { $0.manualShotTime = nil } }
+          .disabled(clip.manualShotTime == nil)
       }
       editable("Notes", \.customNotes)
       Toggle("Favorite", isOn: bind(\.favorite))

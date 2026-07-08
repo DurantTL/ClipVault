@@ -11,6 +11,20 @@ final class MetadataService {
       do {
         let duration = try await asset.load(.duration)
         clip.duration = (duration.isValid && !duration.isIndefinite && duration.seconds.isFinite) ? duration.seconds : nil
+        if let creationDateItem = try? await asset.load(.creationDate),
+          let metadataDate = creationDateItem?.dateValue {
+          clip.capturedAt = metadataDate
+          clip.shotStartTime = metadataDate
+          if clip.manualShotTime == nil {
+            clip.shotTimeSource = .cameraMetadata
+          }
+        } else if let createdAt = clip.createdAt {
+          clip.shotStartTime = createdAt
+          if clip.manualShotTime == nil { clip.shotTimeSource = .fileCreationDate }
+        } else if let modifiedAt = clip.modifiedAt {
+          clip.shotStartTime = modifiedAt
+          if clip.manualShotTime == nil { clip.shotTimeSource = .fileModifiedDate }
+        }
         if let duration = clip.duration, duration > 0 {
           clip.estimatedBitrate = Double(clip.fileSize * 8) / duration
         }

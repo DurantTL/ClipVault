@@ -198,3 +198,38 @@ make icons
 ```
 
 The script writes `ClipVault/Assets.xcassets/AppIcon.appiconset/icon_16.png` through `icon_1024.png` plus `Contents.json`. If PNGs are missing, Xcode can still use a generic app icon; generated PNGs are ignored by git.
+
+## Recent ClipVault Improvements
+
+### Ingest session and folder selection
+- The New Ingest screen now treats each `IngestSession.selected` value as the selection source of truth. The copy pipeline receives only the clips selected through session or individual file checkboxes.
+- Session cards include clear checkboxes, whole-card click toggling, selected/partial badges, accent borders, selected backgrounds, and selected count/size review totals.
+- Selection controls include Select All, Clear Selection, Select Today, Select New Only, Select by Date, and Reload.
+- The ingest setup panel exposes handling choices for already imported media: skip already copied, retry failed only, or include all with safe rename.
+
+### Individual clip selection
+- Session cards can expand to show individual source files with checkboxes.
+- Selecting or clearing individual clips updates the session card state, selected clip count, and total selected size.
+- Partial selections are called out explicitly so ingesting one session no longer accidentally copies every scanned clip.
+
+### Library layout and partial libraries
+- The library uses a fixed compact sidebar, a flexible primary clip grid, and a bounded/collapsible inspector so the grid remains the main workspace after ingest.
+- A toolbar control shows or hides the inspector, and the preference is saved in user defaults.
+- Partial ingest libraries show a compact top banner with Resume Ingest, Retry Failed, and Reveal Project Folder actions.
+- Pending clips remain in the project metadata as non-destructive records and are not previewed unless a destination file exists.
+
+### Shot-time sorting and manual production time
+- Clips now store `capturedAt`, `shotStartTime`, `manualShotTime`, and `shotTimeSource` in `.clipvault-project.json` metadata.
+- Library sorting includes Ingest Order, Shot Time, Filename, Created Date, Modified Date, Duration, File Size, Cull Status, Rating/Keep Status, and Camera Type, plus Ascending/Descending order.
+- Shot Time uses a manual override first when present, then camera/media metadata, file creation, file modified date, and available fallback metadata.
+- The inspector shows Shot Time and source and allows setting, using current time for, or clearing a Manual Shot Time override.
+
+### macOS 26 design and Apple Intelligence preparation
+- Design changes continue to use native SwiftUI/AppKit materials, accent-aware highlights, compact banners, and readable inspector cards with fallbacks that do not raise the deployment target.
+- macOS 26-only future hooks are guarded with `#available(macOS 26.0, *)`.
+- A local-only `LocalSuggestionService` architecture has been added with a rule-based implementation and a guarded `FoundationModelSuggestionService` placeholder. ClipVault does not use cloud AI, does not upload media, and does not require Foundation Models to build.
+
+### Compatibility and safety
+- ClipVault continues to use Apple APIs only and does not require FFmpeg.
+- Source media and SD-card contents are never modified or deleted.
+- App metadata remains in `.clipvault-project.json`; ClipVault does not write metadata into MP4/MOV files by default.

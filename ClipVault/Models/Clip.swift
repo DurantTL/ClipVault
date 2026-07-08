@@ -2,6 +2,26 @@ import CoreTransferable
 import Foundation
 import UniformTypeIdentifiers
 
+enum ShotTimeSource: String, Codable, CaseIterable {
+  case cameraMetadata
+  case fileCreationDate
+  case fileModifiedDate
+  case filenamePattern
+  case manual
+  case unavailable
+
+  var label: String {
+    switch self {
+    case .cameraMetadata: return "From camera metadata"
+    case .fileCreationDate: return "From file creation date"
+    case .fileModifiedDate: return "From file modified date"
+    case .filenamePattern: return "From filename"
+    case .manual: return "Manual override"
+    case .unavailable: return "Unavailable"
+    }
+  }
+}
+
 enum AnalysisStatus: String, Codable, CaseIterable {
   case notAnalyzed
   case analyzing
@@ -46,6 +66,10 @@ struct Clip: Identifiable, Codable, Equatable, Transferable {
   var estimatedBitrate: Double?
   var createdAt: Date?
   var modifiedAt: Date?
+  var capturedAt: Date?
+  var shotStartTime: Date?
+  var manualShotTime: Date?
+  var shotTimeSource: ShotTimeSource = .unavailable
   var ingestDate: Date?
   var sonyCardFolderPath: String?
   var cardVolumeName: String?
@@ -154,6 +178,9 @@ struct Clip: Identifiable, Codable, Equatable, Transferable {
     self.fileSize = fileSize
     self.createdAt = createdAt
     self.modifiedAt = modifiedAt
+    self.capturedAt = createdAt
+    self.shotStartTime = createdAt ?? modifiedAt
+    self.shotTimeSource = createdAt == nil ? (modifiedAt == nil ? .unavailable : .fileModifiedDate) : .fileCreationDate
     self.ingestDate = ingestDate
     self.sonyCardFolderPath = sonyCardFolderPath
     self.cardVolumeName = cardVolumeName
@@ -179,7 +206,7 @@ struct Clip: Identifiable, Codable, Equatable, Transferable {
     thumbnailStatus = try c.decodeIfPresent(ThumbnailStatus.self, forKey: .thumbnailStatus) ?? .pending
     analysisStatus = try c.decodeIfPresent(AnalysisStatus.self, forKey: .analysisStatus) ?? .notAnalyzed
     // Decode remaining optional/simple fields with defaults.
-    duration = try c.decodeIfPresent(Double.self, forKey: .duration); width = try c.decodeIfPresent(Int.self, forKey: .width); height = try c.decodeIfPresent(Int.self, forKey: .height); frameRate = try c.decodeIfPresent(Double.self, forKey: .frameRate); codec = try c.decodeIfPresent(String.self, forKey: .codec); bitDepth = try c.decodeIfPresent(Int.self, forKey: .bitDepth); hasAudio = try c.decodeIfPresent(Bool.self, forKey: .hasAudio); audioChannelCount = try c.decodeIfPresent(Int.self, forKey: .audioChannelCount); orientation = try c.decodeIfPresent(String.self, forKey: .orientation); estimatedBitrate = try c.decodeIfPresent(Double.self, forKey: .estimatedBitrate); createdAt = try c.decodeIfPresent(Date.self, forKey: .createdAt); modifiedAt = try c.decodeIfPresent(Date.self, forKey: .modifiedAt); ingestDate = try c.decodeIfPresent(Date.self, forKey: .ingestDate); sonyCardFolderPath = try c.decodeIfPresent(String.self, forKey: .sonyCardFolderPath); cardVolumeName = try c.decodeIfPresent(String.self, forKey: .cardVolumeName); checksum = try c.decodeIfPresent(String.self, forKey: .checksum); assignedFolder = try c.decodeIfPresent(String.self, forKey: .assignedFolder); thumbnailPath = try c.decodeIfPresent(String.self, forKey: .thumbnailPath); errorMessage = try c.decodeIfPresent(String.self, forKey: .errorMessage); previewUnavailable = try c.decodeIfPresent(Bool.self, forKey: .previewUnavailable) ?? false
+    duration = try c.decodeIfPresent(Double.self, forKey: .duration); width = try c.decodeIfPresent(Int.self, forKey: .width); height = try c.decodeIfPresent(Int.self, forKey: .height); frameRate = try c.decodeIfPresent(Double.self, forKey: .frameRate); codec = try c.decodeIfPresent(String.self, forKey: .codec); bitDepth = try c.decodeIfPresent(Int.self, forKey: .bitDepth); hasAudio = try c.decodeIfPresent(Bool.self, forKey: .hasAudio); audioChannelCount = try c.decodeIfPresent(Int.self, forKey: .audioChannelCount); orientation = try c.decodeIfPresent(String.self, forKey: .orientation); estimatedBitrate = try c.decodeIfPresent(Double.self, forKey: .estimatedBitrate); createdAt = try c.decodeIfPresent(Date.self, forKey: .createdAt); modifiedAt = try c.decodeIfPresent(Date.self, forKey: .modifiedAt); capturedAt = try c.decodeIfPresent(Date.self, forKey: .capturedAt); shotStartTime = try c.decodeIfPresent(Date.self, forKey: .shotStartTime); manualShotTime = try c.decodeIfPresent(Date.self, forKey: .manualShotTime); shotTimeSource = try c.decodeIfPresent(ShotTimeSource.self, forKey: .shotTimeSource) ?? .unavailable; ingestDate = try c.decodeIfPresent(Date.self, forKey: .ingestDate); sonyCardFolderPath = try c.decodeIfPresent(String.self, forKey: .sonyCardFolderPath); cardVolumeName = try c.decodeIfPresent(String.self, forKey: .cardVolumeName); checksum = try c.decodeIfPresent(String.self, forKey: .checksum); assignedFolder = try c.decodeIfPresent(String.self, forKey: .assignedFolder); thumbnailPath = try c.decodeIfPresent(String.self, forKey: .thumbnailPath); errorMessage = try c.decodeIfPresent(String.self, forKey: .errorMessage); previewUnavailable = try c.decodeIfPresent(Bool.self, forKey: .previewUnavailable) ?? false
     title = try c.decodeIfPresent(String.self, forKey: .title) ?? ""
     description = try c.decodeIfPresent(String.self, forKey: .description) ?? ""
     productionTags = try c.decodeIfPresent([String].self, forKey: .productionTags) ?? []
@@ -231,6 +258,8 @@ struct Clip: Identifiable, Codable, Equatable, Transferable {
     motionScore = try c.decodeIfPresent(Double.self, forKey: .motionScore)
     highMotion = try c.decodeIfPresent(Bool.self, forKey: .highMotion) ?? false
   }
+
+  var effectiveShotTime: Date? { manualShotTime ?? shotStartTime ?? capturedAt ?? createdAt ?? modifiedAt }
 
   static var transferRepresentation: some TransferRepresentation {
     CodableRepresentation(contentType: .data)
