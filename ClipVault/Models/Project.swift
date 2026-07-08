@@ -151,6 +151,42 @@ struct ClipVaultProject: Identifiable, Codable {
     defaultTags = try c.decodeIfPresent([String].self, forKey: .defaultTags) ?? []
   }
 
+  func encode(to encoder: Encoder) throws {
+    var container = encoder.container(keyedBy: CodingKeys.self)
+
+    try container.encode(id, forKey: .id)
+    try container.encode(name, forKey: .name)
+    try container.encode(createdAt, forKey: .createdAt)
+    try container.encodeIfPresent(lastOpenedAt, forKey: .lastOpenedAt)
+    try container.encodeIfPresent(sourceBookmarkData, forKey: .sourceBookmarkData)
+    try container.encodeIfPresent(destinationBookmarkData, forKey: .destinationBookmarkData)
+    try container.encodeIfPresent(projectFolderBookmarkData, forKey: .projectFolderBookmarkData)
+    try container.encode(projectFolderPath, forKey: .projectFolderPath)
+    try container.encode(ingestIncomplete, forKey: .ingestIncomplete)
+    try container.encode(ingestStatus, forKey: .ingestStatus)
+    try container.encode(totalSelectedClips, forKey: .totalSelectedClips)
+    try container.encode(copiedClipCount, forKey: .copiedClipCount)
+    try container.encode(verifiedClipCount, forKey: .verifiedClipCount)
+    try container.encode(failedClipCount, forKey: .failedClipCount)
+    try container.encode(pendingClipCount, forKey: .pendingClipCount)
+    try container.encodeIfPresent(lastIngestDate, forKey: .lastIngestDate)
+    try container.encode(canResumeIngest, forKey: .canResumeIngest)
+    try container.encode(sourceSessions, forKey: .sourceSessions)
+    try container.encode(selectedSessionIDs, forKey: .selectedSessionIDs)
+    try container.encode(customFolders, forKey: .customFolders)
+    try container.encode(clips, forKey: .clips)
+    try container.encode(projectTitle, forKey: .projectTitle)
+    try container.encode(productionName, forKey: .productionName)
+    try container.encode(clientOrOrganization, forKey: .clientOrOrganization)
+    try container.encode(eventName, forKey: .eventName)
+    try container.encodeIfPresent(eventDate, forKey: .eventDate)
+    try container.encode(location, forKey: .location)
+    try container.encode(cameraOperator, forKey: .cameraOperator)
+    try container.encode(cameraModel, forKey: .cameraModel)
+    try container.encode(notes, forKey: .notes)
+    try container.encode(defaultTags, forKey: .defaultTags)
+  }
+
   private static func inferIngestStatus(
     from clips: [Clip],
     ingestIncomplete: Bool
