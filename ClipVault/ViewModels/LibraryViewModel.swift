@@ -1,13 +1,18 @@
 import AppKit
 import Foundation
+import SwiftUI
 
 enum ClipSortOption: String, CaseIterable, Identifiable {
   case ingestOrder = "Ingest Order"
+  case shotTime = "Shot Time"
   case filename = "Filename"
   case createdDate = "Created Date"
+  case modifiedDate = "Modified Date"
   case duration = "Duration"
   case fileSize = "File Size"
   case cullStatus = "Cull Status"
+  case ratingKeepStatus = "Rating/Keep Status"
+  case cameraType = "Camera Type"
 
   var id: String { rawValue }
 }
@@ -17,7 +22,9 @@ enum ClipSortOption: String, CaseIterable, Identifiable {
   @Published var selectedClipID: UUID?
   @Published var selectedClipIDs: Set<UUID> = []
   @Published var filter: String = "All Clips"
-  @Published var sortOption: ClipSortOption = .ingestOrder
+  @Published var sortOption: ClipSortOption = .shotTime
+  @Published var sortAscending = true
+  @AppStorage("libraryInspectorVisible") var inspectorVisible = true
   @Published var previewClip: Clip?
   @Published var thumbnailSize: Double = 190
 
@@ -29,7 +36,7 @@ enum ClipSortOption: String, CaseIterable, Identifiable {
   init(project: ClipVaultProject) {
     self.project = project
     self.project.lastOpenedAt = Date()
-    self.selectedClipID = project.clips.first?.id
+    self.selectedClipID = project.clips.first(where: { $0.copyStatus == .copied || $0.verificationStatus == .verified })?.id ?? project.clips.first?.id
     self.selectedClipIDs = Set(project.clips.prefix(1).map(\.id))
     applyAutomaticTags()
     save()
@@ -314,14 +321,19 @@ enum ClipSortOption: String, CaseIterable, Identifiable {
   }
 
   private func sorted(_ clips: [Clip]) -> [Clip] {
+    let sorted: [Clip]
     switch sortOption {
-    case .ingestOrder: return clips.sorted { ($0.ingestDate ?? .distantPast) < ($1.ingestDate ?? .distantPast) }
-    case .filename: return clips.sorted { $0.currentFilename.localizedStandardCompare($1.currentFilename) == .orderedAscending }
-    case .createdDate: return clips.sorted { ($0.createdAt ?? .distantPast) < ($1.createdAt ?? .distantPast) }
-    case .duration: return clips.sorted { ($0.duration ?? 0) < ($1.duration ?? 0) }
-    case .fileSize: return clips.sorted { $0.fileSize < $1.fileSize }
-    case .cullStatus: return clips.sorted { $0.cullStatus.rawValue < $1.cullStatus.rawValue }
+    case .ingestOrder: sorted = clips.sorted { ($0.ingestDate ?? .distantPast) < ($1.ingestDate ?? .distantPast) }
+    case .shotTime: sorted = clips.sorted { ($0.effectiveShotTime ?? $0.ingestDate ?? .distantPast) < ($1.effectiveShotTime ?? $1.ingestDate ?? .distantPast) }
+    case .filename: sorted = clips.sorted { $0.currentFilename.localizedStandardCompare($1.currentFilename) == .orderedAscending }
+    case .createdDate: sorted = clips.sorted { ($0.createdAt ?? .distantPast) < ($1.createdAt ?? .distantPast) }
+    case .modifiedDate: sorted = clips.sorted { ($0.modifiedAt ?? .distantPast) < ($1.modifiedAt ?? .distantPast) }
+    case .duration: sorted = clips.sorted { ($0.duration ?? 0) < ($1.duration ?? 0) }
+    case .fileSize: sorted = clips.sorted { $0.fileSize < $1.fileSize }
+    case .cullStatus, .ratingKeepStatus: sorted = clips.sorted { $0.cullStatus.rawValue < $1.cullStatus.rawValue }
+    case .cameraType: sorted = clips.sorted { ($0.cardVolumeName ?? "").localizedStandardCompare($1.cardVolumeName ?? "") == .orderedAscending }
     }
+    return sortAscending ? sorted : Array(sorted.reversed())
   }
 
   private func csv(for clips: [Clip]) -> String {

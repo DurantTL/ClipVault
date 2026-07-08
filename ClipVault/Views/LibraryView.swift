@@ -8,17 +8,21 @@ struct LibraryView: View {
   @State private var showingPreview = false
 
   var body: some View {
-    NavigationSplitView {
+    HSplitView {
       SidebarView(vm: viewModel, newFolder: $newFolder)
-    } content: {
+        .frame(minWidth: 200, idealWidth: 220, maxWidth: 260)
       VStack(spacing: 0) {
         if viewModel.project.ingestStatus != .complete {
           partialBanner
         }
         ClipGridView(vm: viewModel)
+          .frame(minWidth: 650, maxWidth: .infinity, maxHeight: .infinity)
       }
-    } detail: {
-      ClipInspectorView(clip: viewModel.selectedClip, vm: viewModel)
+      .frame(minWidth: 650, maxWidth: .infinity)
+      if viewModel.inspectorVisible {
+        ClipInspectorView(clip: viewModel.selectedClip, vm: viewModel)
+          .frame(minWidth: 300, idealWidth: 340, maxWidth: 390)
+      }
     }
     .toolbar {
       ToolbarItemGroup {
@@ -60,6 +64,14 @@ struct LibraryView: View {
           }
         }
         .pickerStyle(.menu)
+
+        Toggle(isOn: $viewModel.sortAscending) {
+          Label(viewModel.sortAscending ? "Ascending" : "Descending", systemImage: "arrow.up.arrow.down")
+        }
+
+        Button { viewModel.inspectorVisible.toggle() } label: {
+          Label(viewModel.inspectorVisible ? "Hide Inspector" : "Show Inspector", systemImage: "sidebar.right")
+        }
 
         Menu("Batch") {
           Button("Mark selected as Keep") { viewModel.setStatus(.keep) }

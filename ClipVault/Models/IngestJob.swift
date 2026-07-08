@@ -13,6 +13,7 @@ struct SourceVideo: Identifiable, Hashable, Codable {
 
 struct ScannedVideo: Identifiable, Hashable, Codable {
   var id = UUID()
+  var selected = true
   var url: URL
   var filename: String
   var fileSize: Int64
@@ -36,6 +37,38 @@ struct IngestSession: Identifiable, Hashable, Codable {
   var thumbnailPreviewPaths: [String] = []
   var cameraType: String
   var sourceVolumeName: String
+
+  var selectedClips: [ScannedVideo] { clips.filter(\.selected) }
+  var selectedClipCount: Int { selectedClips.count }
+  var selectedSize: Int64 { selectedClips.reduce(0) { $0 + $1.fileSize } }
+  var isPartiallySelected: Bool { selectedClipCount > 0 && selectedClipCount < clips.count }
+}
+
+enum IngestGroupingMode: String, CaseIterable, Identifiable {
+  case date = "Group by Date"
+  case dateAndGap = "Group by Date + Time Gap"
+  case allFiles = "Show All Files"
+  case sourceFolder = "Group by Source Folder"
+
+  var id: String { rawValue }
+}
+
+enum IngestTimeGap: Int, CaseIterable, Identifiable {
+  case thirty = 30
+  case sixty = 60
+  case ninety = 90
+  case twoHours = 120
+
+  var id: Int { rawValue }
+  var label: String { rawValue == 120 ? "2 hours" : "\(rawValue) minutes" }
+}
+
+enum AlreadyImportedMode: String, CaseIterable, Identifiable {
+  case skipAlreadyCopied = "Skip already copied"
+  case retryFailedOnly = "Retry failed only"
+  case includeAllSafeRename = "Include all with safe rename"
+
+  var id: String { rawValue }
 }
 
 
