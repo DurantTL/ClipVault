@@ -64,7 +64,8 @@ enum ClipSortOption: String, CaseIterable, Identifiable {
       "Failed Verification", "Social Candidates", "Interviews", "B-Roll", "Sermon",
       "Possibly Out of Focus", "Faces", "Group Shots", "Close Faces", "Low Face Visibility",
       "Possibly Shaky", "Stable Clips", "High Motion", "Dark Clips", "Bright Clips",
-      "Low Contrast", "Sharp Clips", "Balanced Exposure", "Warm Color", "Cool Color", "Approx. WB", "Failed Analysis"
+      "Low Contrast", "Sharp Clips", "Balanced Exposure", "Warm Color", "Cool Color", "Approx. WB", "Failed Analysis",
+      "Duplicate Candidates"
     ]
   }
 
@@ -308,6 +309,24 @@ enum ClipSortOption: String, CaseIterable, Identifiable {
     }
   }
 
+  /// Fast, non-destructive duplicate detection for a large project. Candidates
+  /// share an original filename and byte size; no media is read or altered.
+  func findDuplicateCandidates() {
+    let copied = project.clips.filter { $0.verificationStatus == .verified }
+    let groups = Dictionary(grouping: copied) { clip in
+      "\(clip.originalFilename.localizedLowercase)|\(clip.fileSize)"
+    }
+    let candidateIDs = Set(groups.values.filter { $0.count > 1 }.flatMap { $0.map(\.id) })
+    for index in project.clips.indices {
+      project.clips[index].automaticTags.removeAll { $0 == "Duplicate Candidate" }
+      if candidateIDs.contains(project.clips[index].id) {
+        project.clips[index].automaticTags.append("Duplicate Candidate")
+      }
+    }
+    filter = candidateIDs.isEmpty ? "All Clips" : "Duplicate Candidates"
+    save()
+  }
+
   func analyzeLocally(mode: LocalAnalysisMode = LocalAnalysisMode(rawValue: UserDefaults.standard.string(forKey: "localAnalysisMode") ?? "Off") ?? .off) {
     analyzeClips(ids: Array(activeSelectionIDs), requestedMode: mode)
   }
@@ -517,6 +536,7 @@ enum ClipSortOption: String, CaseIterable, Identifiable {
     case "Interviews": return clip.isInterview
     case "B-Roll": return clip.isBroll || clip.assignedFolder == filter
     case "Sermon": return clip.isSermon || clip.assignedFolder == filter
+    case "Duplicate Candidates": return clip.automaticTags.contains("Duplicate Candidate")
     default:
       return clip.assignedFolder == filter || clip.productionTags.contains(filter) || clip.automaticTags.contains(filter)
     }

@@ -12,6 +12,7 @@ import Foundation
   @Published var progress = IngestProgress()
   @Published var error: String?
   @Published var isIngesting = false
+  @Published var isScanning = false
   @Published var canceledSummary: String?
   @Published var detectedCardType: DetectedCardType = .generic
   @Published var destinationFreeSpace: Int64?
@@ -35,11 +36,10 @@ import Foundation
   private var maxConcurrentPreviewThumbnails = SystemPerformanceProfile.current().recommendedThumbnailConcurrency
   private var previewThumbnailTasks: [UUID: Task<Void, Never>] = [:]
   private var sourceBookmarkDataByID: [String: Data] = [:]
+  private var accessedSourceURL: URL?
 
   init() {
-    sourceBookmarkDataByID = UserDefaults.standard.dictionary(
-      forKey: Self.rememberedSourceBookmarksKey
-    ) as? [String: Data] ?? [:]
+    sourceBookmarkDataByID = Self.loadRememberedSourceBookmarks()
     ingestPreviewThumbnails.cleanCache()
     let formatter = DateFormatter()
     formatter.dateFormat = "yyyy-MM-dd"
@@ -109,6 +109,7 @@ import Foundation
   }
 
   private func selectGrantedSource(_ source: SourceVolumeOption, grantedURL: URL, settings: AppSettings) {
+    activateAccess(to: grantedURL)
     sourceURL = grantedURL
     selectedSourceID = source.id
     error = nil
@@ -119,6 +120,11 @@ import Foundation
   private func ensureAccessForDetectedSource(_ option: SourceVolumeOption) -> URL? {
     if let bookmarkData = option.bookmarkData ?? sourceBookmarkDataByID[option.id],
       let resolved = try? bookmarks.resolve(bookmarkData) {
+      // Refresh the persisted bookmark after resolution. This handles a mounted
+      // card whose path or bookmark representation changed since last use.
+      if let refreshed = try? bookmarks.bookmark(for: resolved) {
+        remember(refreshed, for: option.id)
+      }
       return resolved
     }
 
@@ -146,10 +152,25 @@ import Foundation
 
   private func remember(_ bookmarkData: Data, for sourceID: String) {
     sourceBookmarkDataByID[sourceID] = bookmarkData
-    UserDefaults.standard.set(
-      sourceBookmarkDataByID,
-      forKey: Self.rememberedSourceBookmarksKey
-    )
+    if let data = try? PropertyListEncoder().encode(sourceBookmarkDataByID) {
+      UserDefaults.standard.set(data, forKey: Self.rememberedSourceBookmarksKey)
+    }
+  }
+
+  private static func loadRememberedSourceBookmarks() -> [String: Data] {
+    if let data = UserDefaults.standard.data(forKey: rememberedSourceBookmarksKey),
+      let bookmarks = try? PropertyListDecoder().decode([String: Data].self, from: data) {
+      return bookmarks
+    }
+    // Preserve permissions granted by the previous implementation when possible.
+    return UserDefaults.standard.dictionary(forKey: rememberedSourceBookmarksKey) as? [String: Data] ?? [:]
+  }
+
+  private func activateAccess(to url: URL) {
+    if accessedSourceURL?.standardizedFileURL != url.standardizedFileURL {
+      accessedSourceURL?.stopAccessingSecurityScopedResource()
+      accessedSourceURL = url.startAccessingSecurityScopedResource() ? url : nil
+    }
   }
 
   func chooseDestination() {
@@ -181,21 +202,34 @@ import Foundation
 
   func scan(settings: AppSettings) {
     guard let sourceURL else { return }
-    do {
-      detectSonyCard()
-      cancelPreviewThumbnailWork()
-      maxConcurrentPreviewThumbnails = settings.performanceTuning().ingestPreviewThumbnailConcurrency
-      ingestPreviewThumbnails.cleanCache()
-      queuedPreviewThumbnailIDs.removeAll()
-      pendingPreviewThumbnailClips.removeAll()
-      activePreviewThumbnailCount = 0
+    detectSonyCard()
+    cancelPreviewThumbnailWork()
+    maxConcurrentPreviewThumbnails = settings.performanceTuning().ingestPreviewThumbnailConcurrency
+    ingestPreviewThumbnails.cleanCache()
+    queuedPreviewThumbnailIDs.removeAll()
+    pendingPreviewThumbnailClips.removeAll()
+    activePreviewThumbnailCount = 0
+    isScanning = true
+    error = nil
+
+    let includeProxyFiles = settings.includeProxyFiles
+    Task { [weak self] in
       let scanStart = Date()
-      videos = try scanner.scan(source: sourceURL, includeProxyFiles: settings.includeProxyFiles)
-      PerformanceLogger.shared.scan(duration: Date().timeIntervalSince(scanStart), fileCount: videos.count)
-      sessions = buildSessions(from: videos, source: sourceURL)
-      updateFreeSpace()
-      queueInitialPreviewThumbnails()
-    } catch { self.error = error.localizedDescription }
+      do {
+        let scannedVideos = try await Task.detached(priority: .userInitiated) {
+          try SourceScanner().scan(source: sourceURL, includeProxyFiles: includeProxyFiles)
+        }.value
+        guard let self, self.sourceURL == sourceURL else { return }
+        self.videos = scannedVideos
+        PerformanceLogger.shared.scan(duration: Date().timeIntervalSince(scanStart), fileCount: scannedVideos.count)
+        self.sessions = self.buildSessions(from: scannedVideos, source: sourceURL)
+        self.updateFreeSpace()
+        self.queueInitialPreviewThumbnails()
+      } catch {
+        self?.error = error.localizedDescription
+      }
+      self?.isScanning = false
+    }
   }
 
   func createProjectFolder() {
@@ -246,6 +280,7 @@ import Foundation
     if let error { return error }
     if let canceledSummary { return canceledSummary }
     if sourceURL == nil { return "No source selected" }
+    if isScanning { return "Scanning source…" }
     if destinationURL == nil { return "Destination not selected" }
     if sessions.isEmpty { return "No sessions scanned" }
     if selectedVideos.isEmpty { return "Nothing selected" }
@@ -339,6 +374,10 @@ import Foundation
     pendingPreviewThumbnailClips.removeAll()
     queuedPreviewThumbnailIDs.removeAll()
     activePreviewThumbnailCount = 0
+  }
+
+  deinit {
+    accessedSourceURL?.stopAccessingSecurityScopedResource()
   }
 
   private func finishPreviewThumbnail(
