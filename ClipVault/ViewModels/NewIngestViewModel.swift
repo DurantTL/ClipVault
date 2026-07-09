@@ -36,11 +36,10 @@ import Foundation
   private var maxConcurrentPreviewThumbnails = SystemPerformanceProfile.current().recommendedThumbnailConcurrency
   private var previewThumbnailTasks: [UUID: Task<Void, Never>] = [:]
   private var sourceBookmarkDataByID: [String: Data] = [:]
+  private var accessedSourceURL: URL?
 
   init() {
-    sourceBookmarkDataByID = UserDefaults.standard.dictionary(
-      forKey: Self.rememberedSourceBookmarksKey
-    ) as? [String: Data] ?? [:]
+    sourceBookmarkDataByID = Self.loadRememberedSourceBookmarks()
     ingestPreviewThumbnails.cleanCache()
     let formatter = DateFormatter()
     formatter.dateFormat = "yyyy-MM-dd"
@@ -110,6 +109,7 @@ import Foundation
   }
 
   private func selectGrantedSource(_ source: SourceVolumeOption, grantedURL: URL, settings: AppSettings) {
+    activateAccess(to: grantedURL)
     sourceURL = grantedURL
     selectedSourceID = source.id
     error = nil
@@ -120,6 +120,11 @@ import Foundation
   private func ensureAccessForDetectedSource(_ option: SourceVolumeOption) -> URL? {
     if let bookmarkData = option.bookmarkData ?? sourceBookmarkDataByID[option.id],
       let resolved = try? bookmarks.resolve(bookmarkData) {
+      // Refresh the persisted bookmark after resolution. This handles a mounted
+      // card whose path or bookmark representation changed since last use.
+      if let refreshed = try? bookmarks.bookmark(for: resolved) {
+        remember(refreshed, for: option.id)
+      }
       return resolved
     }
 
@@ -147,10 +152,25 @@ import Foundation
 
   private func remember(_ bookmarkData: Data, for sourceID: String) {
     sourceBookmarkDataByID[sourceID] = bookmarkData
-    UserDefaults.standard.set(
-      sourceBookmarkDataByID,
-      forKey: Self.rememberedSourceBookmarksKey
-    )
+    if let data = try? PropertyListEncoder().encode(sourceBookmarkDataByID) {
+      UserDefaults.standard.set(data, forKey: Self.rememberedSourceBookmarksKey)
+    }
+  }
+
+  private static func loadRememberedSourceBookmarks() -> [String: Data] {
+    if let data = UserDefaults.standard.data(forKey: rememberedSourceBookmarksKey),
+      let bookmarks = try? PropertyListDecoder().decode([String: Data].self, from: data) {
+      return bookmarks
+    }
+    // Preserve permissions granted by the previous implementation when possible.
+    return UserDefaults.standard.dictionary(forKey: rememberedSourceBookmarksKey) as? [String: Data] ?? [:]
+  }
+
+  private func activateAccess(to url: URL) {
+    if accessedSourceURL?.standardizedFileURL != url.standardizedFileURL {
+      accessedSourceURL?.stopAccessingSecurityScopedResource()
+      accessedSourceURL = url.startAccessingSecurityScopedResource() ? url : nil
+    }
   }
 
   func chooseDestination() {
@@ -354,6 +374,10 @@ import Foundation
     pendingPreviewThumbnailClips.removeAll()
     queuedPreviewThumbnailIDs.removeAll()
     activePreviewThumbnailCount = 0
+  }
+
+  deinit {
+    accessedSourceURL?.stopAccessingSecurityScopedResource()
   }
 
   private func finishPreviewThumbnail(
