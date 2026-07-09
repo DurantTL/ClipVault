@@ -18,8 +18,13 @@ import Foundation
   @Published var timeGap: IngestTimeGap = .ninety
   @Published var alreadyImportedMode: AlreadyImportedMode = .skipAlreadyCopied
   @Published var selectDate = Date()
+  @Published var sourceOptions: [SourceVolumeOption] = []
+  @Published var recentManualSources: [SourceVolumeOption] = []
+  @Published var selectedSourceID: String?
+
 
   let scanner = SourceScanner()
+  let volumeSourceService = VolumeSourceService()
   let bookmarks = SecurityScopedBookmarkManager()
   let ingestService = IngestService()
   private let ingestPreviewThumbnails = IngestPreviewThumbnailService()
@@ -34,6 +39,7 @@ import Foundation
     let formatter = DateFormatter()
     formatter.dateFormat = "yyyy-MM-dd"
     projectName = "\(formatter.string(from: Date())) Video Ingest"
+    refreshSources()
   }
 
   var finalOutputURL: URL? {
@@ -47,10 +53,40 @@ import Foundation
 
   func chooseSource(settings: AppSettings) {
     if let url = pickFolder(canCreateDirectories: false) {
-      sourceURL = url
-      detectSonyCard()
-      scan(settings: settings)
+      let manual = volumeSourceService.manualSource(for: url)
+      if !recentManualSources.contains(where: { $0.id == manual.id }) {
+        recentManualSources.insert(manual, at: 0)
+      }
+      selectSource(manual, settings: settings)
     }
+  }
+
+  func refreshSources() {
+    let selectedPath = sourceURL?.standardizedFileURL.path
+    sourceOptions = volumeSourceService.scanMountedSources()
+    recentManualSources = recentManualSources.map { manual in
+      var refreshed = volumeSourceService.manualSource(for: manual.url)
+      refreshed.isAvailable = FileManager.default.fileExists(atPath: manual.url.path)
+      return refreshed
+    }
+    if let selectedPath, !sourceOptions.contains(where: { $0.id == selectedPath }) && !recentManualSources.contains(where: { $0.id == selectedPath }) {
+      var disconnected = volumeSourceService.manualSource(for: URL(fileURLWithPath: selectedPath))
+      disconnected.isAvailable = false
+      recentManualSources.insert(disconnected, at: 0)
+      selectedSourceID = selectedPath
+    }
+  }
+
+  func selectSource(_ source: SourceVolumeOption, settings: AppSettings) {
+    guard source.isAvailable else {
+      error = "That source is disconnected. Reconnect it or use Add Source to choose a folder manually."
+      return
+    }
+    sourceURL = source.url
+    selectedSourceID = source.id
+    error = nil
+    detectSonyCard()
+    scan(settings: settings)
   }
 
   func chooseDestination() {
