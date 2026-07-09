@@ -83,6 +83,10 @@ struct LibraryView: View {
           Divider()
           Button("Copy filenames to clipboard") { viewModel.copySelectedFilenames() }
           Button("Reveal selected in Finder") { viewModel.reveal() }
+          Divider()
+          Button("Generate Missing Thumbnails") { viewModel.generateMissingThumbnails() }
+          Button("Regenerate Thumbnail for This Clip") { viewModel.regenerateThumbnailForSelectedClip() }
+          Button("Regenerate Thumbnails for Selected Clips") { viewModel.regenerateThumbnailsForSelectedClips() }
         }
 
         Menu("Export") {
@@ -133,10 +137,11 @@ struct LibraryView: View {
   }
 
   private func openIngestWindow() {
-    if let ingestWindow {
+    if let ingestWindow, ingestWindow.isVisible {
       ingestWindow.makeKeyAndOrderFront(nil)
       return
     }
+    ingestWindow = nil
 
     let root = NewIngestView { project in
       viewModel.project = project
@@ -152,10 +157,42 @@ struct LibraryView: View {
     window.title = "New Ingest"
     window.minSize = NSSize(width: 1150, height: 740)
     window.contentViewController = NSHostingController(rootView: root)
-    window.center()
     window.isReleasedWhenClosed = false
+    window.setFrameAutosaveName("ClipVault.NewIngestWindow")
+
+    let restored = window.setFrameUsingName("ClipVault.NewIngestWindow", force: false)
+    if restored {
+      window.setFrame(constrainedFrame(for: window), display: false)
+    } else {
+      window.setFrame(NSRect(x: 0, y: 0, width: 1250, height: 820), display: false)
+      window.center()
+    }
+
     window.makeKeyAndOrderFront(nil)
     ingestWindow = window
+  }
+
+  private func constrainedFrame(for window: NSWindow) -> NSRect {
+    let minimumWidth = window.minSize.width
+    let minimumHeight = window.minSize.height
+    var frame = window.frame
+    frame.size.width = max(frame.width, minimumWidth)
+    frame.size.height = max(frame.height, minimumHeight)
+
+    let visibleFrames = NSScreen.screens.map(\.visibleFrame)
+    if let visibleFrame = visibleFrames.first(where: { $0.contains(frame) }) {
+      frame.size.width = min(frame.width, visibleFrame.width)
+      frame.size.height = min(frame.height, visibleFrame.height)
+      return frame
+    }
+
+    let visibleFrame = visibleFrames.first(where: { $0.intersects(frame) }) ?? NSScreen.main?.visibleFrame ?? NSScreen.screens.first?.visibleFrame
+    guard let visibleFrame else { return frame }
+    frame.size.width = min(frame.width, visibleFrame.width)
+    frame.size.height = min(frame.height, visibleFrame.height)
+    frame.origin.x = visibleFrame.midX - frame.width / 2
+    frame.origin.y = visibleFrame.midY - frame.height / 2
+    return frame
   }
 
   private var partialBanner: some View {

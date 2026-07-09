@@ -49,6 +49,7 @@ enum ClipCopyStatus: String, Codable, CaseIterable {
 
 enum ThumbnailStatus: String, Codable, CaseIterable {
   case pending
+  case generating
   case generated
   case failed
   case notNeeded

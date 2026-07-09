@@ -18,6 +18,7 @@ struct ClipGridView: View {
               clip: clip,
               selected: vm.selectedClipIDs.contains(clip.id),
               canPreview: vm.canPreview(clip),
+              thumbnailURL: vm.existingThumbnailURL(for: clip),
               preview: {
                 vm.select(clip)
                 vm.previewSelected()
@@ -33,6 +34,16 @@ struct ClipGridView: View {
                 vm.previewSelected()
               }
               .draggable(clip)
+              .onAppear { vm.queueThumbnailGenerationIfNeeded(for: clip) }
+              .contextMenu {
+                Button("Regenerate Thumbnail for This Clip") {
+                  vm.select(clip)
+                  vm.regenerateThumbnailForSelectedClip()
+                }
+                Button("Regenerate Thumbnails for Selected Clips") {
+                  vm.regenerateThumbnailsForSelectedClips()
+                }
+              }
           }
         }
         .padding()
