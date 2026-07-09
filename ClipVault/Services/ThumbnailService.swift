@@ -36,7 +36,8 @@ actor ThumbnailService {
     for clip: Clip,
     mediaURL: URL,
     project: ClipVaultProject,
-    quality: ThumbnailQuality
+    quality: ThumbnailQuality,
+    force: Bool = false
   ) async throws -> Result {
     let projectFolder = security.projectFolderURL(for: project)
     return try await security.withAccessAsync(to: projectFolder) {
@@ -47,7 +48,7 @@ actor ThumbnailService {
         try FileManager.default.createDirectory(at: cache, withIntermediateDirectories: true)
 
         let dest = self.thumbnailURL(for: clip, in: project)
-        if FileManager.default.fileExists(atPath: dest.path) {
+        if !force, FileManager.default.fileExists(atPath: dest.path) {
           return Result(path: dest.path, relativePath: self.relativeThumbnailPath(for: dest, projectFolder: projectFolder))
         }
 

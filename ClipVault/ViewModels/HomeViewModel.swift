@@ -8,6 +8,7 @@ struct RecentProjectSummary: Identifiable {
 
   var name: String { project?.name ?? URL(fileURLWithPath: path).deletingLastPathComponent().lastPathComponent }
   var coverThumbnail: String? { project?.clips.first(where: { $0.thumbnailPath != nil })?.thumbnailPath }
+  var projectFolderPath: String? { project?.projectFolderPath ?? URL(fileURLWithPath: path).deletingLastPathComponent().path }
   var createdAt: Date? { project?.createdAt }
   var lastOpenedAt: Date? { project?.lastOpenedAt }
   var clipCount: Int { project?.clips.count ?? 0 }

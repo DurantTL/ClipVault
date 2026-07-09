@@ -79,7 +79,7 @@ struct ProjectCard: View {
     VStack(alignment: .leading, spacing: 10) {
       ZStack {
         Rectangle().fill(.quaternary).aspectRatio(16 / 9, contentMode: .fit)
-        if let path = summary.coverThumbnail, let image = NSImage(contentsOfFile: path) {
+        if let url = resolvedCoverThumbnailURL(for: summary), let image = NSImage(contentsOf: url) {
           Image(nsImage: image).resizable().scaledToFill().clipped()
         } else {
           Image(systemName: "film.stack").font(.largeTitle).foregroundStyle(.secondary)
@@ -105,6 +105,25 @@ struct ProjectCard: View {
     .padding()
     .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
     .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(.quaternary))
+  }
+
+  private func resolvedCoverThumbnailURL(for summary: RecentProjectSummary) -> URL? {
+    guard let thumbnailPath = summary.coverThumbnail, !thumbnailPath.isEmpty else {
+      return nil
+    }
+
+    let thumbnailURL = URL(fileURLWithPath: thumbnailPath)
+    if thumbnailURL.path.hasPrefix("/") {
+      return FileManager.default.fileExists(atPath: thumbnailURL.path) ? thumbnailURL : nil
+    }
+
+    guard let projectFolderPath = summary.projectFolderPath else {
+      return nil
+    }
+
+    let projectFolderURL = URL(fileURLWithPath: projectFolderPath, isDirectory: true)
+    let resolvedURL = projectFolderURL.appendingPathComponent(thumbnailPath)
+    return FileManager.default.fileExists(atPath: resolvedURL.path) ? resolvedURL : nil
   }
 
   private func date(_ date: Date?) -> String {

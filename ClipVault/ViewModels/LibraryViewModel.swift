@@ -36,6 +36,7 @@ enum ClipSortOption: String, CaseIterable, Identifiable {
   private var accessedSecurityScopedURLs: [URL] = []
   private var thumbnailGenerationTask: Task<Void, Never>?
   private var queuedThumbnailIDs: Set<UUID> = []
+  private var forcedThumbnailIDs: Set<UUID> = []
 
   init(project: ClipVaultProject) {
     self.project = project
@@ -385,6 +386,9 @@ enum ClipSortOption: String, CaseIterable, Identifiable {
     }
     guard !newIDs.isEmpty else { return }
     queuedThumbnailIDs.formUnion(newIDs)
+    if force {
+      forcedThumbnailIDs.formUnion(newIDs)
+    }
     if thumbnailGenerationTask == nil {
       thumbnailGenerationTask = Task { [weak self] in
         await self?.processThumbnailQueue()
@@ -396,6 +400,7 @@ enum ClipSortOption: String, CaseIterable, Identifiable {
     defer { thumbnailGenerationTask = nil }
     while let id = queuedThumbnailIDs.first {
       queuedThumbnailIDs.remove(id)
+      let force = forcedThumbnailIDs.remove(id) != nil
       guard let index = project.clips.firstIndex(where: { $0.id == id }) else { continue }
       let clip = project.clips[index]
       guard let mediaURL = resolvedMediaURL(for: clip) else { continue }
@@ -406,7 +411,7 @@ enum ClipSortOption: String, CaseIterable, Identifiable {
       save()
 
       do {
-        if FileManager.default.fileExists(atPath: cacheURL.path) {
+        if !force, FileManager.default.fileExists(atPath: cacheURL.path) {
           project.clips[index].thumbnailPath = relativePath(for: cacheURL)
           project.clips[index].thumbnailStatus = .generated
           save()
@@ -418,7 +423,8 @@ enum ClipSortOption: String, CaseIterable, Identifiable {
           for: clip,
           mediaURL: mediaURL,
           project: project,
-          quality: quality
+          quality: quality,
+          force: force
         )
         if let updatedIndex = project.clips.firstIndex(where: { $0.id == id }) {
           project.clips[updatedIndex].thumbnailPath = result.relativePath
@@ -428,7 +434,12 @@ enum ClipSortOption: String, CaseIterable, Identifiable {
         }
       } catch {
         if let failedIndex = project.clips.firstIndex(where: { $0.id == id }) {
-          project.clips[failedIndex].thumbnailStatus = .failed
+          if FileManager.default.fileExists(atPath: cacheURL.path) {
+            project.clips[failedIndex].thumbnailPath = relativePath(for: cacheURL)
+            project.clips[failedIndex].thumbnailStatus = .generated
+          } else {
+            project.clips[failedIndex].thumbnailStatus = .failed
+          }
           project.clips[failedIndex].thumbnailErrorMessage = error.localizedDescription
           save()
         }
