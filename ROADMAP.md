@@ -135,6 +135,28 @@ First version: reveal edit folder, open DaVinci Resolve / Final Cut Pro / Finder
 - Allow library sorting and filtering by camera, card, operator, and shoot day.
 - Allow folder presets to use camera/card metadata.
 
+### Feature 9 — Preflight Media Check / Already Imported Detection
+
+- Before ingest, compare source files against the project destination, backup destinations, NAS folders, recent projects, and optional comparison folders.
+- Detect files that already exist using filename, size, duration, modified date, and optional checksum.
+- Show clip-level statuses:
+  - New
+  - Already in Project
+  - Already on Backup
+  - Already on NAS
+  - Possible Duplicate
+  - Same Name Different Size
+  - Missing From Backup
+  - Previously Verified
+- Allow ingest choices:
+  - Copy new files only
+  - Skip already imported
+  - Retry missing backups only
+  - Copy all with safe duplicate names
+- Store comparison results in `.clipvault-project.json` and transfer reports.
+- Never overwrite destination files.
+- Never delete source files.
+
 ## Performance and Apple Silicon Roadmap
 
 Shipped local responsiveness baseline: the library caches decoded visible thumbnails in memory and prewarms adjacent copied preview assets. Continue to measure time-to-first-thumbnail and time-to-first-preview before adding heavier processing.
