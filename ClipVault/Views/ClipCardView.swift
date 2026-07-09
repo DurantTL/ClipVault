@@ -7,7 +7,7 @@ struct ClipCardView: View {
   let canPreview: Bool
   let thumbnailURL: URL?
   let preview: () -> Void
-  let rate: (CullStatus) -> Void
+  let rate: (Int) -> Void
   @State private var hovering = false
 
   var body: some View {
@@ -34,9 +34,9 @@ struct ClipCardView: View {
                 .buttonStyle(.borderedProminent)
                 .disabled(!canPreview)
               Spacer()
-              quickButton("5", .keep)
-              quickButton("3", .maybe)
-              quickButton("1", .reject)
+              quickButton("5★", 5)
+              quickButton("3★", 3)
+              quickButton("1★", 1)
             }
             .padding(8)
             .transition(.opacity.combined(with: .move(edge: .bottom)))
@@ -49,6 +49,20 @@ struct ClipCardView: View {
         .font(.headline)
         .lineLimit(1)
         .truncationMode(.middle)
+
+      HStack(spacing: 8) {
+        StarRatingView(rating: clip.rating, onRate: rate)
+        Spacer()
+        if let quality = clip.analysisQualityScore {
+          Text("Q \(Int(quality))")
+            .font(.caption2.bold())
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(qualityColor(quality).opacity(0.16), in: Capsule())
+            .foregroundStyle(qualityColor(quality))
+            .help("Analysis quality score from focus, stability, and exposure")
+        }
+      }
 
       HStack(spacing: 8) {
         Label(DurationFormatterUtil.string(clip.duration), systemImage: "timer")
@@ -118,10 +132,35 @@ struct ClipCardView: View {
     return [resolution, rate].filter { !$0.isEmpty }.joined(separator: " • ")
   }
 
-  private func quickButton(_ title: String, _ status: CullStatus) -> some View {
-    Button(title) { rate(status) }
+  private func quickButton(_ title: String, _ rating: Int) -> some View {
+    Button(title) { rate(rating) }
       .buttonStyle(.bordered)
       .controlSize(.small)
+  }
+
+  private func qualityColor(_ quality: Double) -> Color {
+    if quality >= 75 { return .green }
+    if quality >= 45 { return .orange }
+    return .red
+  }
+}
+
+struct StarRatingView: View {
+  let rating: Int
+  var onRate: ((Int) -> Void)?
+
+  var body: some View {
+    HStack(spacing: 2) {
+      ForEach(1...5, id: \.self) { star in
+        Image(systemName: star <= rating ? "star.fill" : "star")
+          .font(.caption)
+          .foregroundStyle(star <= rating ? Color.yellow : Color.secondary.opacity(0.5))
+          .onTapGesture {
+            // Clicking the current rating clears it back to unrated.
+            onRate?(star == rating ? 0 : star)
+          }
+      }
+    }
   }
 }
 

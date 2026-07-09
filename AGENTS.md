@@ -21,6 +21,14 @@ Never break these:
 - Metadata belongs in `.clipvault-project.json` or sidecars, not inside original MP4/MOV files by default.
 - Partial/canceled ingests must remain reopenable.
 
+## Rating and Cull Status Rules
+
+- Clips carry both a 0–5 `rating` and a coarse `cullStatus`; keep them in sync through `Clip.applyRating` / `Clip.applyCullStatus` — never set either field directly in new code.
+- Mapping: 0 → Unrated, 1 → Reject, 2–3 → Maybe, 4–5 → Keep. Setting a status only adjusts the rating when they disagree.
+- Old project JSON without a rating must keep decoding; the rating is derived from the saved cull status.
+- Analysis suggestions (suggested rating, Top Pick / Social Pick tags) are opt-in only — never auto-apply them over a user's rating.
+- Exports (edit-folder copies, reports) read copied project media only, copy instead of move, and never overwrite (safe `_1`, `_2` names).
+
 ## Source Permission Rules
 
 The app is sandboxed. Any change to source selection must preserve this behavior:

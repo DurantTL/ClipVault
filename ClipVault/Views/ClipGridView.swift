@@ -11,6 +11,9 @@ struct ClipGridView: View {
   var body: some View {
     VStack(spacing: 0) {
       KeyboardLegend(autoAdvance: AppSettings.autoAdvanceAfterRating)
+      if vm.selectedClipIDs.count > 1 {
+        selectionBar
+      }
       ScrollView {
         LazyVGrid(columns: columns, spacing: 16) {
           ForEach(vm.filteredClips) { clip in
@@ -23,12 +26,12 @@ struct ClipGridView: View {
                 vm.select(clip)
                 vm.previewSelected()
               },
-              rate: { status in
-                vm.select(clip)
-                vm.setStatus(status)
+              rate: { rating in
+                if !vm.selectedClipIDs.contains(clip.id) { vm.select(clip) } else { vm.selectedClipID = clip.id }
+                vm.setRating(rating)
               }
             )
-              .onTapGesture { vm.select(clip) }
+              .onTapGesture { handleTap(on: clip) }
               .onTapGesture(count: 2) {
                 vm.select(clip)
                 vm.previewSelected()
@@ -54,27 +57,62 @@ struct ClipGridView: View {
     .onDeleteCommand { vm.setStatus(.reject) }
   }
 
+  private var selectionBar: some View {
+    HStack(spacing: 12) {
+      Label("\(vm.selectedClipIDs.count) clips selected", systemImage: "checkmark.circle.fill")
+        .font(.caption.bold())
+      Spacer()
+      Button("Clear Selection (Esc)") { vm.clearMultiSelection() }
+        .controlSize(.small)
+    }
+    .padding(.horizontal, 12)
+    .padding(.vertical, 6)
+    .background(Color.accentColor.opacity(0.12))
+  }
+
+  private func handleTap(on clip: Clip) {
+    let modifiers = NSEvent.modifierFlags
+    if modifiers.contains(.shift) {
+      vm.selectRange(to: clip)
+    } else if modifiers.contains(.command) {
+      vm.select(clip, extending: true)
+    } else {
+      vm.select(clip)
+    }
+  }
+
   private func handle(_ event: NSEvent) -> Bool {
     if NSApp.keyWindow?.firstResponder is NSTextView { return false }
-    if event.modifierFlags.contains(.command), event.charactersIgnoringModifiers?.lowercased() == "r" {
-      vm.reveal()
-      return true
+    if event.modifierFlags.contains(.command) {
+      switch event.charactersIgnoringModifiers?.lowercased() {
+      case "r":
+        vm.reveal()
+        return true
+      case "a":
+        vm.selectAllVisible()
+        return true
+      default:
+        return false
+      }
     }
     switch event.keyCode {
     case 49:
       vm.previewSelected()
     case 53:
-      vm.closePreview()
+      if vm.previewClip != nil {
+        vm.closePreview()
+      } else {
+        vm.clearMultiSelection()
+      }
     case 124:
       vm.selectNext()
     case 123:
       vm.selectPrevious()
     default:
       switch event.charactersIgnoringModifiers {
-      case "5": vm.setStatus(.keep)
-      case "3": vm.setStatus(.maybe)
-      case "1": vm.setStatus(.reject)
-      case "0": vm.setStatus(.unrated)
+      case "0", "1", "2", "3", "4", "5":
+        guard let value = event.charactersIgnoringModifiers.flatMap({ Int($0) }) else { return false }
+        vm.setRating(value)
       default: return false
       }
     }
@@ -88,13 +126,14 @@ struct KeyboardLegend: View {
   var body: some View {
     HStack(spacing: 14) {
       Label("Space Preview", systemImage: "space")
-      Text("5 Keep")
-      Text("3 Maybe")
-      Text("1 Reject")
+      Text("1–5 Rate (5★ Keep · 3★ Maybe · 1★ Reject)")
       Text("0 Clear")
       Text("←/→ Select")
+      Text("⌘-Click Add")
+      Text("⇧-Click Range")
+      Text("⌘A All")
       Text("⌘R Reveal")
-      Text("Esc Close")
+      Text("Esc Close/Clear")
       if autoAdvance {
         Label("Auto-advance: On", systemImage: "forward.fill")
           .foregroundStyle(.blue)

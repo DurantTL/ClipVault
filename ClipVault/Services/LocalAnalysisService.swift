@@ -204,6 +204,46 @@ struct FaceAnalysisService {
   }
 }
 
+extension Clip {
+  /// Single 0–100 roll-up of the analysis scores, weighted for culling:
+  /// focus matters most, then stability, then exposure. Nil until analysis
+  /// completes so unanalyzed clips are never ranked below analyzed ones.
+  var analysisQualityScore: Double? {
+    guard analysisStatus == .complete, let focus = focusScore else { return nil }
+    let stability = stabilityScore ?? 50
+    let brightness = brightnessScore ?? 50
+    let contrast = contrastScore ?? 50
+    let exposure = max(0, 100 - abs(brightness - 55) * 2.2 - max(0, 30 - contrast))
+    var score = focus * 0.45 + stability * 0.30 + exposure * 0.25
+    if hasCloseFace { score += 6 }
+    if focusWarning { score -= 12 }
+    if possiblyShaky { score -= 8 }
+    if exposureWarning { score -= 6 }
+    return min(100, max(0, score))
+  }
+
+  /// Rating the analyzer would give this clip. A suggestion only — never
+  /// applied automatically; the user opts in per clip or per batch.
+  var suggestedRating: Int? {
+    guard let quality = analysisQualityScore else { return nil }
+    if focusWarning && possiblyShaky { return 1 }
+    switch quality {
+    case 78...: return 5
+    case 62..<78: return 4
+    case 45..<62: return 3
+    case 30..<45: return 2
+    default: return 1
+    }
+  }
+
+  /// True when analysis rates this clip a strong candidate for short-form
+  /// social use: short, sharp, steady, and someone visible in frame.
+  var isSuggestedSocialPick: Bool {
+    guard let quality = analysisQualityScore else { return false }
+    return (duration ?? .infinity) <= 90 && hasFaces && quality >= 60 && !possiblyShaky
+  }
+}
+
 struct LocalAnalysisService {
   private let sampler = FrameSamplerService()
   private let pixels = PixelAnalyzer()
@@ -241,6 +281,13 @@ struct LocalAnalysisService {
       tags.insert("Approx. WB")
     }
     if (clip.whiteBalanceConfidence ?? 100) < 45 && clip.whiteBalanceKelvin != nil { tags.insert("White Balance Estimate Low Confidence") }
+    tags.remove("Top Pick Suggestion")
+    tags.remove("Social Pick Suggestion")
+    if let quality = clip.analysisQualityScore,
+      quality >= 75, !clip.focusWarning, !clip.possiblyShaky, !clip.exposureWarning {
+      tags.insert("Top Pick Suggestion")
+    }
+    if clip.isSuggestedSocialPick { tags.insert("Social Pick Suggestion") }
     return Array(tags).sorted()
   }
 

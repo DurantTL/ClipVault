@@ -187,15 +187,15 @@ Manual: keep a folder of 5–10 short clips for every PR and run the regression 
 
 ## Priority Order
 
-1. Stabilize the detected source picker (permissions must not re-prompt)
+1. Stabilize the detected source picker (permissions must not re-prompt) — ✅ shipped
 2. Confirm New Ingest window stays large and remembered
 3. Confirm ingest source thumbnails work and remain read-only
 4. Confirm partial ingest/resume
-5. Add 0–5 ratings
-6. Add multi-select
-7. Add bulk metadata
-8. Add Copy Keeps to Edit Folder
-9. Add CSV/JSON export
+5. Add 0–5 ratings — ✅ shipped
+6. Add multi-select — ✅ shipped
+7. Add bulk metadata — ✅ shipped
+8. Add Copy Keeps to Edit Folder — ✅ shipped
+9. Add CSV/JSON export — ✅ shipped (clip/keep/reject/verification/analysis CSVs + metadata JSON)
 10. Add aliases
 11. Add editor handoff
 12. Add project templates

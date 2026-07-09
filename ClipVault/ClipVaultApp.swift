@@ -13,11 +13,15 @@ struct ClipVaultApp: App {
       CommandMenu("Clip") {
         Button("Preview / Play") { NotificationCenter.default.post(name: .clipPreview, object: nil) }
           .keyboardShortcut(.space, modifiers: [])
-        Button("Keep") { NotificationCenter.default.post(name: .clipKeep, object: nil) }
+        Button("Favorite / Best Keep (5★)") { NotificationCenter.default.post(name: .clipKeep, object: nil) }
           .keyboardShortcut("5", modifiers: [])
-        Button("Maybe") { NotificationCenter.default.post(name: .clipMaybe, object: nil) }
+        Button("Keep (4★)") { NotificationCenter.default.post(name: .clipRating4, object: nil) }
+          .keyboardShortcut("4", modifiers: [])
+        Button("Maybe (3★)") { NotificationCenter.default.post(name: .clipMaybe, object: nil) }
           .keyboardShortcut("3", modifiers: [])
-        Button("Reject") { NotificationCenter.default.post(name: .clipReject, object: nil) }
+        Button("Maybe – Low (2★)") { NotificationCenter.default.post(name: .clipRating2, object: nil) }
+          .keyboardShortcut("2", modifiers: [])
+        Button("Reject (1★)") { NotificationCenter.default.post(name: .clipReject, object: nil) }
           .keyboardShortcut("1", modifiers: [])
         Button("Unrated") { NotificationCenter.default.post(name: .clipUnrated, object: nil) }
           .keyboardShortcut("0", modifiers: [])
@@ -44,6 +48,8 @@ extension Notification.Name {
   static let clipMaybe = Notification.Name("clipMaybe")
   static let clipReject = Notification.Name("clipReject")
   static let clipUnrated = Notification.Name("clipUnrated")
+  static let clipRating2 = Notification.Name("clipRating2")
+  static let clipRating4 = Notification.Name("clipRating4")
   static let clipReveal = Notification.Name("clipReveal")
   static let clipPreview = Notification.Name("clipPreview")
   static let clipNext = Notification.Name("clipNext")

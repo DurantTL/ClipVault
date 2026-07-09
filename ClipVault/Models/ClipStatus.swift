@@ -4,6 +4,35 @@ enum CullStatus: String, Codable, CaseIterable, Identifiable {
   case unrated, keep, maybe, reject
   var id: String { rawValue }
   var label: String { rawValue.prefix(1).uppercased() + rawValue.dropFirst() }
+
+  /// Star ratings that agree with this status. Rating and status coexist:
+  /// status stays the fast three-way cull, rating adds finer 0–5 control.
+  var consistentRatings: ClosedRange<Int> {
+    switch self {
+    case .unrated: return 0...0
+    case .reject: return 1...1
+    case .maybe: return 2...3
+    case .keep: return 4...5
+    }
+  }
+
+  var defaultRating: Int {
+    switch self {
+    case .unrated: return 0
+    case .reject: return 1
+    case .maybe: return 3
+    case .keep: return 4
+    }
+  }
+
+  static func status(forRating rating: Int) -> CullStatus {
+    switch rating {
+    case ..<1: return .unrated
+    case 1: return .reject
+    case 2, 3: return .maybe
+    default: return .keep
+    }
+  }
 }
 
 enum VerificationStatus: String, Codable, CaseIterable {

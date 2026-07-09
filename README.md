@@ -100,13 +100,30 @@ ClipVault is a native macOS SwiftUI ingest and culling app focused on safe copy,
 ### Keyboard shortcuts
 
 - Space: Preview selected clip.
-- 5: Mark Keep.
-- 3: Mark Maybe.
-- 1: Mark Reject.
+- 1–5: Set star rating (5 = Favorite/Best Keep, 4 = Keep, 3 = Maybe, 2 = Maybe-Low, 1 = Reject).
 - 0: Clear rating / Unrated.
 - Left / Right Arrow: Select previous or next clip.
-- Command-R: Reveal selected clip in Finder.
-- Escape: Close preview.
+- Command-Click: Add or remove a clip from the multi-selection.
+- Shift-Click: Select a range of visible clips.
+- Command-A: Select all visible clips.
+- Command-R: Reveal selected clip(s) in Finder.
+- Escape: Close preview, or clear the multi-selection.
+
+### Ratings and culling
+
+Clips carry both a fast Keep/Maybe/Reject cull status and a 0–5 star rating. Setting a rating updates the status automatically (0 → Unrated, 1 → Reject, 2–3 → Maybe, 4–5 → Keep). Setting a status directly only adjusts the rating when the two disagree, so a 5-star clip marked Keep stays 5-star. Old project files without ratings open normally; ratings are derived from the saved cull status.
+
+### Multi-select, batch actions, and bulk metadata
+
+The library grid supports Command-click, Shift-click range select, Command-A, and Escape. Batch actions apply to the whole selection: status/rating, add/remove tags, move to folder, thumbnails, and Batch Edit Metadata (tags append/replace/remove, people, location, scene, shot type, notes, and flag set/clear).
+
+### Export and editor handoff
+
+The Export menu copies clips into an editor-ready folder: Keeps, Keep + Maybe, 4–5 star clips, or the current selection. Exports copy — never move — from copied project media only, never overwrite (safe `_1`, `_2` duplicate names), show progress and a summary, and reveal the folder when done. CSV reports cover the full clip list, keep list, reject list, verification, and analysis; project metadata exports as JSON.
+
+### Analysis-assisted culling
+
+Local analysis rolls focus, stability, and exposure into a 0–100 quality score shown on clip cards and sortable via "Analysis Quality". Each analyzed clip gets a suggested 0–5 rating and, where warranted, "Top Pick Suggestion" / "Social Pick Suggestion" tags with matching smart folders. Suggestions are never applied automatically — apply them per clip from the inspector or in bulk via "Apply Suggested Ratings to Unrated Clips", which never overwrites a rating a person set.
 
 ### Sony a7R V workflow
 
