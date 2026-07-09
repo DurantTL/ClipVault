@@ -103,7 +103,7 @@ struct LibraryView: View {
 
       ToolbarItemGroup {
         Picker("Filter", selection: $viewModel.filter) {
-          ForEach(["All Clips", "Unrated", "Keep", "Maybe", "Reject", "Favorites (5-Star)", "4+ Stars", "Top Pick Suggestions", "Social Pick Suggestions", "Verified", "Failed", "Has Audio", "No Audio", "4K", "60p", "Short Clip", "Long Clip"], id: \.self) { filter in
+          ForEach(["All Clips"] + viewModel.smartFolders, id: \.self) { filter in
             Text(filter).tag(filter)
           }
         }

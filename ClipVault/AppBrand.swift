@@ -1,8 +1,8 @@
 import SwiftUI
 
 struct AppBrand {
-  static let appName = "ClipVault"
-  static let tagline = "Copy. Verify. Cull. Organize."
+  static let appName = "SlateBox"
+  static let tagline = "Ingest. Verify. Cull. Hand off."
   static let metadataFileName = ".clipvault-project.json"
   static let cacheFolderName = ".clipvault-cache"
 }
@@ -38,7 +38,7 @@ struct LogoMarkView: View {
         .offset(x: size * 0.28, y: size * 0.27)
     }
     .frame(width: size, height: size)
-    .accessibilityLabel("ClipVault logo")
+    .accessibilityLabel("SlateBox logo")
   }
 }
 

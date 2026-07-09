@@ -28,11 +28,11 @@ enum ClipReportKind {
 
   var defaultFilename: String {
     switch self {
-    case .allClips: return "ClipVault-Clip-Report.csv"
-    case .keeps: return "ClipVault-Keep-List.csv"
-    case .rejects: return "ClipVault-Reject-List.csv"
-    case .verification: return "ClipVault-Verification-Report.csv"
-    case .analysis: return "ClipVault-Analysis-Report.csv"
+    case .allClips: return "SlateBox-Clip-Report.csv"
+    case .keeps: return "SlateBox-Keep-List.csv"
+    case .rejects: return "SlateBox-Reject-List.csv"
+    case .verification: return "SlateBox-Verification-Report.csv"
+    case .analysis: return "SlateBox-Analysis-Report.csv"
     }
   }
 }
@@ -138,20 +138,29 @@ struct BatchMetadataEdit {
 
   var smartFolders: [String] {
     [
-      "All Clips", "Unrated", "Keep", "Maybe", "Reject", "Favorites (5-Star)", "4+ Stars",
-      "Top Pick Suggestions", "Social Pick Suggestions", "4K", "60p", "Has Audio", "No Audio",
-      "Short Clips", "Long Clips", "Large Files", "Sony", "Canon/DCF", "Recently Ingested", "Failed Preview",
-      "Failed Verification", "Social Candidates", "Interviews", "B-Roll", "Sermon",
-      "Possibly Out of Focus", "Faces", "Group Shots", "Close Faces", "Low Face Visibility",
-      "Possibly Shaky", "Stable Clips", "High Motion", "Dark Clips", "Bright Clips",
-      "Low Contrast", "Sharp Clips", "Balanced Exposure", "Warm Color", "Cool Color", "Approx. WB", "Failed Analysis",
-      "Duplicate Candidates"
+      "Unrated", "Keep", "Maybe", "Reject", "Needs Review"
     ]
   }
 
   var filteredClips: [Clip] {
-    let clips = project.clips.filter(matchesFilter)
+    let clips = project.clips.filter { matchesFilter($0) }
     return sorted(clips)
+  }
+
+  /// The sidebar keeps workflow filters intentionally small. Everything more
+  /// specific is a tag or a project folder, which keeps the library readable
+  /// as analysis and metadata grow.
+  func clipCount(for filter: String) -> Int {
+    project.clips.filter { matchesFilter($0, filter: filter) }.count
+  }
+
+  func previewNeighborURLs(for clip: Clip) -> [URL] {
+    let clips = filteredClips
+    guard let index = clips.firstIndex(where: { $0.id == clip.id }) else { return [] }
+    let nearby = [index - 1, index + 1, index + 2].compactMap { clips.indices.contains($0) ? clips[$0] : nil }
+    return nearby.compactMap { candidate in
+      canPreview(candidate) ? resolvedMediaURL(for: candidate) : nil
+    }
   }
 
   var selectionCount: Int { selectedClipIDs.isEmpty ? (selectedClipID == nil ? 0 : 1) : selectedClipIDs.count }
@@ -445,7 +454,7 @@ struct BatchMetadataEdit {
   func handOffEditFolder(to applicationIdentifier: String?) {
     let panel = NSOpenPanel()
     panel.title = "Choose Edit Folder"
-    panel.message = "Choose the folder ClipVault should reveal or open in your editor."
+    panel.message = "Choose the folder SlateBox should reveal or open in your editor."
     panel.prompt = applicationIdentifier == nil ? "Reveal" : "Open"
     panel.canChooseDirectories = true
     panel.canChooseFiles = false
@@ -531,7 +540,7 @@ struct BatchMetadataEdit {
     }
     let panel = NSOpenPanel()
     panel.title = "Choose Edit Folder"
-    panel.message = "ClipVault will copy \(clips.count) clip\(clips.count == 1 ? "" : "s") (\(scope.label)) into this folder. Nothing is moved or overwritten."
+    panel.message = "SlateBox will copy \(clips.count) clip\(clips.count == 1 ? "" : "s") (\(scope.label)) into this folder. Nothing is moved or overwritten."
     panel.prompt = "Copy Here"
     panel.canChooseDirectories = true
     panel.canChooseFiles = false
@@ -666,7 +675,7 @@ struct BatchMetadataEdit {
 
   func exportProjectMetadata() {
     let panel = NSSavePanel()
-    panel.nameFieldStringValue = "ClipVault-Project-Metadata.json"
+    panel.nameFieldStringValue = "SlateBox-Project-Metadata.json"
     guard panel.runModal() == .OK, let url = panel.url else { return }
     if let data = try? JSONEncoder().encode(project) { try? data.write(to: url) }
   }
@@ -786,13 +795,15 @@ struct BatchMetadataEdit {
     }
   }
 
-  private func matchesFilter(_ clip: Clip) -> Bool {
-    switch filter {
+  private func matchesFilter(_ clip: Clip, filter requestedFilter: String? = nil) -> Bool {
+    let activeFilter = requestedFilter ?? self.filter
+    switch activeFilter {
     case "All Clips": return true
     case "Unrated": return clip.cullStatus == .unrated
     case "Keep": return clip.cullStatus == .keep
     case "Maybe": return clip.cullStatus == .maybe
     case "Reject": return clip.cullStatus == .reject
+    case "Needs Review": return clip.cullStatus == .unrated || clip.analysisStatus == .failed || clip.verificationStatus == .failed
     case "Favorites (5-Star)": return clip.rating == 5
     case "4+ Stars": return clip.rating >= 4
     case "Top Pick Suggestions": return clip.automaticTags.contains("Top Pick Suggestion")

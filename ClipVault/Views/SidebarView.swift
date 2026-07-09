@@ -12,7 +12,7 @@ struct SidebarView: View {
           .tag("All Clips")
       }
 
-      Section("Smart Folders") {
+      Section("Workflow") {
         ForEach(vm.smartFolders, id: \.self) { folder in
           Label {
             HStack {
@@ -79,17 +79,7 @@ struct SidebarView: View {
   }
 
   private func count(for folder: String) -> Int {
-    vm.project.clips.filter { clip in
-      switch folder {
-      case "All Clips": return true
-      case "Unrated": return clip.cullStatus == .unrated
-      case "Keep": return clip.cullStatus == .keep
-      case "Maybe": return clip.cullStatus == .maybe
-      case "Reject": return clip.cullStatus == .reject
-      default:
-        return clip.assignedFolder == folder || clip.automaticTags.contains(folder) || clip.productionTags.contains(folder)
-      }
-    }.count
+    vm.clipCount(for: folder)
   }
 
   private func icon(for folder: String) -> String {
@@ -97,9 +87,7 @@ struct SidebarView: View {
     case "Keep": return "checkmark.circle"
     case "Maybe": return "questionmark.circle"
     case "Reject": return "xmark.circle"
-    case "Failed Preview", "Failed Verification": return "exclamationmark.triangle"
-    case "4K", "60p": return "4k.tv"
-    case "Has Audio", "No Audio": return "waveform"
+    case "Needs Review": return "exclamationmark.triangle"
     default: return "line.3.horizontal.decrease.circle"
     }
   }
