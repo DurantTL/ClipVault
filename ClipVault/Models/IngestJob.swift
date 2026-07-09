@@ -11,6 +11,13 @@ struct SourceVideo: Identifiable, Hashable, Codable {
   let cardType: String
 }
 
+enum ThumbnailStatus: String, Hashable, Codable {
+  case notGenerated
+  case generating
+  case generated
+  case failed
+}
+
 struct ScannedVideo: Identifiable, Hashable, Codable {
   var id = UUID()
   var selected = true
@@ -23,6 +30,76 @@ struct ScannedVideo: Identifiable, Hashable, Codable {
   var cameraType: String
   var sourceRelativePath: String
   var sessionID: UUID?
+  var previewThumbnailPath: String?
+  var previewThumbnailStatus: ThumbnailStatus = .notGenerated
+  var previewThumbnailErrorMessage: String?
+
+  enum CodingKeys: String, CodingKey {
+    case id
+    case selected
+    case url
+    case filename
+    case fileSize
+    case createdAt
+    case modifiedAt
+    case duration
+    case cameraType
+    case sourceRelativePath
+    case sessionID
+    case previewThumbnailPath
+    case previewThumbnailStatus
+    case previewThumbnailErrorMessage
+  }
+
+  init(
+    id: UUID = UUID(),
+    selected: Bool = true,
+    url: URL,
+    filename: String,
+    fileSize: Int64,
+    createdAt: Date?,
+    modifiedAt: Date?,
+    duration: Double?,
+    cameraType: String,
+    sourceRelativePath: String,
+    sessionID: UUID? = nil,
+    previewThumbnailPath: String? = nil,
+    previewThumbnailStatus: ThumbnailStatus = .notGenerated,
+    previewThumbnailErrorMessage: String? = nil
+  ) {
+    self.id = id
+    self.selected = selected
+    self.url = url
+    self.filename = filename
+    self.fileSize = fileSize
+    self.createdAt = createdAt
+    self.modifiedAt = modifiedAt
+    self.duration = duration
+    self.cameraType = cameraType
+    self.sourceRelativePath = sourceRelativePath
+    self.sessionID = sessionID
+    self.previewThumbnailPath = previewThumbnailPath
+    self.previewThumbnailStatus = previewThumbnailStatus
+    self.previewThumbnailErrorMessage = previewThumbnailErrorMessage
+  }
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+    selected = try container.decodeIfPresent(Bool.self, forKey: .selected) ?? true
+    url = try container.decode(URL.self, forKey: .url)
+    filename = try container.decode(String.self, forKey: .filename)
+    fileSize = try container.decode(Int64.self, forKey: .fileSize)
+    createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt)
+    modifiedAt = try container.decodeIfPresent(Date.self, forKey: .modifiedAt)
+    duration = try container.decodeIfPresent(Double.self, forKey: .duration)
+    cameraType = try container.decode(String.self, forKey: .cameraType)
+    sourceRelativePath = try container.decode(String.self, forKey: .sourceRelativePath)
+    sessionID = try container.decodeIfPresent(UUID.self, forKey: .sessionID)
+    previewThumbnailPath = try container.decodeIfPresent(String.self, forKey: .previewThumbnailPath)
+    previewThumbnailStatus = try container.decodeIfPresent(ThumbnailStatus.self, forKey: .previewThumbnailStatus) ?? .notGenerated
+    previewThumbnailErrorMessage = try container.decodeIfPresent(String.self, forKey: .previewThumbnailErrorMessage)
+  }
 }
 
 struct IngestSession: Identifiable, Hashable, Codable {
