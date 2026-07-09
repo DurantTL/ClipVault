@@ -22,8 +22,14 @@ import Foundation
   let scanner = SourceScanner()
   let bookmarks = SecurityScopedBookmarkManager()
   let ingestService = IngestService()
+  private let ingestPreviewThumbnails = IngestPreviewThumbnailService()
+  private var queuedPreviewThumbnailIDs = Set<UUID>()
+  private var pendingPreviewThumbnailClips: [ScannedVideo] = []
+  private var activePreviewThumbnailCount = 0
+  private let maxConcurrentPreviewThumbnails = 2
 
   init() {
+    ingestPreviewThumbnails.cleanCache()
     let formatter = DateFormatter()
     formatter.dateFormat = "yyyy-MM-dd"
     projectName = "\(formatter.string(from: Date())) Video Ingest"
@@ -77,9 +83,14 @@ import Foundation
     guard let sourceURL else { return }
     do {
       detectSonyCard()
+      ingestPreviewThumbnails.cleanCache()
+      queuedPreviewThumbnailIDs.removeAll()
+      pendingPreviewThumbnailClips.removeAll()
+      activePreviewThumbnailCount = 0
       videos = try scanner.scan(source: sourceURL, includeProxyFiles: settings.includeProxyFiles)
       sessions = buildSessions(from: videos, source: sourceURL)
       updateFreeSpace()
+      queueInitialPreviewThumbnails()
     } catch { self.error = error.localizedDescription }
   }
 
@@ -165,11 +176,103 @@ import Foundation
     setSession(at: index, selected: !sessions[index].selected)
   }
 
+  func queuePreviewThumbnails(for session: IngestSession, limit: Int = 8) {
+    for clip in session.clips.prefix(limit) {
+      queuePreviewThumbnail(for: clip)
+    }
+  }
+
+  func queuePreviewThumbnail(for clip: ScannedVideo) {
+    guard let sourceURL else { return }
+    guard clip.previewThumbnailStatus == .pending || clip.previewThumbnailStatus == .failed else { return }
+    guard !queuedPreviewThumbnailIDs.contains(clip.id) else { return }
+    queuedPreviewThumbnailIDs.insert(clip.id)
+    pendingPreviewThumbnailClips.append(clip)
+    updatePreviewThumbnailState(clipID: clip.id, status: .generating, path: nil, errorMessage: nil, duration: nil)
+    startNextPreviewThumbnailIfNeeded()
+  }
+
+  private func startNextPreviewThumbnailIfNeeded() {
+    guard activePreviewThumbnailCount < maxConcurrentPreviewThumbnails else { return }
+    guard let sourceURL else { return }
+    guard !pendingPreviewThumbnailClips.isEmpty else { return }
+
+    let clip = pendingPreviewThumbnailClips.removeFirst()
+    activePreviewThumbnailCount += 1
+
+    Task {
+      do {
+        let result = try await ingestPreviewThumbnails.generate(for: clip, sourceRoot: sourceURL)
+        await MainActor.run {
+          self.finishPreviewThumbnail(
+            clipID: clip.id,
+            status: .generated,
+            path: result.path,
+            errorMessage: nil,
+            duration: result.duration
+          )
+        }
+      } catch {
+        await MainActor.run {
+          self.finishPreviewThumbnail(
+            clipID: clip.id,
+            status: .failed,
+            path: nil,
+            errorMessage: error.localizedDescription,
+            duration: nil
+          )
+        }
+      }
+    }
+  }
+
+  private func finishPreviewThumbnail(
+    clipID: UUID,
+    status: ThumbnailStatus,
+    path: String?,
+    errorMessage: String?,
+    duration: Double?
+  ) {
+    activePreviewThumbnailCount = max(0, activePreviewThumbnailCount - 1)
+    updatePreviewThumbnailState(
+      clipID: clipID,
+      status: status,
+      path: path,
+      errorMessage: errorMessage,
+      duration: duration
+    )
+    startNextPreviewThumbnailIfNeeded()
+  }
+
   func setClip(_ clip: ScannedVideo, in session: IngestSession, selected: Bool) {
     guard let sessionIndex = sessions.firstIndex(where: { $0.id == session.id }),
       let clipIndex = sessions[sessionIndex].clips.firstIndex(where: { $0.id == clip.id }) else { return }
     sessions[sessionIndex].clips[clipIndex].selected = selected
     sessions[sessionIndex].selected = sessions[sessionIndex].clips.contains { $0.selected }
+  }
+
+  private func queueInitialPreviewThumbnails() {
+    for session in sessions {
+      queuePreviewThumbnails(for: session, limit: 8)
+    }
+  }
+
+  private func updatePreviewThumbnailState(
+    clipID: UUID,
+    status: ThumbnailStatus,
+    path: String?,
+    errorMessage: String?,
+    duration: Double?
+  ) {
+    for sessionIndex in sessions.indices {
+      guard let clipIndex = sessions[sessionIndex].clips.firstIndex(where: { $0.id == clipID }) else { continue }
+      sessions[sessionIndex].clips[clipIndex].previewThumbnailStatus = status
+      if let path { sessions[sessionIndex].clips[clipIndex].previewThumbnailPath = path }
+      if status == .failed { sessions[sessionIndex].clips[clipIndex].previewThumbnailPath = nil }
+      sessions[sessionIndex].clips[clipIndex].previewThumbnailErrorMessage = errorMessage
+      if let duration { sessions[sessionIndex].clips[clipIndex].duration = duration }
+      return
+    }
   }
 
   private func setSession(at index: Int, selected: Bool) {

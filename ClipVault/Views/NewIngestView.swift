@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 struct NewIngestView: View {
@@ -83,7 +84,9 @@ struct NewIngestView: View {
                 vm.sessions.first(where: { $0.id == session.id })?.selected ?? false
               }, set: { vm.setSession(session, selected: $0) }),
               onToggleSession: { vm.toggleSession(session) },
-              onSetClip: { clip, selected in vm.setClip(clip, in: session, selected: selected) }
+              onSetClip: { clip, selected in vm.setClip(clip, in: session, selected: selected) },
+              onQueueClipThumbnail: { clip in vm.queuePreviewThumbnail(for: clip) },
+              onQueueSessionThumbnails: { session in vm.queuePreviewThumbnails(for: session, limit: 24) }
             )
           }
           if vm.sessions.isEmpty {
@@ -206,6 +209,8 @@ struct SessionCard: View {
   @Binding var selected: Bool
   let onToggleSession: () -> Void
   let onSetClip: (ScannedVideo, Bool) -> Void
+  let onQueueClipThumbnail: (ScannedVideo) -> Void
+  let onQueueSessionThumbnails: (IngestSession) -> Void
   @State private var expanded = false
 
   var body: some View {
@@ -241,7 +246,8 @@ struct SessionCard: View {
           ForEach(session.clips) { clip in
             ClipSelectionRow(
               clip: clip,
-              isSelected: Binding(get: { clip.selected }, set: { onSetClip(clip, $0) })
+              isSelected: Binding(get: { clip.selected }, set: { onSetClip(clip, $0) }),
+              onQueueThumbnail: { onQueueClipThumbnail(clip) }
             )
           }
         }
@@ -253,18 +259,26 @@ struct SessionCard: View {
       RoundedRectangle(cornerRadius: 16)
         .stroke(selected ? Color.accentColor : Color.secondary.opacity(0.16), lineWidth: selected ? 2 : 1)
     )
+    .onAppear { onQueueSessionThumbnails(session) }
+    .onChange(of: expanded) { isExpanded in
+      if isExpanded { onQueueSessionThumbnails(session) }
+    }
   }
 
   private var thumbnailStrip: some View {
     HStack(spacing: 6) {
       ForEach(Array(session.clips.prefix(7).enumerated()), id: \.element.id) { _, clip in
-        ZStack {
-          RoundedRectangle(cornerRadius: 8)
-            .fill(.quaternary)
-            .frame(width: 54, height: 38)
-          Image(systemName: clip.selected ? "checkmark.circle.fill" : "film")
-            .foregroundStyle(clip.selected ? Color.accentColor : Color.secondary)
-        }
+        IngestPreviewThumbnailView(clip: clip, width: 54, height: 38)
+          .overlay(alignment: .topTrailing) {
+            if clip.selected {
+              Image(systemName: "checkmark.circle.fill")
+                .font(.caption)
+                .foregroundStyle(Color.accentColor)
+                .background(.thinMaterial, in: Circle())
+                .padding(3)
+            }
+          }
+          .onAppear { onQueueClipThumbnail(clip) }
       }
       if session.clips.count > 7 {
         Text("+\(session.clips.count - 7)")
@@ -294,20 +308,63 @@ struct SessionCard: View {
 struct ClipSelectionRow: View {
   let clip: ScannedVideo
   @Binding var isSelected: Bool
+  let onQueueThumbnail: () -> Void
 
   var body: some View {
-    Toggle(isOn: $isSelected) {
-      VStack(alignment: .leading, spacing: 3) {
-        Text(clip.filename)
+    HStack(spacing: 8) {
+      IngestPreviewThumbnailView(clip: clip, width: 54, height: 38)
+        .onAppear(perform: onQueueThumbnail)
+      Toggle(isOn: $isSelected) {
+        VStack(alignment: .leading, spacing: 3) {
+          Text(clip.filename)
           .font(.caption.bold())
           .lineLimit(1)
-        Text(FileSizeFormatterUtil.string(clip.fileSize))
-          .font(.caption2)
-          .foregroundStyle(.secondary)
+          Text(FileSizeFormatterUtil.string(clip.fileSize))
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+        }
       }
+      .toggleStyle(.checkbox)
     }
-    .toggleStyle(.checkbox)
     .padding(8)
     .background(isSelected ? Color.accentColor.opacity(0.10) : Color.secondary.opacity(0.06), in: RoundedRectangle(cornerRadius: 10))
+  }
+}
+
+struct IngestPreviewThumbnailView: View {
+  let clip: ScannedVideo
+  let width: CGFloat
+  let height: CGFloat
+
+  var body: some View {
+    ZStack {
+      RoundedRectangle(cornerRadius: 8)
+        .fill(.quaternary)
+      if let image = previewImage {
+        Image(nsImage: image)
+          .resizable()
+          .scaledToFill()
+          .frame(width: width, height: height)
+          .clipped()
+      } else if clip.previewThumbnailStatus == .generating {
+        Text("Generating…")
+          .font(.system(size: 8, weight: .medium))
+          .foregroundStyle(.secondary)
+          .multilineTextAlignment(.center)
+          .padding(3)
+      } else {
+        Image(systemName: "film")
+          .foregroundStyle(Color.secondary)
+      }
+    }
+    .frame(width: width, height: height)
+    .clipShape(RoundedRectangle(cornerRadius: 8))
+  }
+
+  private var previewImage: NSImage? {
+    guard let path = clip.previewThumbnailPath, FileManager.default.fileExists(atPath: path) else {
+      return nil
+    }
+    return NSImage(contentsOfFile: path)
   }
 }
