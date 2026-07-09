@@ -24,9 +24,12 @@ import Foundation
   let ingestService = IngestService()
   private let ingestPreviewThumbnails = IngestPreviewThumbnailService()
   private var queuedPreviewThumbnailIDs = Set<UUID>()
+  private var pendingPreviewThumbnailClips: [ScannedVideo] = []
+  private var activePreviewThumbnailCount = 0
+  private let maxConcurrentPreviewThumbnails = 2
 
   init() {
-    Task { await ingestPreviewThumbnails.cleanCache() }
+    ingestPreviewThumbnails.cleanCache()
     let formatter = DateFormatter()
     formatter.dateFormat = "yyyy-MM-dd"
     projectName = "\(formatter.string(from: Date())) Video Ingest"
@@ -80,8 +83,10 @@ import Foundation
     guard let sourceURL else { return }
     do {
       detectSonyCard()
-      Task { await ingestPreviewThumbnails.cleanCache() }
+      ingestPreviewThumbnails.cleanCache()
       queuedPreviewThumbnailIDs.removeAll()
+      pendingPreviewThumbnailClips.removeAll()
+      activePreviewThumbnailCount = 0
       videos = try scanner.scan(source: sourceURL, includeProxyFiles: settings.includeProxyFiles)
       sessions = buildSessions(from: videos, source: sourceURL)
       updateFreeSpace()
@@ -179,16 +184,27 @@ import Foundation
 
   func queuePreviewThumbnail(for clip: ScannedVideo) {
     guard let sourceURL else { return }
-    guard clip.previewThumbnailStatus == .notGenerated || clip.previewThumbnailStatus == .failed else { return }
+    guard clip.previewThumbnailStatus == .pending || clip.previewThumbnailStatus == .failed else { return }
     guard !queuedPreviewThumbnailIDs.contains(clip.id) else { return }
     queuedPreviewThumbnailIDs.insert(clip.id)
+    pendingPreviewThumbnailClips.append(clip)
     updatePreviewThumbnailState(clipID: clip.id, status: .generating, path: nil, errorMessage: nil, duration: nil)
+    startNextPreviewThumbnailIfNeeded()
+  }
+
+  private func startNextPreviewThumbnailIfNeeded() {
+    guard activePreviewThumbnailCount < maxConcurrentPreviewThumbnails else { return }
+    guard let sourceURL else { return }
+    guard !pendingPreviewThumbnailClips.isEmpty else { return }
+
+    let clip = pendingPreviewThumbnailClips.removeFirst()
+    activePreviewThumbnailCount += 1
 
     Task {
       do {
         let result = try await ingestPreviewThumbnails.generate(for: clip, sourceRoot: sourceURL)
         await MainActor.run {
-          self.updatePreviewThumbnailState(
+          self.finishPreviewThumbnail(
             clipID: clip.id,
             status: .generated,
             path: result.path,
@@ -198,7 +214,7 @@ import Foundation
         }
       } catch {
         await MainActor.run {
-          self.updatePreviewThumbnailState(
+          self.finishPreviewThumbnail(
             clipID: clip.id,
             status: .failed,
             path: nil,
@@ -208,6 +224,24 @@ import Foundation
         }
       }
     }
+  }
+
+  private func finishPreviewThumbnail(
+    clipID: UUID,
+    status: ThumbnailStatus,
+    path: String?,
+    errorMessage: String?,
+    duration: Double?
+  ) {
+    activePreviewThumbnailCount = max(0, activePreviewThumbnailCount - 1)
+    updatePreviewThumbnailState(
+      clipID: clipID,
+      status: status,
+      path: path,
+      errorMessage: errorMessage,
+      duration: duration
+    )
+    startNextPreviewThumbnailIfNeeded()
   }
 
   func setClip(_ clip: ScannedVideo, in session: IngestSession, selected: Bool) {

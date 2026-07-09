@@ -2,7 +2,7 @@ import AVFoundation
 import AppKit
 import Foundation
 
-actor IngestPreviewThumbnailService {
+final class IngestPreviewThumbnailService {
   struct Result: Sendable {
     let path: String
     let duration: Double?

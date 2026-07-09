@@ -11,13 +11,6 @@ struct SourceVideo: Identifiable, Hashable, Codable {
   let cardType: String
 }
 
-enum ThumbnailStatus: String, Hashable, Codable {
-  case notGenerated
-  case generating
-  case generated
-  case failed
-}
-
 struct ScannedVideo: Identifiable, Hashable, Codable {
   var id = UUID()
   var selected = true
@@ -31,7 +24,7 @@ struct ScannedVideo: Identifiable, Hashable, Codable {
   var sourceRelativePath: String
   var sessionID: UUID?
   var previewThumbnailPath: String?
-  var previewThumbnailStatus: ThumbnailStatus = .notGenerated
+  var previewThumbnailStatus: ThumbnailStatus = .pending
   var previewThumbnailErrorMessage: String?
 
   enum CodingKeys: String, CodingKey {
@@ -64,7 +57,7 @@ struct ScannedVideo: Identifiable, Hashable, Codable {
     sourceRelativePath: String,
     sessionID: UUID? = nil,
     previewThumbnailPath: String? = nil,
-    previewThumbnailStatus: ThumbnailStatus = .notGenerated,
+    previewThumbnailStatus: ThumbnailStatus = .pending,
     previewThumbnailErrorMessage: String? = nil
   ) {
     self.id = id
@@ -97,7 +90,7 @@ struct ScannedVideo: Identifiable, Hashable, Codable {
     sourceRelativePath = try container.decode(String.self, forKey: .sourceRelativePath)
     sessionID = try container.decodeIfPresent(UUID.self, forKey: .sessionID)
     previewThumbnailPath = try container.decodeIfPresent(String.self, forKey: .previewThumbnailPath)
-    previewThumbnailStatus = try container.decodeIfPresent(ThumbnailStatus.self, forKey: .previewThumbnailStatus) ?? .notGenerated
+    previewThumbnailStatus = try container.decodeIfPresent(ThumbnailStatus.self, forKey: .previewThumbnailStatus) ?? .pending
     previewThumbnailErrorMessage = try container.decodeIfPresent(String.self, forKey: .previewThumbnailErrorMessage)
   }
 }
