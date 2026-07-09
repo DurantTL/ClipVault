@@ -1,4 +1,4 @@
-name: Build ClipVault
+name: Build SlateBox
 
 on:
   push:
@@ -7,7 +7,7 @@ on:
 
 jobs:
   build:
-    name: Build macOS App
+    name: Build SlateBox macOS App
     runs-on: macos-latest
 
     steps:
@@ -27,24 +27,23 @@ jobs:
 
       - name: List schemes
         run: |
-          xcodebuild -list -project ClipVault.xcodeproj
+          xcodebuild -list -project SlateBox.xcodeproj
 
       - name: Build
         run: |
           xcodebuild \
-            -project ClipVault.xcodeproj \
-            -scheme ClipVault \
+            -project SlateBox.xcodeproj \
+            -scheme SlateBox \
             -configuration Debug \
             -destination 'platform=macOS' \
             CODE_SIGNING_ALLOWED=NO \
             build
 
-
       - name: Test
         run: |
           xcodebuild \
-            -project ClipVault.xcodeproj \
-            -scheme ClipVault \
+            -project SlateBox.xcodeproj \
+            -scheme SlateBox \
             -configuration Debug \
             -destination 'platform=macOS' \
             CODE_SIGNING_ALLOWED=NO \
