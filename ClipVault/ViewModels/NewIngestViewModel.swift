@@ -18,8 +18,13 @@ import Foundation
   @Published var timeGap: IngestTimeGap = .ninety
   @Published var alreadyImportedMode: AlreadyImportedMode = .skipAlreadyCopied
   @Published var selectDate = Date()
+  @Published var sourceOptions: [SourceVolumeOption] = []
+  @Published var recentManualSources: [SourceVolumeOption] = []
+  @Published var selectedSourceID: String?
+
 
   let scanner = SourceScanner()
+  let volumeSourceService = VolumeSourceService()
   let bookmarks = SecurityScopedBookmarkManager()
   let ingestService = IngestService()
   private let ingestPreviewThumbnails = IngestPreviewThumbnailService()
@@ -28,12 +33,14 @@ import Foundation
   private var activePreviewThumbnailCount = 0
   private var maxConcurrentPreviewThumbnails = SystemPerformanceProfile.current().recommendedThumbnailConcurrency
   private var previewThumbnailTasks: [UUID: Task<Void, Never>] = [:]
+  private var sourceBookmarkDataByID: [String: Data] = [:]
 
   init() {
     ingestPreviewThumbnails.cleanCache()
     let formatter = DateFormatter()
     formatter.dateFormat = "yyyy-MM-dd"
     projectName = "\(formatter.string(from: Date())) Video Ingest"
+    refreshSources()
   }
 
   var finalOutputURL: URL? {
@@ -47,10 +54,94 @@ import Foundation
 
   func chooseSource(settings: AppSettings) {
     if let url = pickFolder(canCreateDirectories: false) {
-      sourceURL = url
-      detectSonyCard()
-      scan(settings: settings)
+      var manual = volumeSourceService.manualSource(for: url)
+      manual.bookmarkData = try? bookmarks.bookmark(for: url)
+      if let bookmarkData = manual.bookmarkData {
+        sourceBookmarkDataByID[manual.id] = bookmarkData
+      }
+      if !recentManualSources.contains(where: { $0.id == manual.id }) {
+        recentManualSources.insert(manual, at: 0)
+      }
+      selectGrantedSource(manual, grantedURL: url, settings: settings)
     }
+  }
+
+  func refreshSources() {
+    let selectedPath = sourceURL?.standardizedFileURL.path
+    sourceOptions = volumeSourceService.scanMountedSources().map { option in
+      var refreshed = option
+      refreshed.bookmarkData = sourceBookmarkDataByID[option.id]
+      return refreshed
+    }
+    recentManualSources = recentManualSources.map { manual in
+      var refreshed = volumeSourceService.manualSource(for: manual.url)
+      refreshed.isAvailable = FileManager.default.fileExists(atPath: manual.url.path)
+      refreshed.bookmarkData = manual.bookmarkData ?? sourceBookmarkDataByID[manual.id]
+      return refreshed
+    }
+    if let selectedPath, !sourceOptions.contains(where: { $0.id == selectedPath }) && !recentManualSources.contains(where: { $0.id == selectedPath }) {
+      var disconnected = volumeSourceService.manualSource(for: URL(fileURLWithPath: selectedPath))
+      disconnected.isAvailable = false
+      recentManualSources.insert(disconnected, at: 0)
+      selectedSourceID = selectedPath
+    }
+  }
+
+  func selectDetectedSource(_ source: SourceVolumeOption, settings: AppSettings) {
+    guard source.isAvailable else {
+      error = "That source is disconnected. Reconnect it or use Add Source to choose a folder manually."
+      return
+    }
+    guard let grantedURL = ensureAccessForDetectedSource(source) else {
+      error = "Access not granted. Choose the card or folder before ClipVault scans it."
+      return
+    }
+    var grantedSource = volumeSourceService.manualSource(for: grantedURL)
+    grantedSource.id = source.id
+    grantedSource.name = source.name
+    grantedSource.volumeKind = source.volumeKind
+    grantedSource.iconName = source.iconName
+    grantedSource.bookmarkData = try? bookmarks.bookmark(for: grantedURL)
+    if let bookmarkData = grantedSource.bookmarkData {
+      sourceBookmarkDataByID[source.id] = bookmarkData
+    }
+    selectGrantedSource(grantedSource, grantedURL: grantedURL, settings: settings)
+  }
+
+  private func selectGrantedSource(_ source: SourceVolumeOption, grantedURL: URL, settings: AppSettings) {
+    sourceURL = grantedURL
+    selectedSourceID = source.id
+    error = nil
+    detectSonyCard()
+    scan(settings: settings)
+  }
+
+  private func ensureAccessForDetectedSource(_ option: SourceVolumeOption) -> URL? {
+    if let bookmarkData = option.bookmarkData ?? sourceBookmarkDataByID[option.id],
+      let resolved = try? bookmarks.resolve(bookmarkData) {
+      return resolved
+    }
+
+    let panel = NSOpenPanel()
+    panel.title = "Allow ClipVault to Access This Source"
+    panel.message = "Choose this card or folder so ClipVault can scan it."
+    panel.prompt = "Allow Access"
+    panel.canChooseDirectories = true
+    panel.canChooseFiles = false
+    panel.allowsMultipleSelection = false
+    panel.canCreateDirectories = false
+    if FileManager.default.fileExists(atPath: option.url.path) {
+      panel.directoryURL = option.url
+    }
+
+    guard panel.runModal() == .OK, let selectedURL = panel.url else { return nil }
+    let selectedPath = selectedURL.standardizedFileURL.path
+    let detectedPath = option.url.standardizedFileURL.path
+    guard selectedPath == detectedPath || selectedPath.hasPrefix(detectedPath + "/") else {
+      error = "Choose the detected card or one of its folders to allow access."
+      return nil
+    }
+    return selectedURL
   }
 
   func chooseDestination() {

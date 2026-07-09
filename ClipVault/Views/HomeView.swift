@@ -1,8 +1,8 @@
 import SwiftUI
 
 struct HomeView: View {
+  @EnvironmentObject var settings: AppSettings
   @StateObject var vm = HomeViewModel()
-  @State private var showingIngest = false
   let openProject: (ClipVaultProject) -> Void
 
   var body: some View {
@@ -20,7 +20,7 @@ struct HomeView: View {
           Text(AppBrand.appName).font(.largeTitle.bold())
           Text(AppBrand.tagline).font(.title3).foregroundStyle(.secondary)
           HStack {
-            Button("New Ingest") { showingIngest = true }
+            Button("New Ingest") { NewIngestWindowManager.shared.open(settings: settings, openProject: openProject) }
               .buttonStyle(.borderedProminent)
               .controlSize(.large)
             Button("Open Existing Project") { if let project = vm.pickProject() { openProject(project) } }
@@ -56,9 +56,6 @@ struct HomeView: View {
         }
         .padding(36)
       }
-    }
-    .sheet(isPresented: $showingIngest) {
-      NewIngestView(openProject: openProject).frame(minWidth: 1100, idealWidth: 1200, minHeight: 720, idealHeight: 780)
     }
   }
 

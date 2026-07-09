@@ -6,6 +6,7 @@ struct NewIngestView: View {
   @Environment(\.dismiss) var dismiss
   @StateObject var vm = NewIngestViewModel()
   let openProject: (ClipVaultProject) -> Void
+  var onClose: (() -> Void)? = nil
 
   var body: some View {
     HStack(spacing: 0) {
@@ -17,15 +18,31 @@ struct NewIngestView: View {
     }
     .frame(minWidth: 1150, idealWidth: 1250, minHeight: 740, idealHeight: 820)
     .background(Color(nsColor: .windowBackgroundColor))
+    .onAppear { vm.refreshSources() }
+    .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+      vm.refreshSources()
+    }
   }
 
   private var sourceSidebar: some View {
-    VStack(alignment: .leading, spacing: 18) {
+    VStack(alignment: .leading, spacing: 12) {
       AppHeaderView(subtitle: "Session-based ingest", logoSize: 48)
-      volumeGroup("Removable Volumes", icon: "sdcard")
-      volumeGroup("External Volumes", icon: "externaldrive")
-      volumeGroup("Network Volumes", icon: "network")
-      volumeGroup("Other Volumes", icon: "folder")
+      HStack {
+        Text("Sources")
+          .font(.title3.bold())
+        Spacer()
+        Button("Refresh", systemImage: "arrow.clockwise") { vm.refreshSources() }
+          .labelStyle(.iconOnly)
+      }
+      ScrollView {
+        VStack(alignment: .leading, spacing: 14) {
+          sourceSection("Detected Cards", kinds: [.removableCard])
+          sourceSection("External Drives", kinds: [.externalDrive, .internalDrive])
+          sourceSection("Cloud / Synced Drives", kinds: [.cloudDrive])
+          sourceSection("Network Volumes", kinds: [.networkVolume])
+          sourceSection("Other Folders", kinds: [.folder, .unknown], includeManual: true)
+        }
+      }
       Button("Add Source", systemImage: "plus") { vm.chooseSource(settings: settings) }
         .buttonStyle(.borderedProminent)
       Text(vm.sourceURL?.path ?? "No source selected")
@@ -35,19 +52,32 @@ struct NewIngestView: View {
       Label(vm.detectedCardType.summary, systemImage: vm.detectedCardType == .generic ? "folder" : "checkmark.seal.fill")
         .font(.caption)
         .foregroundStyle(vm.detectedCardType == .generic ? Color.secondary : Color.green)
-      Spacer()
     }
-    .padding(20)
+    .padding(18)
     .frame(width: 230)
   }
 
-  private func volumeGroup(_ title: String, icon: String) -> some View {
-    VStack(alignment: .leading, spacing: 8) {
-      Label(title, systemImage: icon)
-        .font(.headline)
-      Text("Choose a mounted folder or card source.")
-        .font(.caption)
+  private func sourceSection(_ title: String, kinds: [SourceVolumeKind], includeManual: Bool = false) -> some View {
+    let options = vm.sourceOptions.filter { kinds.contains($0.volumeKind) } + (includeManual ? vm.recentManualSources : [])
+    return VStack(alignment: .leading, spacing: 7) {
+      Text(title)
+        .font(.caption.bold())
         .foregroundStyle(.secondary)
+        .textCase(.uppercase)
+      if options.isEmpty {
+        Text(title == "Detected Cards" ? "No cards detected" : "None mounted")
+          .font(.caption)
+          .foregroundStyle(.tertiary)
+          .padding(.vertical, 2)
+      } else {
+        ForEach(options) { option in
+          SourceVolumeCard(
+            option: option,
+            isSelected: vm.selectedSourceID == option.id,
+            onSelect: { vm.selectDetectedSource(option, settings: settings) }
+          )
+        }
+      }
     }
   }
 
@@ -157,18 +187,30 @@ struct NewIngestView: View {
         Button("Start Ingest") {
           Task {
             if let project = await vm.start(settings: settings) {
-              dismiss()
               openProject(project)
+              closeIngestWindow()
             }
           }
         }
         .buttonStyle(.borderedProminent)
         .disabled(vm.selectedVideos.isEmpty || vm.projectName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || vm.destinationURL == nil)
-        Button("Cancel") { dismiss() }
+        Button("Cancel") {
+          vm.cancelPreviewThumbnailWork()
+          if vm.isIngesting { vm.ingestService.cancel() }
+          closeIngestWindow()
+        }
       }
       .padding(20)
     }
     .frame(width: 360)
+  }
+
+  private func closeIngestWindow() {
+    if let onClose {
+      onClose()
+    } else {
+      dismiss()
+    }
   }
 
   @ViewBuilder private var statusArea: some View {
@@ -366,5 +408,56 @@ struct IngestPreviewThumbnailView: View {
       return nil
     }
     return NSImage(contentsOfFile: path)
+  }
+}
+
+
+struct SourceVolumeCard: View {
+  let option: SourceVolumeOption
+  let isSelected: Bool
+  let onSelect: () -> Void
+
+  var body: some View {
+    Button(action: onSelect) {
+      HStack(alignment: .top, spacing: 10) {
+        Image(systemName: option.iconName)
+          .font(.title3)
+          .frame(width: 24)
+        VStack(alignment: .leading, spacing: 4) {
+          HStack {
+            Text(option.name)
+              .font(.subheadline.weight(.semibold))
+              .lineLimit(1)
+            if !option.isAvailable {
+              Text("Disconnected")
+                .font(.caption2.bold())
+                .foregroundStyle(.red)
+            }
+          }
+          Text(option.capacitySummary)
+            .font(.caption)
+            .foregroundStyle(.secondary)
+          HStack(spacing: 5) {
+            Text(option.volumeKind.rawValue)
+              .font(.caption2.bold())
+              .padding(.horizontal, 6)
+              .padding(.vertical, 2)
+              .background(Color.secondary.opacity(0.12), in: Capsule())
+            if option.structureBadge != .noVideosFound {
+              Text(option.structureBadge.rawValue)
+                .font(.caption2.bold())
+                .foregroundStyle(option.structureBadge == .sony || option.structureBadge == .canonDCF ? .green : .secondary)
+            }
+          }
+        }
+        Spacer(minLength: 0)
+      }
+      .padding(9)
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .background(isSelected ? Color.accentColor.opacity(0.18) : Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 10))
+      .overlay(RoundedRectangle(cornerRadius: 10).stroke(isSelected ? Color.accentColor.opacity(0.55) : Color.secondary.opacity(0.12)))
+    }
+    .buttonStyle(.plain)
+    .disabled(!option.isAvailable)
   }
 }
