@@ -14,7 +14,7 @@ struct NewIngestView: View {
       Divider()
       ingestPanel
     }
-    .frame(minWidth: 1100, idealWidth: 1200, minHeight: 720, idealHeight: 780)
+    .frame(minWidth: 1150, idealWidth: 1250, minHeight: 740, idealHeight: 820)
     .background(Color(nsColor: .windowBackgroundColor))
   }
 
@@ -37,7 +37,7 @@ struct NewIngestView: View {
       Spacer()
     }
     .padding(20)
-    .frame(width: 220)
+    .frame(width: 230)
   }
 
   private func volumeGroup(_ title: String, icon: String) -> some View {
@@ -52,22 +52,27 @@ struct NewIngestView: View {
 
   private var sessionReview: some View {
     VStack(alignment: .leading, spacing: 14) {
-      HStack {
-        VStack(alignment: .leading) {
-          Text("Detected Sessions")
-            .font(.title2.bold())
-          Text("Grouped by recording day and 90-minute gaps before copying starts.")
-            .foregroundStyle(.secondary)
+      VStack(alignment: .leading, spacing: 10) {
+        Text("Detected Sessions")
+          .font(.title2.bold())
+          .lineLimit(1)
+        Text("Grouped by recording day and 90-minute gaps before copying starts.")
+          .font(.subheadline)
+          .foregroundStyle(.secondary)
+          .lineLimit(2)
+        ScrollView(.horizontal, showsIndicators: false) {
+          HStack(spacing: 8) {
+            Button("Select All") { vm.selectAllSessions() }
+            Button("Clear Selection") { vm.clearSessionSelection() }
+            Button("Select Today") { vm.selectTodaySessions() }
+            Button("Select New Only") { vm.selectNewOnlySessions() }
+            DatePicker("Select by Date", selection: $vm.selectDate, displayedComponents: .date)
+              .labelsHidden()
+            Button("Select by Date") { vm.selectSessions(on: vm.selectDate) }
+            Button("Reload") { vm.scan(settings: settings) }
+          }
+          .padding(.bottom, 2)
         }
-        Spacer()
-        Button("Select All") { vm.selectAllSessions() }
-        Button("Clear Selection") { vm.clearSessionSelection() }
-        Button("Select Today") { vm.selectTodaySessions() }
-        Button("Select New Only") { vm.selectNewOnlySessions() }
-        DatePicker("Select by Date", selection: $vm.selectDate, displayedComponents: .date)
-          .labelsHidden()
-        Button("Select by Date") { vm.selectSessions(on: vm.selectDate) }
-        Button("Reload") { vm.scan(settings: settings) }
       }
       ScrollView {
         LazyVStack(spacing: 12) {
@@ -90,7 +95,7 @@ struct NewIngestView: View {
       progressSection
     }
     .padding(22)
-    .frame(minWidth: 500)
+    .frame(minWidth: 600, maxWidth: .infinity)
   }
 
   private var ingestPanel: some View {
@@ -145,6 +150,7 @@ struct NewIngestView: View {
         InfoRow("Total Selected Videos", "\(vm.selectedClipCount)")
         InfoRow("Total Selected Size", FileSizeFormatterUtil.string(vm.selectedTotalSize))
         statusArea
+        Spacer(minLength: 8)
         Button("Start Ingest") {
           Task {
             if let project = await vm.start(settings: settings) {
@@ -159,7 +165,7 @@ struct NewIngestView: View {
       }
       .padding(20)
     }
-    .frame(width: 320)
+    .frame(width: 360)
   }
 
   @ViewBuilder private var statusArea: some View {

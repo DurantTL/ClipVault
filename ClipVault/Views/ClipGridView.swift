@@ -17,6 +17,7 @@ struct ClipGridView: View {
             ClipCardView(
               clip: clip,
               selected: vm.selectedClipIDs.contains(clip.id),
+              canPreview: vm.canPreview(clip),
               preview: {
                 vm.select(clip)
                 vm.previewSelected()

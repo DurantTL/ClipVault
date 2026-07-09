@@ -31,10 +31,11 @@ struct PlayerPreviewView: View {
       .padding()
 
       if let clip {
-        if clip.previewUnavailable {
+        if let message = vm.errorMessage ?? (library.canPreview(clip) ? nil : library.previewFailureMessage(for: clip)) {
           ContentUnavailableView(
-            "Copied and verified — preview unavailable on this Mac.",
-            systemImage: "video.slash"
+            "Could not preview this clip.",
+            systemImage: "video.slash",
+            description: Text(message)
           )
           .frame(minWidth: 800, minHeight: 500)
         } else {
@@ -76,12 +77,13 @@ struct PlayerPreviewView: View {
       vm.stop()
       return
     }
-    if clip.previewUnavailable {
+    guard let url = library.resolvedMediaURL(for: clip), library.canPreview(clip) else {
       vm.stop()
-    } else {
-      vm.load(clip)
-      if autoplay { vm.player?.play() }
+      library.logPreviewFailure(for: clip, reason: library.previewFailureMessage(for: clip))
+      return
     }
+    vm.load(url: url, clip: clip)
+    if autoplay { vm.player?.play() }
   }
 }
 
