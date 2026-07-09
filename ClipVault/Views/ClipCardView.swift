@@ -4,6 +4,7 @@ import SwiftUI
 struct ClipCardView: View {
   let clip: Clip
   let selected: Bool
+  let canPreview: Bool
   let preview: () -> Void
   let rate: (CullStatus) -> Void
   @State private var hovering = false
@@ -30,6 +31,7 @@ struct ClipCardView: View {
             HStack {
               Button("Preview", systemImage: "play.fill", action: preview)
                 .buttonStyle(.borderedProminent)
+                .disabled(!canPreview)
               Spacer()
               quickButton("5", .keep)
               quickButton("3", .maybe)
@@ -81,12 +83,18 @@ struct ClipCardView: View {
         VStack(spacing: 8) {
           Image(systemName: clip.copyStatus == .pending ? "clock" : (clip.errorMessage == nil ? "video.badge.exclamationmark" : "exclamationmark.triangle.fill"))
             .font(.system(size: 34, weight: .semibold))
-          Text(clip.copyStatus == .pending ? "Not copied yet" : (clip.errorMessage == nil ? "Preview unavailable" : "Thumbnail failed"))
+          Text(thumbnailPlaceholderText)
             .font(.caption)
         }
         .foregroundStyle(.secondary)
       }
     }
+  }
+
+  private var thumbnailPlaceholderText: String {
+    if clip.copyStatus == .pending || clip.copyStatus == .copying { return "Not copied yet" }
+    if clip.thumbnailStatus == .failed || clip.errorMessage != nil { return "Thumbnail unavailable" }
+    return "Thumbnail unavailable"
   }
 
   private var metadataSummary: String {

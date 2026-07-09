@@ -32,12 +32,14 @@ enum ClipSortOption: String, CaseIterable, Identifiable {
   let mover = FileMoveService()
   let security = SecurityScopedBookmarkManager()
   let analysis = LocalAnalysisService()
+  private var accessedSecurityScopedURLs: [URL] = []
 
   init(project: ClipVaultProject) {
     self.project = project
     self.project.lastOpenedAt = Date()
     self.selectedClipID = project.clips.first(where: { $0.copyStatus == .copied || $0.verificationStatus == .verified })?.id ?? project.clips.first?.id
     self.selectedClipIDs = Set(project.clips.prefix(1).map(\.id))
+    restoreSecurityScopedAccess()
     applyAutomaticTags()
     save()
   }
@@ -105,7 +107,48 @@ enum ClipSortOption: String, CaseIterable, Identifiable {
   }
 
   func previewSelected() {
-    if let clip = selectedClip { previewClip = clip }
+    guard let clip = selectedClip else { return }
+    if canPreview(clip) {
+      previewClip = clip
+    } else {
+      logPreviewFailure(for: clip, reason: previewFailureMessage(for: clip))
+      previewClip = clip
+    }
+  }
+
+  func resolvedMediaURL(for clip: Clip, in project: ClipVaultProject? = nil) -> URL? {
+    let project = project ?? self.project
+    let candidates = mediaURLCandidates(for: clip, in: project)
+    return candidates.first { FileManager.default.fileExists(atPath: $0.path) }
+  }
+
+  func canPreview(_ clip: Clip) -> Bool {
+    guard clip.copyStatus == .copied || clip.verificationStatus == .copied || clip.verificationStatus == .verified || clip.copyStatus == .failed else {
+      return false
+    }
+    return resolvedMediaURL(for: clip) != nil
+  }
+
+  func previewFailureMessage(for clip: Clip) -> String {
+    if clip.copyStatus == .pending || clip.copyStatus == .copying || clip.copyStatus == .skipped {
+      return "Could not preview this clip. It is pending/not copied yet."
+    }
+    let candidates = mediaURLCandidates(for: clip, in: project)
+    if candidates.isEmpty {
+      return "Could not preview this clip. No destination path is stored."
+    }
+    if candidates.contains(where: { !FileManager.default.isReadableFile(atPath: $0.path) && FileManager.default.fileExists(atPath: $0.path) }) {
+      return "Could not preview this clip. Permission denied."
+    }
+    return "Could not preview this clip. The file is missing or uses an unsupported codec."
+  }
+
+  func logPreviewFailure(for clip: Clip, reason: String, avPlayerError: Error? = nil) {
+    let url = resolvedMediaURL(for: clip)
+    let exists = url.map { FileManager.default.fileExists(atPath: $0.path) } ?? false
+    print("""
+    ClipVault preview failure: filename=\(clip.currentFilename), reason=\(reason), resolvedURL=\(url?.path ?? "nil"), fileExists=\(exists), copyStatus=\(clip.copyStatus.rawValue), verificationStatus=\(clip.verificationStatus.rawValue), thumbnailStatus=\(clip.thumbnailStatus.rawValue), avPlayerError=\(avPlayerError?.localizedDescription ?? "none")
+    """)
   }
 
   func closePreview() { previewClip = nil }
@@ -158,8 +201,8 @@ enum ClipSortOption: String, CaseIterable, Identifiable {
 
   func reveal() {
     let urls = activeSelectionIDs.compactMap { id -> URL? in
-      guard let path = project.clips.first(where: { $0.id == id })?.currentPath, !path.isEmpty else { return nil }
-      return URL(fileURLWithPath: path)
+      guard let clip = project.clips.first(where: { $0.id == id }) else { return nil }
+      return resolvedMediaURL(for: clip)
     }
     NSWorkspace.shared.activateFileViewerSelecting(urls.isEmpty ? [security.projectFolderURL(for: project)] : urls)
   }
@@ -334,6 +377,49 @@ enum ClipSortOption: String, CaseIterable, Identifiable {
     case .cameraType: sorted = clips.sorted { ($0.cardVolumeName ?? "").localizedStandardCompare($1.cardVolumeName ?? "") == .orderedAscending }
     }
     return sortAscending ? sorted : Array(sorted.reversed())
+  }
+
+  private func mediaURLCandidates(for clip: Clip, in project: ClipVaultProject) -> [URL] {
+    var urls: [URL] = []
+    func appendPath(_ path: String) {
+      guard !path.isEmpty else { return }
+      let url = URL(fileURLWithPath: path)
+      if !urls.contains(url) { urls.append(url) }
+    }
+
+    appendPath(clip.currentPath)
+
+    let projectFolder = security.projectFolderURL(for: project)
+    if !clip.destinationRelativePath.isEmpty {
+      urls.append(projectFolder.appendingPathComponent(clip.destinationRelativePath))
+    }
+    if !clip.relativePath.isEmpty {
+      urls.append(projectFolder.appendingPathComponent(clip.relativePath))
+    }
+    return urls.reduce(into: []) { unique, url in
+      if !unique.contains(url) { unique.append(url) }
+    }
+  }
+
+  private func restoreSecurityScopedAccess() {
+    let bookmarks: [Data] = [
+      project.projectFolderBookmarkData,
+      project.destinationBookmarkData,
+      project.canResumeIngest ? project.sourceBookmarkData : nil
+    ].compactMap { $0 }
+
+    for bookmark in bookmarks {
+      guard let url = try? security.resolve(bookmark) else { continue }
+      if url.startAccessingSecurityScopedResource() {
+        accessedSecurityScopedURLs.append(url)
+      }
+    }
+  }
+
+  deinit {
+    for url in accessedSecurityScopedURLs {
+      url.stopAccessingSecurityScopedResource()
+    }
   }
 
   private func csv(for clips: [Clip]) -> String {

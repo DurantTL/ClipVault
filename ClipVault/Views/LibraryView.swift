@@ -1,9 +1,11 @@
+import AppKit
 import SwiftUI
 
 struct LibraryView: View {
+  @EnvironmentObject var settings: AppSettings
   @StateObject var viewModel: LibraryViewModel
   @State private var newFolder = ""
-  @State private var showingIngest = false
+  @State private var ingestWindow: NSWindow?
   @State private var showingSettings = false
   @State private var showingPreview = false
 
@@ -26,7 +28,7 @@ struct LibraryView: View {
     }
     .toolbar {
       ToolbarItemGroup {
-        Button { showingIngest = true } label: {
+        Button { openIngestWindow() } label: {
           Label("New Ingest", systemImage: "tray.and.arrow.down.fill")
         }
         .buttonStyle(.borderedProminent)
@@ -96,10 +98,6 @@ struct LibraryView: View {
         }
       }
     }
-    .sheet(isPresented: $showingIngest) {
-      NewIngestView { _ in }
-        .frame(minWidth: 1100, idealWidth: 1200, minHeight: 720, idealHeight: 780)
-    }
     .sheet(isPresented: $showingSettings) { SettingsView() }
     .sheet(isPresented: $showingPreview) {
       PlayerPreviewView(
@@ -132,6 +130,32 @@ struct LibraryView: View {
       viewModel.closePreview()
       showingPreview = false
     }
+  }
+
+  private func openIngestWindow() {
+    if let ingestWindow {
+      ingestWindow.makeKeyAndOrderFront(nil)
+      return
+    }
+
+    let root = NewIngestView { project in
+      viewModel.project = project
+    }
+    .environmentObject(settings)
+
+    let window = NSWindow(
+      contentRect: NSRect(x: 0, y: 0, width: 1250, height: 820),
+      styleMask: [.titled, .closable, .miniaturizable, .resizable],
+      backing: .buffered,
+      defer: false
+    )
+    window.title = "New Ingest"
+    window.minSize = NSSize(width: 1150, height: 740)
+    window.contentViewController = NSHostingController(rootView: root)
+    window.center()
+    window.isReleasedWhenClosed = false
+    window.makeKeyAndOrderFront(nil)
+    ingestWindow = window
   }
 
   private var partialBanner: some View {
