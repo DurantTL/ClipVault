@@ -23,6 +23,15 @@ struct SettingsView: View {
         Toggle("Advance direction: Previous", isOn: $settings.advanceDirectionPrevious)
       }
 
+      Section("Performance") {
+        Picker("Performance mode", selection: $settings.performanceModeRaw) {
+          ForEach(PerformanceMode.allCases) { Text($0.rawValue).tag($0.rawValue) }
+        }
+        Text("Automatic tunes thumbnail and analysis concurrency from Apple Silicon, memory, and Metal availability.")
+          .font(.caption)
+          .foregroundStyle(.secondary)
+      }
+
       Section("Analysis and Export") {
         Picker("Local analysis mode", selection: $settings.localAnalysisMode) {
           ForEach(["Off", "Fast", "Balanced", "Detailed"], id: \.self) { Text($0).tag($0) }

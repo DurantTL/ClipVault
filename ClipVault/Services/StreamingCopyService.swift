@@ -13,6 +13,7 @@ final class StreamingCopyService {
       let partialDestination = destination.deletingLastPathComponent()
         .appendingPathComponent(destination.lastPathComponent + ".clipvault-partial")
       let fm = FileManager.default
+      let start = Date()
       let sourceValues = try source.resourceValues(forKeys: [.fileSizeKey])
       let sourceSize = Int64(sourceValues.fileSize ?? 0)
       var copied: Int64 = 0
@@ -56,6 +57,7 @@ final class StreamingCopyService {
         throw CocoaError(.fileWriteFileExists)
       }
       try fm.moveItem(at: partialDestination, to: destination)
+      PerformanceLogger.shared.transfer(kind: "copy", bytes: copied, duration: Date().timeIntervalSince(start))
       return copied
     }.value
   }

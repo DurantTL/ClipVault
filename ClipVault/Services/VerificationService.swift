@@ -8,6 +8,7 @@ final class VerificationService {
       try security.withAccess(to: source) {
         try security.withAccess(to: destination) {
           let fm = FileManager.default
+          let start = Date()
           guard fm.fileExists(atPath: destination.path) else { throw CocoaError(.fileNoSuchFile) }
           let s = try source.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? -1
           let d = try destination.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? -2
@@ -23,6 +24,7 @@ final class VerificationService {
                 userInfo: [NSLocalizedDescriptionKey: "SHA256 checksum mismatch."])
             }
           }
+          PerformanceLogger.shared.transfer(kind: "verification", bytes: Int64(d), duration: Date().timeIntervalSince(start))
         }
       }
     }.value

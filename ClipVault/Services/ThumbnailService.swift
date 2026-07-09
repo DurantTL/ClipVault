@@ -64,6 +64,7 @@ actor ThumbnailService {
         let time = CMTime(seconds: seconds, preferredTimescale: 600)
 
         do {
+          let start = Date()
           let cgImage = try await generator.image(at: time).image
           guard let data = NSBitmapImageRep(cgImage: cgImage).representation(
             using: .jpeg,
@@ -72,8 +73,10 @@ actor ThumbnailService {
             throw CocoaError(.fileWriteUnknown)
           }
           try data.write(to: dest, options: .atomic)
+          PerformanceLogger.shared.thumbnail(duration: Date().timeIntervalSince(start), failed: false)
           return Result(path: dest.path, relativePath: self.relativeThumbnailPath(for: dest, projectFolder: projectFolder))
         } catch {
+          PerformanceLogger.shared.thumbnail(duration: 0, failed: true)
           let exists = FileManager.default.fileExists(atPath: mediaURL.path)
           print("""
           ClipVault thumbnail failure: filename=\(clip.currentFilename), resolvedMediaURL=\(mediaURL.path), mediaFileExists=\(exists), cacheThumbnailURL=\(dest.path), assetDuration=\(duration?.seconds.description ?? "nil"), requestedThumbnailTime=\(seconds), error=\(error.localizedDescription)
