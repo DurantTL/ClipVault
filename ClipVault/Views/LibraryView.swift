@@ -86,6 +86,8 @@ struct LibraryView: View {
           Button("Generate Missing Thumbnails") { viewModel.generateMissingThumbnails() }
           Button("Regenerate Thumbnail for This Clip") { viewModel.regenerateThumbnailForSelectedClip() }
           Button("Regenerate Thumbnails for Selected Clips") { viewModel.regenerateThumbnailsForSelectedClips() }
+          Divider()
+          Button("Find Duplicate Candidates") { viewModel.findDuplicateCandidates() }
         }
 
         Menu("Export") {
