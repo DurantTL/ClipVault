@@ -2,6 +2,7 @@ import AppKit
 import Foundation
 
 @MainActor final class NewIngestViewModel: ObservableObject {
+  private static let rememberedSourceBookmarksKey = "rememberedSourceBookmarks"
   @Published var sourceURL: URL?
   @Published var destinationURL: URL?
   @Published var projectName = ""
@@ -36,6 +37,9 @@ import Foundation
   private var sourceBookmarkDataByID: [String: Data] = [:]
 
   init() {
+    sourceBookmarkDataByID = UserDefaults.standard.dictionary(
+      forKey: Self.rememberedSourceBookmarksKey
+    ) as? [String: Data] ?? [:]
     ingestPreviewThumbnails.cleanCache()
     let formatter = DateFormatter()
     formatter.dateFormat = "yyyy-MM-dd"
@@ -56,9 +60,7 @@ import Foundation
     if let url = pickFolder(canCreateDirectories: false) {
       var manual = volumeSourceService.manualSource(for: url)
       manual.bookmarkData = try? bookmarks.bookmark(for: url)
-      if let bookmarkData = manual.bookmarkData {
-        sourceBookmarkDataByID[manual.id] = bookmarkData
-      }
+      if let bookmarkData = manual.bookmarkData { remember(bookmarkData, for: manual.id) }
       if !recentManualSources.contains(where: { $0.id == manual.id }) {
         recentManualSources.insert(manual, at: 0)
       }
@@ -102,9 +104,7 @@ import Foundation
     grantedSource.volumeKind = source.volumeKind
     grantedSource.iconName = source.iconName
     grantedSource.bookmarkData = try? bookmarks.bookmark(for: grantedURL)
-    if let bookmarkData = grantedSource.bookmarkData {
-      sourceBookmarkDataByID[source.id] = bookmarkData
-    }
+    if let bookmarkData = grantedSource.bookmarkData { remember(bookmarkData, for: source.id) }
     selectGrantedSource(grantedSource, grantedURL: grantedURL, settings: settings)
   }
 
@@ -142,6 +142,14 @@ import Foundation
       return nil
     }
     return selectedURL
+  }
+
+  private func remember(_ bookmarkData: Data, for sourceID: String) {
+    sourceBookmarkDataByID[sourceID] = bookmarkData
+    UserDefaults.standard.set(
+      sourceBookmarkDataByID,
+      forKey: Self.rememberedSourceBookmarksKey
+    )
   }
 
   func chooseDestination() {
