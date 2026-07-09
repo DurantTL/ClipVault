@@ -121,6 +121,8 @@ The library grid supports Command-click, Shift-click range select, Command-A, an
 
 The Export menu copies clips into an editor-ready folder: Keeps, Keep + Maybe, 4–5 star clips, or the current selection. Exports copy — never move — from copied project media only, never overwrite (safe `_1`, `_2` duplicate names), show progress and a summary, and reveal the folder when done. CSV reports cover the full clip list, keep list, reject list, verification, and analysis; project metadata exports as JSON.
 
+The Batch menu can also create symbolic-link aliases in `Aliases/<name>/` for the selected copied clips. The links are organization only: they never point to source-card media, and removing an alias never alters the copied original. The Export menu includes folder handoff choices for Finder, DaVinci Resolve, and Final Cut Pro; ClipVault tells you when a requested editor is not installed.
+
 ### Analysis-assisted culling
 
 Local analysis rolls focus, stability, and exposure into a 0–100 quality score shown on clip cards and sortable via "Analysis Quality". Each analyzed clip gets a suggested 0–5 rating and, where warranted, "Top Pick Suggestion" / "Social Pick Suggestion" tags with matching smart folders. Suggestions are never applied automatically — apply them per clip from the inspector or in bulk via "Apply Suggested Ratings to Unrated Clips", which never overwrites a rating a person set.

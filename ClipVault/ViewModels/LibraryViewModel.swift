@@ -102,8 +102,10 @@ struct BatchMetadataEdit {
   @Published var thumbnailSize: Double = 190
   @Published var exportProgress: ClipExportProgress?
   @Published var exportSummary: ClipExportSummary?
+  @Published var aliasSummary: AliasCreationSummary?
   private var selectionAnchorID: UUID?
   private let exporter = ClipExportService()
+  private let aliases = AliasService()
 
   let store = ProjectStore()
   let mover = FileMoveService()
@@ -420,6 +422,48 @@ struct BatchMetadataEdit {
     let names = activeSelectionIDs.compactMap { id in project.clips.first { $0.id == id }?.currentFilename }
     NSPasteboard.general.clearContents()
     NSPasteboard.general.setString(names.joined(separator: "\n"), forType: .string)
+  }
+
+  func createAliases(named folderName: String) {
+    let items = activeSelectionIDs.compactMap { id -> (clip: Clip, mediaURL: URL)? in
+      guard let clip = project.clips.first(where: { $0.id == id }),
+        (clip.copyStatus == .copied || clip.verificationStatus == .verified),
+        let mediaURL = resolvedMediaURL(for: clip) else { return nil }
+      return (clip, mediaURL)
+    }
+    guard !items.isEmpty else { return }
+    aliasSummary = aliases.createAliases(
+      named: folderName,
+      for: items,
+      projectFolder: security.projectFolderURL(for: project))
+  }
+
+  func revealAliases() {
+    NSWorkspace.shared.activateFileViewerSelecting([aliases.aliasesFolder(in: security.projectFolderURL(for: project))])
+  }
+
+  func handOffEditFolder(to applicationIdentifier: String?) {
+    let panel = NSOpenPanel()
+    panel.title = "Choose Edit Folder"
+    panel.message = "Choose the folder ClipVault should reveal or open in your editor."
+    panel.prompt = applicationIdentifier == nil ? "Reveal" : "Open"
+    panel.canChooseDirectories = true
+    panel.canChooseFiles = false
+    panel.allowsMultipleSelection = false
+    guard panel.runModal() == .OK, let folder = panel.url else { return }
+
+    guard let applicationIdentifier else {
+      NSWorkspace.shared.activateFileViewerSelecting([folder])
+      return
+    }
+    guard let applicationURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: applicationIdentifier) else {
+      let alert = NSAlert()
+      alert.messageText = "Editor not found"
+      alert.informativeText = "Install the selected editor, then try the handoff again."
+      alert.runModal()
+      return
+    }
+    NSWorkspace.shared.open([folder], withApplicationAt: applicationURL, configuration: NSWorkspace.OpenConfiguration())
   }
 
   func addProductionTagToSelection(_ tag: String) {

@@ -41,14 +41,25 @@ struct FrameSample {
 
 struct FrameSamplerService {
   func samples(for url: URL, mode: LocalAnalysisMode, duration: Double?) async throws -> [FrameSample] {
+    try await samples(for: url, times: mode.sampleTimes(duration: duration), maximumSize: CGSize(width: 480, height: 270))
+  }
+
+  /// Face rectangles need substantially more detail than the lightweight
+  /// pixel-analysis frames. Keeping this separate preserves fast focus and
+  /// exposure analysis while making people in wider shots detectable.
+  func faceSamples(for url: URL, mode: LocalAnalysisMode, duration: Double?) async throws -> [FrameSample] {
+    try await samples(for: url, times: mode.sampleTimes(duration: duration), maximumSize: CGSize(width: 1280, height: 720))
+  }
+
+  private func samples(for url: URL, times: [Double], maximumSize: CGSize) async throws -> [FrameSample] {
     let asset = AVURLAsset(url: url)
     let generator = AVAssetImageGenerator(asset: asset)
     generator.appliesPreferredTrackTransform = true
-    generator.maximumSize = CGSize(width: 480, height: 270)
+    generator.maximumSize = maximumSize
     generator.requestedTimeToleranceBefore = CMTime(seconds: 0.5, preferredTimescale: 600)
     generator.requestedTimeToleranceAfter = CMTime(seconds: 0.5, preferredTimescale: 600)
     var frames: [FrameSample] = []
-    for seconds in mode.sampleTimes(duration: duration) {
+    for seconds in times {
       try Task.checkCancellation()
       let result = try generator.copyCGImage(at: CMTime(seconds: seconds, preferredTimescale: 600), actualTime: nil)
       frames.append(FrameSample(time: seconds, image: result))
@@ -113,10 +124,14 @@ struct PixelAnalyzer {
 struct FocusAnalysisService {
   func apply(to clip: inout Clip, metrics: [FrameMetrics]) {
     let sharpness = metrics.map(\.sharpness).reduce(0, +) / Double(max(metrics.count, 1))
-    let score = min(100, max(0, sharpness * 1800))
+    // Edge energy is naturally lower in wide, stable, low-texture shots
+    // (church interiors are a common example). This is a usability signal,
+    // not a lens-focus measurement, so retain the warning for truly soft
+    // frames instead of penalizing detailed-but-distant scenes.
+    let score = min(100, max(0, sharpness * 2500))
     clip.focusScore = score
     clip.focusConfidence = min(100, Double(metrics.count) * 22)
-    clip.focusWarning = score < 38
+    clip.focusWarning = score < 30
   }
 }
 
@@ -130,7 +145,7 @@ struct ExposureAnalysisService {
     clip.contrastScore = min(100, max(0, contrast))
     clip.darkFramePercentage = dark
     clip.brightFramePercentage = bright
-    clip.exposureWarning = dark > 45 || bright > 35 || contrast < 18
+    clip.exposureWarning = avg < 0.35 || avg > 0.80 || dark > 45 || bright > 35 || contrast < 18
   }
 
   private func average(_ values: [Double]) -> Double {
@@ -274,7 +289,11 @@ struct LocalAnalysisService {
     if clip.brightnessScore ?? 50 < 25 { tags.insert("Dark Clips") }
     if clip.brightnessScore ?? 50 > 82 { tags.insert("Bright Clips") }
     if clip.contrastScore ?? 50 < 18 { tags.insert("Low Contrast") }
-    if clip.exposureWarning == false, clip.brightnessScore != nil { tags.insert("Balanced Exposure") }
+    if clip.exposureWarning == false,
+      let brightness = clip.brightnessScore,
+      (35...80).contains(brightness) {
+      tags.insert("Balanced Exposure")
+    }
     if let kelvin = clip.whiteBalanceKelvin {
       if kelvin < 4200 { tags.insert("Warm Color") }
       if kelvin > 6500 { tags.insert("Cool Color") }
@@ -304,7 +323,10 @@ struct LocalAnalysisService {
       ExposureAnalysisService().apply(to: &clip, metrics: metrics)
       WhiteBalanceAnalysisService().apply(to: &clip, metrics: metrics)
       StabilityAnalysisService().apply(to: &clip, metrics: metrics)
-      await FaceAnalysisService().apply(to: &clip, samples: samples)
+      // A failure to decode a larger Vision frame should not throw away the
+      // inexpensive analysis result; it simply falls back to the small frame.
+      let faceSamples = (try? await sampler.faceSamples(for: URL(fileURLWithPath: clip.currentPath), mode: mode, duration: clip.duration)) ?? samples
+      await FaceAnalysisService().apply(to: &clip, samples: faceSamples)
       clip.analysisStatus = .complete
     } catch is CancellationError {
       clip.analysisStatus = .canceled

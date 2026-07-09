@@ -153,4 +153,30 @@ final class RatingAndSuggestionTests: XCTestCase {
     try Data("second".utf8).write(to: second)
     XCTAssertEqual(SafeFilename.uniqueURL(for: desired).lastPathComponent, "A001_2.MP4")
   }
+
+  func testAliasesPointOnlyAtCopiedMediaAndNeverReplaceIt() throws {
+    let project = FileManager.default.temporaryDirectory
+      .appendingPathComponent("clipvault-alias-test-\(UUID().uuidString)", isDirectory: true)
+    let ingest = project.appendingPathComponent("Original Ingest", isDirectory: true)
+    try FileManager.default.createDirectory(at: ingest, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: project) }
+
+    let media = ingest.appendingPathComponent("A001.MP4")
+    try Data("copied media".utf8).write(to: media)
+    var clip = makeClip()
+    clip.currentPath = media.path
+    clip.currentFilename = media.lastPathComponent
+
+    let service = AliasService()
+    let first = service.createAliases(named: "Keep", for: [(clip, media)], projectFolder: project)
+    XCTAssertEqual(first.createdCount, 1)
+    let alias = first.aliasesFolder.appendingPathComponent("A001.MP4")
+    XCTAssertEqual(try FileManager.default.destinationOfSymbolicLink(atPath: alias.path), media.path)
+    XCTAssertTrue(FileManager.default.fileExists(atPath: media.path))
+
+    let second = service.createAliases(named: "Keep", for: [(clip, media)], projectFolder: project)
+    XCTAssertEqual(second.createdCount, 0)
+    XCTAssertEqual(second.skippedCount, 1)
+    XCTAssertEqual(try String(contentsOf: media), "copied media")
+  }
 }

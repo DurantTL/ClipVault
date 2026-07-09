@@ -196,8 +196,8 @@ Manual: keep a folder of 5–10 short clips for every PR and run the regression 
 7. Add bulk metadata — ✅ shipped
 8. Add Copy Keeps to Edit Folder — ✅ shipped
 9. Add CSV/JSON export — ✅ shipped (clip/keep/reject/verification/analysis CSVs + metadata JSON)
-10. Add aliases
-11. Add editor handoff
+10. Add aliases — ✅ shipped (symbolic links in `Aliases/`, copied project media only)
+11. Add editor handoff — ✅ shipped (Finder, DaVinci Resolve, Final Cut Pro folder handoff)
 12. Add project templates
 13. Add better contact sheets
 14. Add cloud-synced folder support
