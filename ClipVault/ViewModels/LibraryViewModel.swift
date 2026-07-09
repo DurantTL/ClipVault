@@ -32,6 +32,7 @@ enum ClipSortOption: String, CaseIterable, Identifiable {
   let mover = FileMoveService()
   let security = SecurityScopedBookmarkManager()
   let analysis = LocalAnalysisService()
+  private let ingestService = IngestService()
   private let thumbnails = ThumbnailService()
   private var accessedSecurityScopedURLs: [URL] = []
   private var thumbnailGenerationTask: Task<Void, Never>?
@@ -264,42 +265,19 @@ enum ClipSortOption: String, CaseIterable, Identifiable {
 
   func resumeIngest() {
     Task {
-      project.ingestStatus = .inProgress
-      project.canResumeIngest = true
-      save()
-      for index in project.clips.indices {
-        guard project.clips[index].verificationStatus != .verified else { continue }
-        let sourcePath = project.clips[index].sourcePath.isEmpty ? project.clips[index].originalSourcePath : project.clips[index].sourcePath
-        guard !sourcePath.isEmpty, FileManager.default.fileExists(atPath: sourcePath) else {
-          project.clips[index].errorMessage = "Source is not connected. Reconnect the SD card or choose a new source folder to resume."
-          project.clips[index].copyStatus = .failed
-          save()
-          continue
-        }
-        do {
-          let destination = URL(fileURLWithPath: project.clips[index].currentPath)
-          try FileManager.default.createDirectory(
-            at: destination.deletingLastPathComponent(),
-            withIntermediateDirectories: true
-          )
-          if !FileManager.default.fileExists(atPath: destination.path) {
-            try FileManager.default.copyItem(at: URL(fileURLWithPath: sourcePath), to: destination)
-          }
-          project.clips[index].copyStatus = .copied
-          project.clips[index].verificationStatus = .verified
-          project.clips[index].errorMessage = nil
-        } catch {
-          project.clips[index].copyStatus = .failed
-          project.clips[index].verificationStatus = .failed
+      do {
+        project = try await ingestService.resume(
+          project: project,
+          settings: AppSettings()
+        ) { _ in }
+      } catch {
+        for index in project.clips.indices where project.clips[index].verificationStatus != .verified {
           project.clips[index].errorMessage = error.localizedDescription
         }
-        refreshProjectCounts()
+        project.ingestStatus = .incomplete
+        project.canResumeIngest = true
         save()
       }
-      refreshProjectCounts()
-      project.ingestStatus = project.pendingClipCount == 0 && project.failedClipCount == 0 ? .complete : .incomplete
-      project.canResumeIngest = project.ingestStatus.canResume
-      save()
     }
   }
 
