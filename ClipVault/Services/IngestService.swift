@@ -127,13 +127,22 @@ final class IngestService {
           }
           if clip.verificationStatus == .verified {
             await self.metadata.enrich(&clip)
-            if settings.generateThumbnailsDuringIngest, let thumb = try? await self.thumbnails.generate(
-              for: clip, projectFolder: projectFolder, quality: settings.thumbnailQuality)
-            {
-              clip.thumbnailPath = thumb
-              clip.thumbnailStatus = .generated
-            } else if settings.generateThumbnailsDuringIngest {
-              clip.thumbnailStatus = .failed
+            if settings.generateThumbnailsDuringIngest {
+              clip.thumbnailStatus = .generating
+              do {
+                let result = try await self.thumbnails.generate(
+                  for: clip,
+                  mediaURL: destURL,
+                  project: project,
+                  quality: settings.thumbnailQuality
+                )
+                clip.thumbnailPath = result.relativePath
+                clip.thumbnailStatus = .generated
+                clip.thumbnailErrorMessage = nil
+              } catch {
+                clip.thumbnailStatus = .failed
+                clip.thumbnailErrorMessage = error.localizedDescription
+              }
             }
           }
           project.clips[idx] = clip

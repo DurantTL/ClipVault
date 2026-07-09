@@ -5,6 +5,7 @@ struct ClipCardView: View {
   let clip: Clip
   let selected: Bool
   let canPreview: Bool
+  let thumbnailURL: URL?
   let preview: () -> Void
   let rate: (CullStatus) -> Void
   @State private var hovering = false
@@ -70,7 +71,7 @@ struct ClipCardView: View {
   }
 
   @ViewBuilder private var thumbnail: some View {
-    if let path = clip.thumbnailPath, let image = NSImage(contentsOfFile: path) {
+    if let thumbnailURL, let image = NSImage(contentsOf: thumbnailURL) {
       Image(nsImage: image)
         .resizable()
         .scaledToFill()
@@ -81,7 +82,7 @@ struct ClipCardView: View {
         RoundedRectangle(cornerRadius: 14, style: .continuous)
           .fill(.quaternary)
         VStack(spacing: 8) {
-          Image(systemName: clip.copyStatus == .pending ? "clock" : (clip.errorMessage == nil ? "video.badge.exclamationmark" : "exclamationmark.triangle.fill"))
+          Image(systemName: placeholderIcon)
             .font(.system(size: 34, weight: .semibold))
           Text(thumbnailPlaceholderText)
             .font(.caption)
@@ -92,9 +93,23 @@ struct ClipCardView: View {
   }
 
   private var thumbnailPlaceholderText: String {
-    if clip.copyStatus == .pending || clip.copyStatus == .copying { return "Not copied yet" }
-    if clip.thumbnailStatus == .failed || clip.errorMessage != nil { return "Thumbnail unavailable" }
-    return "Thumbnail unavailable"
+    if clip.copyStatus == .pending || clip.copyStatus == .copying {
+      return "Pending — not copied yet"
+    }
+    if clip.thumbnailStatus == .generating {
+      return "Generating thumbnail…"
+    }
+    if clip.thumbnailStatus == .failed {
+      return "Thumbnail unavailable"
+    }
+    return "Video thumbnail pending"
+  }
+
+  private var placeholderIcon: String {
+    if clip.copyStatus == .pending || clip.copyStatus == .copying { return "clock" }
+    if clip.thumbnailStatus == .failed { return "exclamationmark.triangle.fill" }
+    if clip.thumbnailStatus == .generating { return "hourglass" }
+    return "video"
   }
 
   private var metadataSummary: String {

@@ -79,6 +79,7 @@ struct Clip: Identifiable, Codable, Equatable, Transferable {
   var assignedFolder: String?
   var thumbnailPath: String?
   var thumbnailStatus: ThumbnailStatus = .pending
+  var thumbnailErrorMessage: String?
   var errorMessage: String?
   var previewUnavailable: Bool = false
 
@@ -140,7 +141,7 @@ struct Clip: Identifiable, Codable, Equatable, Transferable {
     case copyStatus, duration, width, height, frameRate, codec, bitDepth, hasAudio, audioChannelCount
     case orientation, estimatedBitrate, createdAt, modifiedAt, capturedAt, shotStartTime, manualShotTime
     case shotTimeSource, ingestDate, sonyCardFolderPath, cardVolumeName
-    case checksum, verificationStatus, cullStatus, assignedFolder, thumbnailPath, thumbnailStatus, errorMessage
+    case checksum, verificationStatus, cullStatus, assignedFolder, thumbnailPath, thumbnailStatus, thumbnailErrorMessage, errorMessage
     case previewUnavailable, title, description, productionTags, people, location, scene, shotType, camera
     case lens, audioNotes, transcriptNotes, usageNotes, colorLabel, favorite, isBroll, isSermon
     case isInterview, isSocialClipCandidate, customNotes, automaticTags, analysisStatus, focusScore
@@ -231,6 +232,7 @@ struct Clip: Identifiable, Codable, Equatable, Transferable {
     checksum = try c.decodeIfPresent(String.self, forKey: .checksum)
     assignedFolder = try c.decodeIfPresent(String.self, forKey: .assignedFolder)
     thumbnailPath = try c.decodeIfPresent(String.self, forKey: .thumbnailPath)
+    thumbnailErrorMessage = try c.decodeIfPresent(String.self, forKey: .thumbnailErrorMessage)
     errorMessage = try c.decodeIfPresent(String.self, forKey: .errorMessage)
     previewUnavailable = try c.decodeIfPresent(Bool.self, forKey: .previewUnavailable) ?? false
     title = try c.decodeIfPresent(String.self, forKey: .title) ?? ""
@@ -325,6 +327,7 @@ struct Clip: Identifiable, Codable, Equatable, Transferable {
     try c.encodeIfPresent(assignedFolder, forKey: .assignedFolder)
     try c.encodeIfPresent(thumbnailPath, forKey: .thumbnailPath)
     try c.encode(thumbnailStatus, forKey: .thumbnailStatus)
+    try c.encodeIfPresent(thumbnailErrorMessage, forKey: .thumbnailErrorMessage)
     try c.encodeIfPresent(errorMessage, forKey: .errorMessage)
     try c.encode(previewUnavailable, forKey: .previewUnavailable)
     try c.encode(title, forKey: .title)
