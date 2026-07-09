@@ -26,7 +26,8 @@ import Foundation
   private var queuedPreviewThumbnailIDs = Set<UUID>()
   private var pendingPreviewThumbnailClips: [ScannedVideo] = []
   private var activePreviewThumbnailCount = 0
-  private let maxConcurrentPreviewThumbnails = 2
+  private var maxConcurrentPreviewThumbnails = SystemPerformanceProfile.current().recommendedThumbnailConcurrency
+  private var previewThumbnailTasks: [UUID: Task<Void, Never>] = [:]
 
   init() {
     ingestPreviewThumbnails.cleanCache()
@@ -83,11 +84,15 @@ import Foundation
     guard let sourceURL else { return }
     do {
       detectSonyCard()
+      cancelPreviewThumbnailWork()
+      maxConcurrentPreviewThumbnails = settings.performanceTuning().ingestPreviewThumbnailConcurrency
       ingestPreviewThumbnails.cleanCache()
       queuedPreviewThumbnailIDs.removeAll()
       pendingPreviewThumbnailClips.removeAll()
       activePreviewThumbnailCount = 0
+      let scanStart = Date()
       videos = try scanner.scan(source: sourceURL, includeProxyFiles: settings.includeProxyFiles)
+      PerformanceLogger.shared.scan(duration: Date().timeIntervalSince(scanStart), fileCount: videos.count)
       sessions = buildSessions(from: videos, source: sourceURL)
       updateFreeSpace()
       queueInitialPreviewThumbnails()
@@ -200,8 +205,10 @@ import Foundation
     let clip = pendingPreviewThumbnailClips.removeFirst()
     activePreviewThumbnailCount += 1
 
-    Task {
+    let task = Task(priority: .utility) {
       do {
+        let workID = await BackgroundWorkCoordinator.shared.begin(kind: .ingestPreviewThumbnail, label: clip.filename)
+        defer { Task { await BackgroundWorkCoordinator.shared.finish(workID) } }
         let result = try await ingestPreviewThumbnails.generate(for: clip, sourceRoot: sourceURL)
         await MainActor.run {
           self.finishPreviewThumbnail(
@@ -224,6 +231,15 @@ import Foundation
         }
       }
     }
+    previewThumbnailTasks[clip.id] = task
+  }
+
+  func cancelPreviewThumbnailWork() {
+    for task in previewThumbnailTasks.values { task.cancel() }
+    previewThumbnailTasks.removeAll()
+    pendingPreviewThumbnailClips.removeAll()
+    queuedPreviewThumbnailIDs.removeAll()
+    activePreviewThumbnailCount = 0
   }
 
   private func finishPreviewThumbnail(
@@ -233,6 +249,7 @@ import Foundation
     errorMessage: String?,
     duration: Double?
   ) {
+    previewThumbnailTasks[clipID] = nil
     activePreviewThumbnailCount = max(0, activePreviewThumbnailCount - 1)
     updatePreviewThumbnailState(
       clipID: clipID,

@@ -2,6 +2,20 @@
 
 ClipVault is a native macOS SwiftUI app for safe video ingest, preview, culling, and folder sorting. It copies video files from an SD card or source folder to a destination project folder, verifies the copies, generates thumbnails, and lets users review and sort the copied media without touching the original source.
 
+
+## System requirements and performance
+
+ClipVault is designed for Apple Silicon Macs and the app target builds for `arm64` only. Recommended hardware:
+
+- Apple Silicon M2 or newer.
+- M2 Pro / M3 Pro / M4 Pro or better for large 4K/10-bit workflows.
+- 16 GB RAM minimum recommended.
+- 32 GB+ recommended for large event projects.
+- Fast SSD recommended.
+- macOS 15+ or newer recommended; the deployment target may remain lower, but newer systems get the best performance.
+
+ClipVault uses an automatic performance profile based on safe Apple APIs: arm64 architecture, physical memory, and Metal device availability. Performance Mode can be set to Automatic, Fast, Balanced, or Quality to tune thumbnail concurrency, local-analysis sampling, contact-sheet preparation, and background work priority.
+
 ## Build
 
 Open `ClipVault.xcodeproj` in Xcode 15 or newer on macOS 14+, select the `ClipVault` scheme, and run. The app uses only Apple frameworks: SwiftUI, AVFoundation, AVKit, Foundation/FileManager, UniformTypeIdentifiers, CryptoKit, and AppKit where macOS-specific APIs are needed.
@@ -22,6 +36,10 @@ Open `ClipVault.xcodeproj` in Xcode 15 or newer on macOS 14+, select the `ClipVa
 - ClipVault never deletes source files.
 - ClipVault never formats or erases cards.
 - ClipVault never modifies original media.
+- ClipVault never writes thumbnails to source cards.
+- New Ingest may generate temporary read-only thumbnails from source media for identification only, stored in `~/Library/Caches/ClipVault/IngestPreviewThumbnails/`.
+- Full playback preview, culling, rating, metadata editing, analysis, aliases, export, and library thumbnails use copied project files only.
+- Library thumbnails are generated from copied files only and stored in `.clipvault-cache/thumbnails/`.
 - ClipVault never overwrites destination files; conflicts receive `_1`, `_2`, etc.
 - Ingest copy uses security-scoped access for selected source, destination, and project folders so SD cards, external SSDs, and mounted NAS locations continue working after the user grants access.
 - If ingest is canceled during a large file copy, copied files are left in place, source files are untouched, and the project is marked incomplete.

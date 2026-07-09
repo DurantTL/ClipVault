@@ -52,6 +52,7 @@ final class IngestPreviewThumbnailService {
       let time = CMTime(seconds: seconds, preferredTimescale: 600)
 
       do {
+        let start = Date()
         let cgImage = try await generator.image(at: time).image
         guard let data = NSBitmapImageRep(cgImage: cgImage).representation(
           using: .jpeg,
@@ -60,8 +61,10 @@ final class IngestPreviewThumbnailService {
           throw CocoaError(.fileWriteUnknown)
         }
         try data.write(to: dest, options: .atomic)
+        PerformanceLogger.shared.thumbnail(duration: Date().timeIntervalSince(start), failed: false)
         return Result(path: dest.path, duration: duration?.seconds)
       } catch {
+        PerformanceLogger.shared.thumbnail(duration: 0, failed: true)
         let exists = FileManager.default.fileExists(atPath: clip.url.path)
         print("""
         ClipVault ingest preview thumbnail failure: filename=\(clip.filename), sourceURL=\(clip.url.path), sourceFileExists=\(exists), assetDuration=\(duration?.seconds.description ?? "nil"), requestedFrameTime=\(seconds), error=\(error.localizedDescription)

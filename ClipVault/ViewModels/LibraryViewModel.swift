@@ -35,6 +35,7 @@ enum ClipSortOption: String, CaseIterable, Identifiable {
   private let thumbnails = ThumbnailService()
   private var accessedSecurityScopedURLs: [URL] = []
   private var thumbnailGenerationTask: Task<Void, Never>?
+  private var analysisTask: Task<Void, Never>?
   private var queuedThumbnailIDs: Set<UUID> = []
   private var forcedThumbnailIDs: Set<UUID> = []
 
@@ -330,33 +331,60 @@ enum ClipSortOption: String, CaseIterable, Identifiable {
   }
 
   func analyzeLocally(mode: LocalAnalysisMode = LocalAnalysisMode(rawValue: UserDefaults.standard.string(forKey: "localAnalysisMode") ?? "Off") ?? .off) {
-    guard mode != .off else { return }
-    Task {
-      for index in project.clips.indices {
-        project.clips[index] = await analysis.analyzed(project.clips[index], mode: mode)
-        save()
-      }
-    }
+    analyzeClips(ids: Array(activeSelectionIDs), requestedMode: mode)
   }
 
   func analyzeVisibleClips() {
-    let ids = Set(filteredClips.map(\.id))
+    let ids = filteredClips.map(\.id)
     let mode = LocalAnalysisMode(rawValue: UserDefaults.standard.string(forKey: "localAnalysisMode") ?? "Fast") ?? .fast
-    Task {
-      for index in project.clips.indices where ids.contains(project.clips[index].id) {
-        project.clips[index] = await analysis.analyzed(project.clips[index], mode: mode)
-        save()
+    analyzeClips(ids: ids, requestedMode: mode)
+  }
+
+  func analyzeSelectedClip() {
+    guard let selectedClipID else { return }
+    let mode = LocalAnalysisMode(rawValue: UserDefaults.standard.string(forKey: "localAnalysisMode") ?? "Fast") ?? .fast
+    analyzeClips(ids: [selectedClipID], requestedMode: mode)
+  }
+
+  func cancelAnalysis() {
+    analysisTask?.cancel()
+    analysisTask = nil
+  }
+
+  private func analyzeClips(ids: [UUID], requestedMode: LocalAnalysisMode) {
+    let tuning = AppSettings().performanceTuning()
+    let mode = requestedMode == .off ? tuning.analysisMode : requestedMode
+    guard mode != .off else { return }
+    analysisTask?.cancel()
+    let orderedIDs = prioritize(ids: ids)
+    analysisTask = Task(priority: tuning.backgroundPriority) { [weak self] in
+      guard let self else { return }
+      for id in orderedIDs {
+        if Task.isCancelled { break }
+        guard let index = self.project.clips.firstIndex(where: { $0.id == id }) else { continue }
+        let clip = self.project.clips[index]
+        guard clip.copyStatus != .pending, clip.copyStatus != .copying else { continue }
+        guard self.resolvedMediaURL(for: clip) != nil else { continue }
+        let workID = await BackgroundWorkCoordinator.shared.begin(kind: .localAnalysis, label: clip.currentFilename)
+        let start = Date()
+        let analyzed = await self.analysis.analyzed(clip, mode: mode)
+        await BackgroundWorkCoordinator.shared.finish(workID)
+        PerformanceLogger.shared.analysis(duration: Date().timeIntervalSince(start), filename: clip.currentFilename, failed: analyzed.analysisStatus == .failed)
+        if let updatedIndex = self.project.clips.firstIndex(where: { $0.id == id }) {
+          self.project.clips[updatedIndex] = analyzed
+          self.save()
+        }
       }
     }
   }
 
-  func analyzeSelectedClip() {
-    guard let selectedClipID, let index = project.clips.firstIndex(where: { $0.id == selectedClipID }) else { return }
-    let mode = LocalAnalysisMode(rawValue: UserDefaults.standard.string(forKey: "localAnalysisMode") ?? "Fast") ?? .fast
-    Task {
-      project.clips[index] = await analysis.analyzed(project.clips[index], mode: mode)
-      save()
+  private func prioritize(ids: [UUID]) -> [UUID] {
+    var seen = Set<UUID>()
+    var ordered: [UUID] = []
+    for id in Array(activeSelectionIDs) + ids {
+      if seen.insert(id).inserted { ordered.append(id) }
     }
+    return ordered
   }
 
   func exportClipReport(keepsOnly: Bool = false) {
@@ -398,7 +426,7 @@ enum ClipSortOption: String, CaseIterable, Identifiable {
 
   private func processThumbnailQueue() async {
     defer { thumbnailGenerationTask = nil }
-    while let id = queuedThumbnailIDs.first {
+    while let id = prioritizedThumbnailID() {
       queuedThumbnailIDs.remove(id)
       let force = forcedThumbnailIDs.remove(id) != nil
       guard let index = project.clips.firstIndex(where: { $0.id == id }) else { continue }
@@ -419,6 +447,8 @@ enum ClipSortOption: String, CaseIterable, Identifiable {
         }
 
         let quality = ThumbnailQuality(rawValue: UserDefaults.standard.string(forKey: "thumbnailQuality") ?? "balanced") ?? .balanced
+        let workID = await BackgroundWorkCoordinator.shared.begin(kind: .libraryThumbnail, label: clip.currentFilename)
+        defer { Task { await BackgroundWorkCoordinator.shared.finish(workID) } }
         let result = try await thumbnails.generate(
           for: clip,
           mediaURL: mediaURL,
@@ -445,6 +475,12 @@ enum ClipSortOption: String, CaseIterable, Identifiable {
         }
       }
     }
+  }
+
+  private func prioritizedThumbnailID() -> UUID? {
+    if let selected = selectedClipID, queuedThumbnailIDs.contains(selected) { return selected }
+    if let visible = filteredClips.map(\.id).first(where: { queuedThumbnailIDs.contains($0) }) { return visible }
+    return queuedThumbnailIDs.first
   }
 
   private func normalizeExistingThumbnailPaths() {
@@ -562,6 +598,8 @@ enum ClipSortOption: String, CaseIterable, Identifiable {
   }
 
   deinit {
+    thumbnailGenerationTask?.cancel()
+    analysisTask?.cancel()
     for url in accessedSecurityScopedURLs {
       url.stopAccessingSecurityScopedResource()
     }
