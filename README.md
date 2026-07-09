@@ -49,6 +49,15 @@ Open `ClipVault.xcodeproj` in Xcode 15 or newer on macOS 14+, select the `ClipVa
 - Culling only changes project metadata.
 - Physical sorting only moves copied files inside the destination project folder, and undo restores clip path metadata.
 
+## Source permission behavior
+
+ClipVault is sandboxed, so source access follows these rules:
+
+- Volumes macOS reports as removable (most SD cards) are readable through the read-only removable-media entitlement and never show a ClipVault picker. macOS itself may show a one-time "removable volume" system prompt for the app.
+- External SSDs, fixed card readers, network volumes, and manual folders need a one-time grant through the source picker. ClipVault saves a security-scoped bookmark so the grant survives relaunches.
+- Once a source is granted in a session, its access stays active for the life of the New Ingest view model. Swapping between cards and drives in the sources list must never re-prompt for a source that was already granted.
+- Persisted bookmarks are refreshed while their security scope is active, and a grant is re-requested only when a volume remounts at a different path than the saved bookmark covers.
+
 ## Verification
 
 The default verification mode is **Fast size check**, which confirms the copied file size without rereading the SD card more than necessary. **Strong SHA256** remains available in Settings for users who want a safer byte-level hash comparison, but it is slower for large Sony a7R V 4K60 4:2:2 10-bit files because it reads both the source media and copied destination media.

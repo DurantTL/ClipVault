@@ -21,6 +21,16 @@ Never break these:
 - Metadata belongs in `.clipvault-project.json` or sidecars, not inside original MP4/MOV files by default.
 - Partial/canceled ingests must remain reopenable.
 
+## Source Permission Rules
+
+The app is sandboxed. Any change to source selection must preserve this behavior:
+
+- Removable volumes (as reported by macOS) are read through the `com.apple.security.files.removable-media.read-only` entitlement and must never show ClipVault's own picker.
+- Non-removable detected sources (external SSDs, fixed card readers, network volumes) get a one-time `NSOpenPanel` grant, persisted as a security-scoped bookmark in `UserDefaults` keyed by volume path.
+- A source granted during the current session must stay granted: `NewIngestViewModel` caches granted URLs by source ID and keeps their security scope active until deinit. Swapping between sources must never re-prompt for an already granted source.
+- Security-scoped bookmarks can only be created or refreshed while access to the URL is active. Never create a bookmark from a resolved URL before starting access, and never overwrite a stored bookmark with a failed creation.
+- Re-prompt only when a bookmark no longer covers the mounted volume path (for example, the card remounted at a new path).
+
 ## Build Rule
 
 Before claiming work is complete, the app must build:

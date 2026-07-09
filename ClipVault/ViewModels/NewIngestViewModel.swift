@@ -37,8 +37,14 @@ import Foundation
   private var maxConcurrentPreviewThumbnails = SystemPerformanceProfile.current().recommendedThumbnailConcurrency
   private var previewThumbnailTasks: [UUID: Task<Void, Never>] = [:]
   private var sourceBookmarkDataByID: [String: Data] = [:]
-  private var accessedSourceURL: URL?
+  private var grantedSourceURLsByID: [String: URL] = [:]
+  private var activeAccessURLsByPath: [String: URL] = [:]
   private var scanGeneration = 0
+
+  private struct SourceAccessGrant {
+    var url: URL
+    var needsBookmarkRefresh: Bool
+  }
 
   init() {
     sourceBookmarkDataByID = Self.loadRememberedSourceBookmarks()
@@ -73,7 +79,8 @@ import Foundation
       if !recentManualSources.contains(where: { $0.id == manual.id }) {
         recentManualSources.insert(manual, at: 0)
       }
-      selectGrantedSource(manual, grantedURL: url, settings: settings)
+      let grant = SourceAccessGrant(url: url, needsBookmarkRefresh: manual.bookmarkData == nil)
+      selectGrantedSource(manual, grant: grant, settings: settings)
     }
   }
 
@@ -103,46 +110,68 @@ import Foundation
       error = "That source is disconnected. Reconnect it or use Add Source to choose a folder manually."
       return
     }
-    guard let grantedURL = ensureAccessForDetectedSource(source) else {
+    guard let grant = ensureAccessForDetectedSource(source) else {
       error = "Access not granted. Choose the card or folder before ClipVault scans it."
       return
     }
-    var grantedSource = volumeSourceService.manualSource(for: grantedURL)
+    var grantedSource = volumeSourceService.manualSource(for: grant.url)
     grantedSource.id = source.id
     grantedSource.name = source.name
     grantedSource.volumeKind = source.volumeKind
     grantedSource.iconName = source.iconName
-    grantedSource.bookmarkData = try? bookmarks.bookmark(for: grantedURL)
-    if let bookmarkData = grantedSource.bookmarkData { remember(bookmarkData, for: source.id) }
-    selectGrantedSource(grantedSource, grantedURL: grantedURL, settings: settings)
+    grantedSource.bookmarkData = sourceBookmarkDataByID[source.id]
+    selectGrantedSource(grantedSource, grant: grant, settings: settings)
   }
 
-  private func selectGrantedSource(_ source: SourceVolumeOption, grantedURL: URL, settings: AppSettings) {
-    activateAccess(to: grantedURL)
-    sourceURL = grantedURL
+  private func selectGrantedSource(_ source: SourceVolumeOption, grant: SourceAccessGrant, settings: AppSettings) {
+    retainAccess(to: grant.url)
+    grantedSourceURLsByID[source.id] = grant.url
+    // Refresh the persisted bookmark only while its security scope is active;
+    // creating a security-scoped bookmark from a resolved URL fails before
+    // access starts, which used to silently drop the refreshed bookmark.
+    if grant.needsBookmarkRefresh || sourceBookmarkDataByID[source.id] == nil {
+      if let refreshed = try? bookmarks.bookmark(for: grant.url) {
+        remember(refreshed, for: source.id)
+      }
+    }
+    sourceURL = grant.url
     selectedSourceID = source.id
     error = nil
     detectSonyCard()
     scan(settings: settings)
   }
 
-  private func ensureAccessForDetectedSource(_ option: SourceVolumeOption) -> URL? {
+  private func ensureAccessForDetectedSource(_ option: SourceVolumeOption) -> SourceAccessGrant? {
+    // A source granted earlier in this app session stays granted. Swapping
+    // between cards or drives in the ingest window must never prompt again
+    // for a source the user already allowed.
+    if let granted = grantedSourceURLsByID[option.id],
+      FileManager.default.fileExists(atPath: granted.path) {
+      return SourceAccessGrant(url: granted, needsBookmarkRefresh: false)
+    }
+
     // Only volumes that macOS itself identifies as removable can use the
     // removable-media sandbox entitlement. Some card readers report an SD card
     // as a fixed external USB volume even when ClipVault recognizes its camera
     // layout; those need the normal one-time source picker below.
     if option.isRemovable {
-      return option.url
+      // Still remember a bookmark when possible so the same card keeps working
+      // if a reader later mounts it as a fixed volume.
+      return SourceAccessGrant(
+        url: option.url, needsBookmarkRefresh: sourceBookmarkDataByID[option.id] == nil)
     }
 
     if let bookmarkData = option.bookmarkData ?? sourceBookmarkDataByID[option.id],
-      let resolved = try? bookmarks.resolve(bookmarkData) {
-      // Refresh the persisted bookmark after resolution. This handles a mounted
-      // card whose path or bookmark representation changed since last use.
-      if let refreshed = try? bookmarks.bookmark(for: resolved) {
-        remember(refreshed, for: option.id)
+      let resolved = try? bookmarks.resolveWithStaleness(bookmarkData) {
+      let resolvedPath = resolved.url.standardizedFileURL.path
+      let optionPath = option.url.standardizedFileURL.path
+      let coversOption = resolvedPath == optionPath || resolvedPath.hasPrefix(optionPath + "/")
+      if coversOption && FileManager.default.fileExists(atPath: resolved.url.path) {
+        return SourceAccessGrant(url: resolved.url, needsBookmarkRefresh: resolved.isStale)
       }
-      return resolved
+      // The bookmark points somewhere that no longer matches this mounted
+      // volume (for example the card remounted under a new path), so fall
+      // through and let the user grant the new location once.
     }
 
     let panel = NSOpenPanel()
@@ -164,7 +193,7 @@ import Foundation
       error = "Choose the detected card or one of its folders to allow access."
       return nil
     }
-    return selectedURL
+    return SourceAccessGrant(url: selectedURL, needsBookmarkRefresh: true)
   }
 
   private func remember(_ bookmarkData: Data, for sourceID: String) {
@@ -195,10 +224,15 @@ import Foundation
     UserDefaults.standard.stringArray(forKey: rememberedManualSourcePathsKey) ?? []
   }
 
-  private func activateAccess(to url: URL) {
-    if accessedSourceURL?.standardizedFileURL != url.standardizedFileURL {
-      accessedSourceURL?.stopAccessingSecurityScopedResource()
-      accessedSourceURL = url.startAccessingSecurityScopedResource() ? url : nil
+  private func retainAccess(to url: URL) {
+    let path = url.standardizedFileURL.path
+    guard activeAccessURLsByPath[path] == nil else { return }
+    // Keep security scope active for every source granted in this session so
+    // swapping between cards never drops an earlier grant. Panel-granted URLs
+    // and entitlement-covered removable volumes return false here; they are
+    // accessible without explicit scope activation.
+    if url.startAccessingSecurityScopedResource() {
+      activeAccessURLsByPath[path] = url
     }
   }
 
@@ -412,7 +446,7 @@ import Foundation
   }
 
   deinit {
-    accessedSourceURL?.stopAccessingSecurityScopedResource()
+    for url in activeAccessURLsByPath.values { url.stopAccessingSecurityScopedResource() }
   }
 
   private func finishPreviewThumbnail(

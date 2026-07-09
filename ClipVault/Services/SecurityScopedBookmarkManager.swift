@@ -1,15 +1,24 @@
 import Foundation
 
 final class SecurityScopedBookmarkManager {
+  struct ResolvedBookmark {
+    var url: URL
+    var isStale: Bool
+  }
+
   func bookmark(for url: URL) throws -> Data {
     try url.bookmarkData(
       options: [.withSecurityScope], includingResourceValuesForKeys: nil, relativeTo: nil)
   }
   func resolve(_ data: Data) throws -> URL {
+    try resolveWithStaleness(data).url
+  }
+  func resolveWithStaleness(_ data: Data) throws -> ResolvedBookmark {
     var stale = false
-    return try URL(
+    let url = try URL(
       resolvingBookmarkData: data, options: [.withSecurityScope], relativeTo: nil,
       bookmarkDataIsStale: &stale)
+    return ResolvedBookmark(url: url, isStale: stale)
   }
   func withAccess<T>(to url: URL, _ work: () throws -> T) rethrows -> T {
     let ok = url.startAccessingSecurityScopedResource()

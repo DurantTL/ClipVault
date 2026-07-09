@@ -15,6 +15,10 @@ Use a small test folder with 5–10 short video clips before testing real SD car
 - [ ] Source folder can be selected
 - [ ] Sony card structure is detected
 - [ ] Canon/DCF `DCIM` folder is detected
+- [ ] A detected non-removable source prompts for access at most once
+- [ ] Swapping between two granted sources does not re-prompt
+- [ ] Swapping back to the first source rescans without a prompt
+- [ ] After relaunch, a previously granted non-removable source does not show the picker again
 - [ ] Sessions are shown
 - [ ] Session selection works
 - [ ] Individual clip selection works, if available
