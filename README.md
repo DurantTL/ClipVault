@@ -225,7 +225,7 @@ Codex does not commit generated icon PNGs because binary files are not supported
 python3 Scripts/generate_app_icon.py
 ```
 
-The generated PNG files are ignored by git at `SlateBox/Assets.xcassets/AppIcon.appiconset/*.png`. The SwiftUI in-app logo remains available without generated binary assets.
+The generated PNG files are ignored by git at `ClipVault/Assets.xcassets/AppIcon.appiconset/*.png`. The SwiftUI in-app logo remains available without generated binary assets.
 
 ## Session-based ingest review
 
@@ -255,7 +255,7 @@ python3 Scripts/generate_app_icon.py
 make icons
 ```
 
-The script writes `SlateBox/Assets.xcassets/AppIcon.appiconset/icon_16.png` through `icon_1024.png` plus `Contents.json`. If PNGs are missing, Xcode can still use a generic app icon; generated PNGs are ignored by git.
+The script writes `ClipVault/Assets.xcassets/AppIcon.appiconset/icon_16.png` through `icon_1024.png` plus `Contents.json`. Run `make icons`, then use **Product → Clean Build Folder** in Xcode and rebuild SlateBox. Generated PNGs are ignored by git.
 
 ## Recent SlateBox Improvements
 
