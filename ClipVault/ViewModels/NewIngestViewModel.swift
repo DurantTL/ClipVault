@@ -3,6 +3,7 @@ import Foundation
 
 @MainActor final class NewIngestViewModel: ObservableObject {
   private static let rememberedSourceBookmarksKey = "rememberedSourceBookmarks"
+  private static let rememberedManualSourcePathsKey = "rememberedManualSourcePaths"
   @Published var sourceURL: URL?
   @Published var destinationURL: URL?
   @Published var projectName = ""
@@ -37,9 +38,16 @@ import Foundation
   private var previewThumbnailTasks: [UUID: Task<Void, Never>] = [:]
   private var sourceBookmarkDataByID: [String: Data] = [:]
   private var accessedSourceURL: URL?
+  private var scanGeneration = 0
 
   init() {
     sourceBookmarkDataByID = Self.loadRememberedSourceBookmarks()
+    recentManualSources = Self.loadRememberedManualSourcePaths().map { path in
+      let url = URL(fileURLWithPath: path)
+      var option = VolumeSourceService().manualSource(for: url)
+      option.bookmarkData = sourceBookmarkDataByID[option.id]
+      return option
+    }
     ingestPreviewThumbnails.cleanCache()
     let formatter = DateFormatter()
     formatter.dateFormat = "yyyy-MM-dd"
@@ -61,6 +69,7 @@ import Foundation
       var manual = volumeSourceService.manualSource(for: url)
       manual.bookmarkData = try? bookmarks.bookmark(for: url)
       if let bookmarkData = manual.bookmarkData { remember(bookmarkData, for: manual.id) }
+      rememberManualSource(manual.url)
       if !recentManualSources.contains(where: { $0.id == manual.id }) {
         recentManualSources.insert(manual, at: 0)
       }
@@ -118,6 +127,13 @@ import Foundation
   }
 
   private func ensureAccessForDetectedSource(_ option: SourceVolumeOption) -> URL? {
+    // Camera cards are read-only sources. The removable-media sandbox entitlement
+    // permits scanning them directly, so card switching does not require a Finder
+    // confirmation for every mounted card.
+    if option.volumeKind == .removableCard {
+      return option.url
+    }
+
     if let bookmarkData = option.bookmarkData ?? sourceBookmarkDataByID[option.id],
       let resolved = try? bookmarks.resolve(bookmarkData) {
       // Refresh the persisted bookmark after resolution. This handles a mounted
@@ -166,6 +182,18 @@ import Foundation
     return UserDefaults.standard.dictionary(forKey: rememberedSourceBookmarksKey) as? [String: Data] ?? [:]
   }
 
+  private func rememberManualSource(_ url: URL) {
+    let path = url.standardizedFileURL.path
+    var paths = Self.loadRememberedManualSourcePaths()
+    paths.removeAll { $0 == path }
+    paths.insert(path, at: 0)
+    UserDefaults.standard.set(Array(paths.prefix(20)), forKey: Self.rememberedManualSourcePathsKey)
+  }
+
+  private static func loadRememberedManualSourcePaths() -> [String] {
+    UserDefaults.standard.stringArray(forKey: rememberedManualSourcePathsKey) ?? []
+  }
+
   private func activateAccess(to url: URL) {
     if accessedSourceURL?.standardizedFileURL != url.standardizedFileURL {
       accessedSourceURL?.stopAccessingSecurityScopedResource()
@@ -202,6 +230,8 @@ import Foundation
 
   func scan(settings: AppSettings) {
     guard let sourceURL else { return }
+    scanGeneration += 1
+    let generation = scanGeneration
     detectSonyCard()
     cancelPreviewThumbnailWork()
     maxConcurrentPreviewThumbnails = settings.performanceTuning().ingestPreviewThumbnailConcurrency
@@ -211,6 +241,8 @@ import Foundation
     activePreviewThumbnailCount = 0
     isScanning = true
     error = nil
+    videos = []
+    sessions = []
 
     let includeProxyFiles = settings.includeProxyFiles
     Task { [weak self] in
@@ -219,16 +251,18 @@ import Foundation
         let scannedVideos = try await Task.detached(priority: .userInitiated) {
           try SourceScanner().scan(source: sourceURL, includeProxyFiles: includeProxyFiles)
         }.value
-        guard let self, self.sourceURL == sourceURL else { return }
+        guard let self, self.scanGeneration == generation, self.sourceURL == sourceURL else { return }
         self.videos = scannedVideos
         PerformanceLogger.shared.scan(duration: Date().timeIntervalSince(scanStart), fileCount: scannedVideos.count)
         self.sessions = self.buildSessions(from: scannedVideos, source: sourceURL)
         self.updateFreeSpace()
         self.queueInitialPreviewThumbnails()
       } catch {
-        self?.error = error.localizedDescription
+        guard let self, self.scanGeneration == generation, self.sourceURL == sourceURL else { return }
+        self.error = error.localizedDescription
       }
-      self?.isScanning = false
+      guard let self, self.scanGeneration == generation, self.sourceURL == sourceURL else { return }
+      self.isScanning = false
     }
   }
 
