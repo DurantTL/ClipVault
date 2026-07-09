@@ -20,7 +20,7 @@ ClipVault uses an automatic performance profile based on safe Apple APIs: arm64 
 
 ## Build
 
-Open `ClipVault.xcodeproj` in Xcode 15 or newer on macOS 14+, select the `ClipVault` scheme, and run. The app uses only Apple frameworks: SwiftUI, AVFoundation, AVKit, Foundation/FileManager, UniformTypeIdentifiers, CryptoKit, and AppKit where macOS-specific APIs are needed.
+Open `SlateBox.xcodeproj` in Xcode 15 or newer on macOS 14+, select the `SlateBox` scheme, and run. The app uses only Apple frameworks: SwiftUI, AVFoundation, AVKit, Foundation/FileManager, UniformTypeIdentifiers, CryptoKit, and AppKit where macOS-specific APIs are needed.
 
 ## Ingest workflow
 
@@ -32,6 +32,10 @@ Open `ClipVault.xcodeproj` in Xcode 15 or newer on macOS 14+, select the `ClipVa
 6. Proxy files in Sony `PRIVATE/M4ROOT/SUB` are skipped by default unless **Include Proxy Files** is enabled. Non-Sony folders continue to scan recursively.
 7. Click **Start Copy**. ClipVault streams each file in chunks, updates progress during large copies, verifies the result, then generates metadata and a thumbnail only for successfully copied and verified clips.
 8. The library opens so clips can be previewed, marked Keep/Maybe/Reject, revealed in Finder, and moved into custom folders.
+
+### Camera and card metadata
+
+New Ingest includes a **Camera / Card Info** section for a camera label, camera name/model, operator, card or reel name, and optional shoot day. SlateBox suggests common labels plus recently used labels, saves the source assignment in the project JSON, and applies it to every copied clip from that source. Clip metadata can still be edited later as an override.
 
 ## Safety behavior
 

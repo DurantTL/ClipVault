@@ -92,6 +92,9 @@ struct Clip: Identifiable, Codable, Equatable, Transferable {
   var scene: String = ""
   var shotType: String = ""
   var camera: String = ""
+  var cameraLabel: String = ""
+  var cameraOperator: String = ""
+  var shootDay: Date?
   var lens: String = ""
   var audioNotes: String = ""
   var transcriptNotes: String = ""
@@ -143,7 +146,7 @@ struct Clip: Identifiable, Codable, Equatable, Transferable {
     case orientation, estimatedBitrate, createdAt, modifiedAt, capturedAt, shotStartTime, manualShotTime
     case shotTimeSource, ingestDate, sonyCardFolderPath, cardVolumeName
     case checksum, verificationStatus, cullStatus, rating, assignedFolder, thumbnailPath, thumbnailStatus, thumbnailErrorMessage, errorMessage
-    case previewUnavailable, title, description, productionTags, people, location, scene, shotType, camera
+    case previewUnavailable, title, description, productionTags, people, location, scene, shotType, camera, cameraLabel, cameraOperator, shootDay
     case lens, audioNotes, transcriptNotes, usageNotes, colorLabel, favorite, isBroll, isSermon
     case isInterview, isSocialClipCandidate, customNotes, automaticTags, analysisStatus, focusScore
     case focusConfidence, sampledFrameCount, focusWarning, maxFaceCount, averageFaceCount, hasFaces
@@ -247,6 +250,9 @@ struct Clip: Identifiable, Codable, Equatable, Transferable {
     scene = try c.decodeIfPresent(String.self, forKey: .scene) ?? ""
     shotType = try c.decodeIfPresent(String.self, forKey: .shotType) ?? ""
     camera = try c.decodeIfPresent(String.self, forKey: .camera) ?? ""
+    cameraLabel = try c.decodeIfPresent(String.self, forKey: .cameraLabel) ?? ""
+    cameraOperator = try c.decodeIfPresent(String.self, forKey: .cameraOperator) ?? ""
+    shootDay = try c.decodeIfPresent(Date.self, forKey: .shootDay)
     lens = try c.decodeIfPresent(String.self, forKey: .lens) ?? ""
     audioNotes = try c.decodeIfPresent(String.self, forKey: .audioNotes) ?? ""
     transcriptNotes = try c.decodeIfPresent(String.self, forKey: .transcriptNotes) ?? ""
@@ -343,6 +349,9 @@ struct Clip: Identifiable, Codable, Equatable, Transferable {
     try c.encode(scene, forKey: .scene)
     try c.encode(shotType, forKey: .shotType)
     try c.encode(camera, forKey: .camera)
+    try c.encode(cameraLabel, forKey: .cameraLabel)
+    try c.encode(cameraOperator, forKey: .cameraOperator)
+    try c.encodeIfPresent(shootDay, forKey: .shootDay)
     try c.encode(lens, forKey: .lens)
     try c.encode(audioNotes, forKey: .audioNotes)
     try c.encode(transcriptNotes, forKey: .transcriptNotes)

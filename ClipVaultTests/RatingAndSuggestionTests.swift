@@ -1,6 +1,6 @@
 import XCTest
 
-@testable import ClipVault
+@testable import SlateBox
 
 final class RatingAndSuggestionTests: XCTestCase {
   private func makeClip() -> Clip {

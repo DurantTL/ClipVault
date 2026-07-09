@@ -45,8 +45,8 @@ Before claiming work is complete, the app must build:
 
 ```bash
 xcodebuild \
-  -project ClipVault.xcodeproj \
-  -scheme ClipVault \
+  -project SlateBox.xcodeproj \
+  -scheme SlateBox \
   -configuration Debug \
   -destination 'platform=macOS' \
   CODE_SIGNING_ALLOWED=NO \

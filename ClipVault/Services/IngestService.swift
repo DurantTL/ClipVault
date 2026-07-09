@@ -14,7 +14,7 @@ final class IngestService {
   func resume() { paused = false }
   func ingest(
     name: String, shootName: String, source: URL, destination: URL, videos: [SourceVideo], bookmarks: (Data?, Data?),
-    settings: AppSettings, progress: @escaping @MainActor (IngestProgress) -> Void
+    settings: AppSettings, cameraCardMetadata: IngestCameraCardMetadata, progress: @escaping @MainActor (IngestProgress) -> Void
   ) async throws -> ClipVaultProject {
     self.cancelled = false
     self.copyService.isCancelled = { [weak self] in self?.cancelled ?? false }
@@ -35,7 +35,8 @@ final class IngestService {
             shootName: shootName,
             sequence: idx + 1,
             rename: settings.renameFilesDuringIngest,
-            preserveSourceStructure: settings.preserveSourceStructure
+            preserveSourceStructure: settings.preserveSourceStructure,
+            cameraCardMetadata: cameraCardMetadata
           )
         }
         var project = ClipVaultProject(
@@ -55,6 +56,7 @@ final class IngestService {
           canResumeIngest: true,
           clips: selectedClips
         )
+        project.ingestCameraCardMetadata = cameraCardMetadata.isEmpty ? nil : cameraCardMetadata
         try self.store.save(project)
         let total = videos.reduce(Int64(0)) { $0 + $1.size }
         var done: Int64 = 0
@@ -279,7 +281,8 @@ final class IngestService {
     shootName: String,
     sequence: Int,
     rename: Bool,
-    preserveSourceStructure: Bool
+    preserveSourceStructure: Bool,
+    cameraCardMetadata: IngestCameraCardMetadata
   ) -> Clip {
     let outputFilename = outputFilename(for: video, projectName: projectName, sequence: sequence, rename: rename)
     let cleanShootName = SafeFilename.safeFolderName(shootName)
@@ -305,6 +308,11 @@ final class IngestService {
     clip.destinationRelativePath = clip.relativePath
     clip.copyStatus = .pending
     clip.verificationStatus = .pending
+    clip.cameraLabel = cameraCardMetadata.cameraLabel
+    clip.camera = cameraCardMetadata.cameraNameModel
+    clip.cameraOperator = cameraCardMetadata.operatorName
+    clip.cardVolumeName = cameraCardMetadata.cardOrReelName.isEmpty ? clip.cardVolumeName : cameraCardMetadata.cardOrReelName
+    clip.shootDay = cameraCardMetadata.shootDay
     return clip
   }
 

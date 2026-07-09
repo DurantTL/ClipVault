@@ -24,6 +24,7 @@ import Foundation
   @Published var sourceOptions: [SourceVolumeOption] = []
   @Published var recentManualSources: [SourceVolumeOption] = []
   @Published var selectedSourceID: String?
+  @Published var cameraCardMetadata = IngestCameraCardMetadata()
 
 
   let scanner = SourceScanner()
@@ -40,6 +41,12 @@ import Foundation
   private var grantedSourceURLsByID: [String: URL] = [:]
   private var activeAccessURLsByPath: [String: URL] = [:]
   private var scanGeneration = 0
+
+  var cameraLabelSuggestions: [String] {
+    Array(Set(IngestCameraCardMetadata.defaults + Self.loadCameraLabelHistory() + [cameraCardMetadata.cameraLabel]))
+      .filter { !$0.isEmpty }
+      .sorted()
+  }
 
   private struct SourceAccessGrant {
     var url: URL
@@ -317,15 +324,18 @@ import Foundation
     canceledSummary = nil
     defer { isIngesting = false }
     do {
-      return try await ingestService.ingest(
+      let project = try await ingestService.ingest(
         name: projectName,
         shootName: shootName,
         source: source,
         destination: destination,
         videos: selectedVideos,
         bookmarks: (try? bookmarks.bookmark(for: source), try? bookmarks.bookmark(for: destination)),
-        settings: settings
+        settings: settings,
+        cameraCardMetadata: cameraCardMetadata
       ) { self.progress = $0 }
+      Self.rememberCameraLabel(cameraCardMetadata.cameraLabel)
+      return project
     } catch is CancellationError {
       canceledSummary = "Ingest canceled. \(progress.currentIndex) of \(progress.totalCount) files copied."
       return nil
@@ -333,6 +343,19 @@ import Foundation
       self.error = error.localizedDescription
       return nil
     }
+  }
+
+  private static let cameraLabelHistoryKey = "cameraLabelHistory"
+
+  private static func loadCameraLabelHistory() -> [String] {
+    UserDefaults.standard.stringArray(forKey: cameraLabelHistoryKey) ?? []
+  }
+
+  private static func rememberCameraLabel(_ label: String) {
+    let clean = label.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !clean.isEmpty else { return }
+    let values = ([clean] + loadCameraLabelHistory().filter { $0.caseInsensitiveCompare(clean) != .orderedSame })
+    UserDefaults.standard.set(Array(values.prefix(12)), forKey: cameraLabelHistoryKey)
   }
 
   var selectedSessions: [IngestSession] { sessions.filter(\.selected) }

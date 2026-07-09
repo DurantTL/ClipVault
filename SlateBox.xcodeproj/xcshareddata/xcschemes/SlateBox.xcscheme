@@ -15,9 +15,9 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "1A0000020000000000000002"
-               BuildableName = "ClipVault.app"
-               BlueprintName = "ClipVault"
-               ReferencedContainer = "container:ClipVault.xcodeproj">
+               BuildableName = "SlateBox.app"
+               BlueprintName = "SlateBox"
+               ReferencedContainer = "container:SlateBox.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
          <BuildActionEntry
@@ -29,9 +29,9 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "2A0000020000000000000002"
-               BuildableName = "ClipVaultTests.xctest"
-               BlueprintName = "ClipVaultTests"
-               ReferencedContainer = "container:ClipVault.xcodeproj">
+               BuildableName = "SlateBoxTests.xctest"
+               BlueprintName = "SlateBoxTests"
+               ReferencedContainer = "container:SlateBox.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
       </BuildActionEntries>
@@ -48,9 +48,9 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "2A0000020000000000000002"
-               BuildableName = "ClipVaultTests.xctest"
-               BlueprintName = "ClipVaultTests"
-               ReferencedContainer = "container:ClipVault.xcodeproj">
+               BuildableName = "SlateBoxTests.xctest"
+               BlueprintName = "SlateBoxTests"
+               ReferencedContainer = "container:SlateBox.xcodeproj">
             </BuildableReference>
          </TestableReference>
       </Testables>
@@ -70,9 +70,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "1A0000020000000000000002"
-            BuildableName = "ClipVault.app"
-            BlueprintName = "ClipVault"
-            ReferencedContainer = "container:ClipVault.xcodeproj">
+            BuildableName = "SlateBox.app"
+            BlueprintName = "SlateBox"
+            ReferencedContainer = "container:SlateBox.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </LaunchAction>
@@ -87,9 +87,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "1A0000020000000000000002"
-            BuildableName = "ClipVault.app"
-            BlueprintName = "ClipVault"
-            ReferencedContainer = "container:ClipVault.xcodeproj">
+            BuildableName = "SlateBox.app"
+            BlueprintName = "SlateBox"
+            ReferencedContainer = "container:SlateBox.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </ProfileAction>
