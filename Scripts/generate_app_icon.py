@@ -39,11 +39,17 @@ def png(path, size):
     data=b'\x89PNG\r\n\x1a\n'+chunk(b'IHDR',struct.pack('>IIBBBBB',size,size,8,6,0,0,0))+chunk(b'IDAT',zlib.compress(raw,9))+chunk(b'IEND',b'')
     path.write_bytes(data)
 
-out=Path('ClipVault/Assets.xcassets/AppIcon.appiconset')
+root = Path(__file__).resolve().parents[1]
+catalog = root / 'ClipVault' / 'Assets.xcassets'
+catalog.mkdir(parents=True, exist_ok=True)
+(catalog / 'Contents.json').write_text(json.dumps({'info': {'author': 'xcode', 'version': 1}}, indent=2) + '\n')
+out = catalog / 'AppIcon.appiconset'
 out.mkdir(parents=True, exist_ok=True)
+for old in out.glob('*.png'):
+    old.unlink()
 items=[]
 for pts,scale,pixels in [(16,'1x',16),(16,'2x',32),(32,'1x',32),(32,'2x',64),(128,'1x',128),(128,'2x',256),(256,'1x',256),(256,'2x',512),(512,'1x',512),(512,'2x',1024)]:
-    name=f'icon_{pixels}.png'
+    name=f'icon_{pts}x{pts}_{scale}.png'
     png(out/name,pixels)
     items.append({'idiom':'mac','size':f'{pts}x{pts}','scale':scale,'filename':name})
-(out/'Contents.json').write_text(json.dumps({'images':items,'info':{'author':'xcode','version':1}},indent=2))
+(out/'Contents.json').write_text(json.dumps({'images':items,'info':{'author':'xcode','version':1}},indent=2) + '\n')
