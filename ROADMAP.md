@@ -1,4 +1,4 @@
-# ClipVault Roadmap — Next Steps and Future Ideas
+# SlateBox Roadmap — Next Steps and Future Ideas
 
 Updated: July 9, 2026
 
@@ -16,7 +16,7 @@ The goal is not just to copy files like a transfer utility. The goal is to creat
     → Preview, cull, rate, tag, analyze, and organize
     → Export selected clips or hand off to an editor
 
-Core tagline: **Copy. Verify. Cull. Organize.**
+Core tagline: **Ingest. Verify. Cull. Hand off.**
 
 ClipVault is being designed mainly for Apple Silicon Macs and a Sony a7R V workflow:
 
@@ -125,7 +125,19 @@ Clip report, keep list, reject list, metadata JSON, verification report, and ana
 
 First version: reveal edit folder, open DaVinci Resolve / Final Cut Pro / Finder at the export folder. Later: FCPXML export, Resolve CSV/EDL/XML-style export, export by rating/status/tag, optional proxy folder.
 
+### Feature 8 — Ingest Camera / Card Metadata
+
+- Add a **Camera / Card Info** section to New Ingest.
+- Let the user assign camera label, camera name/model, operator, card/reel name, and shoot day.
+- Auto-suggest labels such as A-Cam, B-Cam, A001, and A002 from project history.
+- Store camera/card metadata in `.clipvault-project.json` without changing source-card files.
+- Apply metadata to every clip copied from that source unless a clip has an explicit override.
+- Allow library sorting and filtering by camera, card, operator, and shoot day.
+- Allow folder presets to use camera/card metadata.
+
 ## Performance and Apple Silicon Roadmap
+
+Shipped local responsiveness baseline: the library caches decoded visible thumbnails in memory and prewarms adjacent copied preview assets. Continue to measure time-to-first-thumbnail and time-to-first-preview before adding heavier processing.
 
 - Apple Silicon required/strongly recommended; M2 Pro or better for large 4K/10-bit workloads; 16 GB RAM minimum, 32 GB+ for large events; fast SSD; macOS 15+ recommended.
 - Use runtime performance profiles (SystemPerformanceProfile: arm64, memory, Metal, tier, recommended concurrency) instead of pretending chip detection is perfect.

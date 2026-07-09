@@ -12,7 +12,7 @@ struct HomeView: View {
         Section("Recent Projects") { ForEach(vm.summaries) { Text($0.name) } }
         Section("All Projects") { ForEach(groupedMonths, id: \.self) { Text($0) } }
       }
-      .navigationTitle("ClipVault")
+      .navigationTitle(AppBrand.appName)
     } detail: {
       ScrollView {
         VStack(spacing: 24) {

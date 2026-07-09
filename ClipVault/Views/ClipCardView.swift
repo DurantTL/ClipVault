@@ -85,7 +85,7 @@ struct ClipCardView: View {
   }
 
   @ViewBuilder private var thumbnail: some View {
-    if let thumbnailURL, let image = NSImage(contentsOf: thumbnailURL) {
+    if let thumbnailURL, let image = ThumbnailImageCache.shared.image(for: thumbnailURL) {
       Image(nsImage: image)
         .resizable()
         .scaledToFill()

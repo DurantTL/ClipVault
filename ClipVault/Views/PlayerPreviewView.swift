@@ -83,6 +83,7 @@ struct PlayerPreviewView: View {
       return
     }
     vm.load(url: url, clip: clip)
+    vm.preload(urls: library.previewNeighborURLs(for: clip))
     if autoplay { vm.player?.play() }
   }
 }

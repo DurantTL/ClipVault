@@ -1,4 +1,6 @@
-# ClipVault
+# SlateBox
+
+**Ingest. Verify. Cull. Hand off.**
 
 ClipVault is a native macOS SwiftUI app for safe video ingest, preview, culling, and folder sorting. It copies video files from an SD card or source folder to a destination project folder, verifies the copies, generates thumbnails, and lets users review and sort the copied media without touching the original source.
 
@@ -116,6 +118,12 @@ Clips carry both a fast Keep/Maybe/Reject cull status and a 0–5 star rating. S
 ### Multi-select, batch actions, and bulk metadata
 
 The library grid supports Command-click, Shift-click range select, Command-A, and Escape. Batch actions apply to the whole selection: status/rating, add/remove tags, move to folder, thumbnails, and Batch Edit Metadata (tags append/replace/remove, people, location, scene, shot type, notes, and flag set/clear).
+
+The sidebar intentionally keeps workflow filters small: Unrated, Keep, Maybe, Reject, and Needs Review. Use project folders for the editing structure you want to see in Finder and tags for descriptive facets such as Sermon, B-Roll, 4K, or Faces. This avoids turning every automatically detected property into a permanent sidebar folder.
+
+### Local responsiveness
+
+Library thumbnails are decoded once into a bounded in-memory cache rather than repeatedly from disk during SwiftUI redraws. Preview navigation prewarms the adjacent copied clips’ AVFoundation metadata, so Next/Previous can start sooner without generating proxies or reading a source card.
 
 ### Export and editor handoff
 

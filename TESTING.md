@@ -1,4 +1,4 @@
-# ClipVault Manual Test Checklist
+# SlateBox Manual Test Checklist
 
 Use a small test folder with 5–10 short video clips before testing real SD cards.
 

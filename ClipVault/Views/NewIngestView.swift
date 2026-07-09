@@ -176,7 +176,7 @@ struct NewIngestView: View {
         Toggle("Generate thumbnails during ingest", isOn: $settings.generateThumbnailsDuringIngest)
         Toggle("Run local analysis after ingest", isOn: $settings.runAnalysisAfterIngest)
         Toggle("Generate contact sheets after ingest", isOn: $settings.generateContactSheetsAfterIngest)
-        Text("ClipVault can use ingest downtime to prepare previews and local analysis after files are safely copied.")
+        Text("SlateBox can use ingest downtime to prepare previews and local analysis after files are safely copied.")
           .font(.caption)
           .foregroundStyle(.secondary)
         Picker("Backup Transfer Mode", selection: $settings.backupTransferMode) {
