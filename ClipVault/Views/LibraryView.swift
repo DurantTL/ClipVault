@@ -10,6 +10,8 @@ struct LibraryView: View {
   @State private var showingBatchMetadata = false
   @State private var showingNewTagPrompt = false
   @State private var newTagName = ""
+  @State private var showingAliasPrompt = false
+  @State private var aliasFolderName = ""
 
   var body: some View {
     HSplitView {
@@ -25,6 +27,9 @@ struct LibraryView: View {
         if let summary = viewModel.exportSummary {
           exportSummaryBanner(summary)
         }
+        if let summary = viewModel.aliasSummary {
+          aliasSummaryBanner(summary)
+        }
         ClipGridView(vm: viewModel)
           .frame(minWidth: 650, maxWidth: .infinity, maxHeight: .infinity)
       }
@@ -34,7 +39,43 @@ struct LibraryView: View {
           .frame(minWidth: 300, idealWidth: 340, maxWidth: 390)
       }
     }
-    .toolbar {
+    .toolbar { libraryToolbar }
+    .sheet(isPresented: $showingSettings) { SettingsView() }
+    .sheet(isPresented: $showingBatchMetadata) { BatchMetadataView(vm: viewModel) }
+    .alert("New Tag", isPresented: $showingNewTagPrompt) {
+      TextField("Tag name", text: $newTagName)
+      Button("Add to Selection") {
+        viewModel.addProductionTagToSelection(newTagName)
+        newTagName = ""
+      }
+      Button("Cancel", role: .cancel) { newTagName = "" }
+    } message: {
+      Text("Adds this tag to every selected clip.")
+    }
+    .alert("Create Aliases", isPresented: $showingAliasPrompt) {
+      TextField("Alias folder name", text: $aliasFolderName)
+      Button("Create") {
+        viewModel.createAliases(named: aliasFolderName)
+        aliasFolderName = ""
+      }
+      Button("Cancel", role: .cancel) { aliasFolderName = "" }
+    } message: {
+      Text("Creates links in this project’s Aliases folder. Original copied media is never moved, deleted, or overwritten.")
+    }
+    .sheet(isPresented: $showingPreview) {
+      PlayerPreviewView(
+        library: viewModel,
+        onClose: {
+          viewModel.closePreview()
+          showingPreview = false
+        }
+      )
+    }
+    .modifier(LibraryNotificationHandler(viewModel: viewModel, showingPreview: $showingPreview))
+  }
+
+  @ToolbarContentBuilder
+  private var libraryToolbar: some ToolbarContent {
       ToolbarItemGroup {
         Button { NewIngestWindowManager.shared.open(settings: settings) { project in viewModel.project = project } } label: {
           Label("New Ingest", systemImage: "tray.and.arrow.down.fill")
@@ -117,6 +158,8 @@ struct LibraryView: View {
             }
           }
           Button("Batch Edit Metadata…") { showingBatchMetadata = true }
+          Button("Create Aliases…") { showingAliasPrompt = true }
+          Button("Reveal Aliases in Finder") { viewModel.revealAliases() }
           Divider()
           Button("Copy filenames to clipboard") { viewModel.copySelectedFilenames() }
           Button("Reveal selected in Finder") { viewModel.reveal() }
@@ -143,6 +186,10 @@ struct LibraryView: View {
           Button("Export Project Metadata JSON") { viewModel.exportProjectMetadata() }
           Divider()
           Button("Analyze Locally") { viewModel.analyzeLocally() }
+          Divider()
+          Button("Reveal an Edit Folder in Finder…") { viewModel.handOffEditFolder(to: nil) }
+          Button("Open an Edit Folder in DaVinci Resolve…") { viewModel.handOffEditFolder(to: "com.blackmagic-design.DaVinciResolve") }
+          Button("Open an Edit Folder in Final Cut Pro…") { viewModel.handOffEditFolder(to: "com.apple.FinalCut") }
         }
 
         Button { showingSettings = true } label: {
@@ -150,52 +197,6 @@ struct LibraryView: View {
         }
       }
     }
-    .sheet(isPresented: $showingSettings) { SettingsView() }
-    .sheet(isPresented: $showingBatchMetadata) { BatchMetadataView(vm: viewModel) }
-    .alert("New Tag", isPresented: $showingNewTagPrompt) {
-      TextField("Tag name", text: $newTagName)
-      Button("Add to Selection") {
-        viewModel.addProductionTagToSelection(newTagName)
-        newTagName = ""
-      }
-      Button("Cancel", role: .cancel) { newTagName = "" }
-    } message: {
-      Text("Adds this tag to every selected clip.")
-    }
-    .sheet(isPresented: $showingPreview) {
-      PlayerPreviewView(
-        library: viewModel,
-        onClose: {
-          viewModel.closePreview()
-          showingPreview = false
-        }
-      )
-    }
-    .onChange(of: viewModel.previewClip) { _, clip in
-      showingPreview = clip != nil
-    }
-    .onReceive(NotificationCenter.default.publisher(for: .clipKeep)) { _ in viewModel.setRating(5) }
-    .onReceive(NotificationCenter.default.publisher(for: .clipMaybe)) { _ in viewModel.setRating(3) }
-    .onReceive(NotificationCenter.default.publisher(for: .clipReject)) { _ in viewModel.setRating(1) }
-    .onReceive(NotificationCenter.default.publisher(for: .clipUnrated)) { _ in viewModel.setRating(0) }
-    .onReceive(NotificationCenter.default.publisher(for: .clipRating2)) { _ in viewModel.setRating(2) }
-    .onReceive(NotificationCenter.default.publisher(for: .clipRating4)) { _ in viewModel.setRating(4) }
-    .onReceive(NotificationCenter.default.publisher(for: .clipReveal)) { _ in viewModel.reveal() }
-    .onReceive(NotificationCenter.default.publisher(for: .clipPreview)) { _ in
-      if showingPreview {
-        // Space toggles playback inside PlayerPreviewView; keep the preview selection-bound.
-      } else {
-        viewModel.previewSelected()
-        showingPreview = viewModel.selectedClip != nil
-      }
-    }
-    .onReceive(NotificationCenter.default.publisher(for: .clipNext)) { _ in viewModel.selectNext() }
-    .onReceive(NotificationCenter.default.publisher(for: .clipPrevious)) { _ in viewModel.selectPrevious() }
-    .onReceive(NotificationCenter.default.publisher(for: .clipClosePreview)) { _ in
-      viewModel.closePreview()
-      showingPreview = false
-    }
-  }
 
   private func exportBanner(_ progress: ClipExportProgress) -> some View {
     HStack(spacing: 12) {
@@ -226,6 +227,21 @@ struct LibraryView: View {
     .background((summary.failedCount == 0 ? Color.green : Color.orange).opacity(0.10))
   }
 
+  private func aliasSummaryBanner(_ summary: AliasCreationSummary) -> some View {
+    HStack(spacing: 12) {
+      Label(summary.message, systemImage: summary.failedCount == 0 ? "link.circle.fill" : "exclamationmark.triangle.fill")
+        .font(.caption)
+        .foregroundStyle(summary.failedCount == 0 ? Color.accentColor : Color.orange)
+        .lineLimit(2)
+      Spacer()
+      Button("Reveal") { NSWorkspace.shared.activateFileViewerSelecting([summary.aliasesFolder]) }
+      Button("Dismiss") { viewModel.aliasSummary = nil }
+    }
+    .padding(.horizontal, 16)
+    .padding(.vertical, 8)
+    .background(Color.accentColor.opacity(0.10))
+  }
+
   private var partialBanner: some View {
     HStack(spacing: 12) {
       Label(
@@ -241,5 +257,33 @@ struct LibraryView: View {
     .padding(.horizontal, 16)
     .padding(.vertical, 10)
     .background(Color.orange.opacity(0.12))
+  }
+}
+
+private struct LibraryNotificationHandler: ViewModifier {
+  @ObservedObject var viewModel: LibraryViewModel
+  @Binding var showingPreview: Bool
+
+  func body(content: Content) -> some View {
+    content
+      .onChange(of: viewModel.previewClip) { _, clip in showingPreview = clip != nil }
+      .onReceive(NotificationCenter.default.publisher(for: .clipKeep)) { _ in viewModel.setRating(5) }
+      .onReceive(NotificationCenter.default.publisher(for: .clipMaybe)) { _ in viewModel.setRating(3) }
+      .onReceive(NotificationCenter.default.publisher(for: .clipReject)) { _ in viewModel.setRating(1) }
+      .onReceive(NotificationCenter.default.publisher(for: .clipUnrated)) { _ in viewModel.setRating(0) }
+      .onReceive(NotificationCenter.default.publisher(for: .clipRating2)) { _ in viewModel.setRating(2) }
+      .onReceive(NotificationCenter.default.publisher(for: .clipRating4)) { _ in viewModel.setRating(4) }
+      .onReceive(NotificationCenter.default.publisher(for: .clipReveal)) { _ in viewModel.reveal() }
+      .onReceive(NotificationCenter.default.publisher(for: .clipPreview)) { _ in
+        guard !showingPreview else { return }
+        viewModel.previewSelected()
+        showingPreview = viewModel.selectedClip != nil
+      }
+      .onReceive(NotificationCenter.default.publisher(for: .clipNext)) { _ in viewModel.selectNext() }
+      .onReceive(NotificationCenter.default.publisher(for: .clipPrevious)) { _ in viewModel.selectPrevious() }
+      .onReceive(NotificationCenter.default.publisher(for: .clipClosePreview)) { _ in
+        viewModel.closePreview()
+        showingPreview = false
+      }
   }
 }

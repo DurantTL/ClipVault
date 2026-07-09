@@ -54,6 +54,7 @@ struct ClipGridView: View {
     }
     .background(KeyboardShortcutCatcher { event in handle(event) }.frame(width: 0, height: 0))
     .focusable()
+    .focusEffectDisabled()
     .onDeleteCommand { vm.setStatus(.reject) }
   }
 
