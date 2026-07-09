@@ -6,6 +6,7 @@ struct NewIngestView: View {
   @Environment(\.dismiss) var dismiss
   @StateObject var vm = NewIngestViewModel()
   let openProject: (ClipVaultProject) -> Void
+  var onClose: (() -> Void)? = nil
 
   var body: some View {
     HStack(spacing: 0) {
@@ -73,7 +74,7 @@ struct NewIngestView: View {
           SourceVolumeCard(
             option: option,
             isSelected: vm.selectedSourceID == option.id,
-            onSelect: { vm.selectSource(option, settings: settings) }
+            onSelect: { vm.selectDetectedSource(option, settings: settings) }
           )
         }
       }
@@ -186,18 +187,30 @@ struct NewIngestView: View {
         Button("Start Ingest") {
           Task {
             if let project = await vm.start(settings: settings) {
-              dismiss()
               openProject(project)
+              closeIngestWindow()
             }
           }
         }
         .buttonStyle(.borderedProminent)
         .disabled(vm.selectedVideos.isEmpty || vm.projectName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || vm.destinationURL == nil)
-        Button("Cancel") { dismiss() }
+        Button("Cancel") {
+          vm.cancelPreviewThumbnailWork()
+          if vm.isIngesting { vm.ingestService.cancel() }
+          closeIngestWindow()
+        }
       }
       .padding(20)
     }
     .frame(width: 360)
+  }
+
+  private func closeIngestWindow() {
+    if let onClose {
+      onClose()
+    } else {
+      dismiss()
+    }
   }
 
   @ViewBuilder private var statusArea: some View {

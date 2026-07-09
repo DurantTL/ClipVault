@@ -33,7 +33,7 @@ enum SourceStructureBadge: String, Codable, Hashable {
 }
 
 struct SourceVolumeOption: Identifiable, Hashable {
-  let id: String
+  var id: String
   var name: String
   var url: URL
   var displayPath: String
@@ -48,6 +48,7 @@ struct SourceVolumeOption: Identifiable, Hashable {
   var iconName: String
   var structureBadge: SourceStructureBadge
   var isAvailable: Bool
+  var bookmarkData: Data?
 
   var capacitySummary: String {
     if let totalCapacity {
@@ -133,7 +134,8 @@ final class VolumeSourceService {
       volumeKind: kind,
       iconName: kind.iconName,
       structureBadge: quickStructureBadge(for: standardized),
-      isAvailable: fileManager.fileExists(atPath: standardized.path)
+      isAvailable: fileManager.fileExists(atPath: standardized.path),
+      bookmarkData: nil
     )
   }
 

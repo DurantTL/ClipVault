@@ -19,8 +19,11 @@ final class NewIngestWindowManager {
       return
     }
 
-    let root = NewIngestView(openProject: openProject)
-      .environmentObject(settings)
+    let root = NewIngestView(
+      openProject: openProject,
+      onClose: { NewIngestWindowManager.shared.close() }
+    )
+    .environmentObject(settings)
 
     let window = NSWindow(
       contentRect: NSRect(origin: .zero, size: defaultSize),
@@ -46,6 +49,11 @@ final class NewIngestWindowManager {
     window.makeKeyAndOrderFront(nil)
     NSApp.activate(ignoringOtherApps: true)
     currentWindow = window
+  }
+
+  func close() {
+    currentWindow?.close()
+    currentWindow = nil
   }
 
   private func clampedFrame(for proposedFrame: NSRect) -> NSRect {
