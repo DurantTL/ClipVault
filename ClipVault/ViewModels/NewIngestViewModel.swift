@@ -118,6 +118,13 @@ import Foundation
   }
 
   private func ensureAccessForDetectedSource(_ option: SourceVolumeOption) -> URL? {
+    // Camera cards are read-only sources. The removable-media sandbox entitlement
+    // permits scanning them directly, so card switching does not require a Finder
+    // confirmation for every mounted card.
+    if option.volumeKind == .removableCard {
+      return option.url
+    }
+
     if let bookmarkData = option.bookmarkData ?? sourceBookmarkDataByID[option.id],
       let resolved = try? bookmarks.resolve(bookmarkData) {
       // Refresh the persisted bookmark after resolution. This handles a mounted
