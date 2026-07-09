@@ -127,10 +127,11 @@ import Foundation
   }
 
   private func ensureAccessForDetectedSource(_ option: SourceVolumeOption) -> URL? {
-    // Camera cards are read-only sources. The removable-media sandbox entitlement
-    // permits scanning them directly, so card switching does not require a Finder
-    // confirmation for every mounted card.
-    if option.volumeKind == .removableCard {
+    // Only volumes that macOS itself identifies as removable can use the
+    // removable-media sandbox entitlement. Some card readers report an SD card
+    // as a fixed external USB volume even when ClipVault recognizes its camera
+    // layout; those need the normal one-time source picker below.
+    if option.isRemovable {
       return option.url
     }
 
