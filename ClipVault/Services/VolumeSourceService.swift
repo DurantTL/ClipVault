@@ -119,6 +119,14 @@ final class VolumeSourceService {
     let cloud = isCloudSyncedPath(standardized.path)
     let kind = manualKind ?? classify(url: standardized, name: name, isRemovable: isRemovable, isEjectable: isEjectable, isInternal: isInternal, isNetwork: isNetwork, isCloud: cloud, totalCapacity: values?.volumeTotalCapacity.map(Int64.init))
 
+    // Mount discovery runs whenever the ingest window opens or the app becomes
+    // active. Recursively probing a NAS or cloud-synced volume here can block the
+    // window before the user has chosen that source, so defer inspection until it
+    // is explicitly selected.
+    let badge: SourceStructureBadge = isNetwork || cloud
+      ? .unchecked
+      : quickStructureBadge(for: standardized)
+
     return SourceVolumeOption(
       id: standardized.path,
       name: name,
@@ -133,7 +141,7 @@ final class VolumeSourceService {
       isCloudSyncedGuess: cloud,
       volumeKind: kind,
       iconName: kind.iconName,
-      structureBadge: quickStructureBadge(for: standardized),
+      structureBadge: badge,
       isAvailable: fileManager.fileExists(atPath: standardized.path),
       bookmarkData: nil
     )

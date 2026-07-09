@@ -12,6 +12,7 @@ import Foundation
   @Published var progress = IngestProgress()
   @Published var error: String?
   @Published var isIngesting = false
+  @Published var isScanning = false
   @Published var canceledSummary: String?
   @Published var detectedCardType: DetectedCardType = .generic
   @Published var destinationFreeSpace: Int64?
@@ -181,21 +182,34 @@ import Foundation
 
   func scan(settings: AppSettings) {
     guard let sourceURL else { return }
-    do {
-      detectSonyCard()
-      cancelPreviewThumbnailWork()
-      maxConcurrentPreviewThumbnails = settings.performanceTuning().ingestPreviewThumbnailConcurrency
-      ingestPreviewThumbnails.cleanCache()
-      queuedPreviewThumbnailIDs.removeAll()
-      pendingPreviewThumbnailClips.removeAll()
-      activePreviewThumbnailCount = 0
+    detectSonyCard()
+    cancelPreviewThumbnailWork()
+    maxConcurrentPreviewThumbnails = settings.performanceTuning().ingestPreviewThumbnailConcurrency
+    ingestPreviewThumbnails.cleanCache()
+    queuedPreviewThumbnailIDs.removeAll()
+    pendingPreviewThumbnailClips.removeAll()
+    activePreviewThumbnailCount = 0
+    isScanning = true
+    error = nil
+
+    let includeProxyFiles = settings.includeProxyFiles
+    Task { [weak self] in
       let scanStart = Date()
-      videos = try scanner.scan(source: sourceURL, includeProxyFiles: settings.includeProxyFiles)
-      PerformanceLogger.shared.scan(duration: Date().timeIntervalSince(scanStart), fileCount: videos.count)
-      sessions = buildSessions(from: videos, source: sourceURL)
-      updateFreeSpace()
-      queueInitialPreviewThumbnails()
-    } catch { self.error = error.localizedDescription }
+      do {
+        let scannedVideos = try await Task.detached(priority: .userInitiated) {
+          try SourceScanner().scan(source: sourceURL, includeProxyFiles: includeProxyFiles)
+        }.value
+        guard let self, self.sourceURL == sourceURL else { return }
+        self.videos = scannedVideos
+        PerformanceLogger.shared.scan(duration: Date().timeIntervalSince(scanStart), fileCount: scannedVideos.count)
+        self.sessions = self.buildSessions(from: scannedVideos, source: sourceURL)
+        self.updateFreeSpace()
+        self.queueInitialPreviewThumbnails()
+      } catch {
+        self?.error = error.localizedDescription
+      }
+      self?.isScanning = false
+    }
   }
 
   func createProjectFolder() {
@@ -246,6 +260,7 @@ import Foundation
     if let error { return error }
     if let canceledSummary { return canceledSummary }
     if sourceURL == nil { return "No source selected" }
+    if isScanning { return "Scanning source…" }
     if destinationURL == nil { return "Destination not selected" }
     if sessions.isEmpty { return "No sessions scanned" }
     if selectedVideos.isEmpty { return "Nothing selected" }

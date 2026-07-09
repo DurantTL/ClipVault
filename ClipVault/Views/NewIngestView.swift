@@ -104,6 +104,14 @@ struct NewIngestView: View {
           }
           .padding(.bottom, 2)
         }
+        if vm.isScanning {
+          HStack(spacing: 8) {
+            ProgressView().controlSize(.small)
+            Text("Scanning source in the background…")
+              .font(.caption)
+              .foregroundStyle(.secondary)
+          }
+        }
       }
       ScrollView {
         LazyVStack(spacing: 12) {
@@ -193,7 +201,7 @@ struct NewIngestView: View {
           }
         }
         .buttonStyle(.borderedProminent)
-        .disabled(vm.selectedVideos.isEmpty || vm.projectName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || vm.destinationURL == nil)
+        .disabled(vm.isScanning || vm.selectedVideos.isEmpty || vm.projectName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || vm.destinationURL == nil)
         Button("Cancel") {
           vm.cancelPreviewThumbnailWork()
           if vm.isIngesting { vm.ingestService.cancel() }
