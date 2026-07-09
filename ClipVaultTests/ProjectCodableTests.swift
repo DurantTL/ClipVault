@@ -1,5 +1,5 @@
 import XCTest
-@testable import ClipVault
+@testable import SlateBox
 
 final class ProjectCodableTests: XCTestCase {
   private func encoder() -> JSONEncoder {
@@ -63,6 +63,8 @@ final class ProjectCodableTests: XCTestCase {
     project.projectTitle = "Service Edit"
     project.productionName = "Weekend"
     project.defaultTags = ["sermon", "wide"]
+    project.ingestCameraCardMetadata = IngestCameraCardMetadata(
+      cameraLabel: "A-Cam", cameraNameModel: "Sony a7R V", operatorName: "Caleb", cardOrReelName: "A001", shootDay: Date(timeIntervalSince1970: 1_700_000_000))
 
     let data = try encoder().encode(project)
     let decoded = try decoder().decode(ClipVaultProject.self, from: data)
@@ -78,6 +80,8 @@ final class ProjectCodableTests: XCTestCase {
     XCTAssertEqual(decoded.selectedSessionIDs, [sessionID])
     XCTAssertEqual(decoded.projectTitle, "Service Edit")
     XCTAssertEqual(decoded.defaultTags, ["sermon", "wide"])
+    XCTAssertEqual(decoded.ingestCameraCardMetadata?.cameraLabel, "A-Cam")
+    XCTAssertEqual(decoded.ingestCameraCardMetadata?.cardOrReelName, "A001")
   }
 
   func testOldProjectJSONMissingNewerFieldsDecodesWithSafeDefaults() throws {

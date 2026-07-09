@@ -1,5 +1,5 @@
 import XCTest
-@testable import ClipVault
+@testable import SlateBox
 
 final class ClipCodableTests: XCTestCase {
   private func encoder() -> JSONEncoder {
@@ -37,6 +37,10 @@ final class ClipCodableTests: XCTestCase {
     clip.manualShotTime = manualShotTime
     clip.shotTimeSource = .manual
     clip.productionTags = ["sermon"]
+    clip.cameraLabel = "A-Cam"
+    clip.camera = "Sony a7R V"
+    clip.cameraOperator = "Caleb"
+    clip.shootDay = capturedAt
     clip.automaticTags = ["face", "stable"]
     clip.customNotes = "Use this clip"
     clip.analysisStatus = .complete
@@ -57,6 +61,10 @@ final class ClipCodableTests: XCTestCase {
     XCTAssertEqual(decoded.manualShotTime, manualShotTime)
     XCTAssertEqual(decoded.shotTimeSource, .manual)
     XCTAssertEqual(decoded.productionTags, ["sermon"])
+    XCTAssertEqual(decoded.cameraLabel, "A-Cam")
+    XCTAssertEqual(decoded.camera, "Sony a7R V")
+    XCTAssertEqual(decoded.cameraOperator, "Caleb")
+    XCTAssertEqual(decoded.shootDay, capturedAt)
     XCTAssertEqual(decoded.automaticTags, ["face", "stable"])
     XCTAssertEqual(decoded.customNotes, "Use this clip")
     XCTAssertEqual(decoded.analysisStatus, .complete)

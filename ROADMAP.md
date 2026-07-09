@@ -125,14 +125,14 @@ Clip report, keep list, reject list, metadata JSON, verification report, and ana
 
 First version: reveal edit folder, open DaVinci Resolve / Final Cut Pro / Finder at the export folder. Later: FCPXML export, Resolve CSV/EDL/XML-style export, export by rating/status/tag, optional proxy folder.
 
-### Feature 8 — Ingest Camera / Card Metadata
+### Feature 8 — Ingest Camera / Card Metadata — ✅ first pass shipped
 
 - Add a **Camera / Card Info** section to New Ingest.
 - Let the user assign camera label, camera name/model, operator, card/reel name, and shoot day.
 - Auto-suggest labels such as A-Cam, B-Cam, A001, and A002 from project history.
 - Store camera/card metadata in `.clipvault-project.json` without changing source-card files.
 - Apply metadata to every clip copied from that source unless a clip has an explicit override.
-- Allow library sorting and filtering by camera, card, operator, and shoot day.
+- Allow library filtering by camera, card, operator, and shoot day.
 - Allow folder presets to use camera/card metadata.
 
 ### Feature 9 — Preflight Media Check / Already Imported Detection

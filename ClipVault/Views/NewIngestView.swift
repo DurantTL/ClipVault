@@ -148,6 +148,33 @@ struct NewIngestView: View {
           .textFieldStyle(.roundedBorder)
         TextField("Shoot/Subfolder Name (optional)", text: $vm.shootName)
           .textFieldStyle(.roundedBorder)
+        Divider()
+        Text("Camera / Card Info")
+          .font(.headline)
+        TextField("Camera label (A-Cam, B-Cam)", text: $vm.cameraCardMetadata.cameraLabel)
+          .textFieldStyle(.roundedBorder)
+        if !vm.cameraLabelSuggestions.isEmpty {
+          Picker("Recent label", selection: $vm.cameraCardMetadata.cameraLabel) {
+            Text("Choose a suggestion").tag("")
+            ForEach(vm.cameraLabelSuggestions, id: \.self) { Text($0).tag($0) }
+          }
+        }
+        TextField("Camera name / model", text: $vm.cameraCardMetadata.cameraNameModel)
+          .textFieldStyle(.roundedBorder)
+        TextField("Operator", text: $vm.cameraCardMetadata.operatorName)
+          .textFieldStyle(.roundedBorder)
+        TextField("Card / reel name", text: $vm.cameraCardMetadata.cardOrReelName)
+          .textFieldStyle(.roundedBorder)
+        Toggle("Set shoot day", isOn: Binding(
+          get: { vm.cameraCardMetadata.shootDay != nil },
+          set: { vm.cameraCardMetadata.shootDay = $0 ? (vm.cameraCardMetadata.shootDay ?? Date()) : nil }
+        ))
+        if let shootDay = Binding($vm.cameraCardMetadata.shootDay) {
+          DatePicker("Shoot day", selection: shootDay, displayedComponents: .date)
+        }
+        Text("Applied to copied clips from this source. Per-clip metadata remains editable after ingest.")
+          .font(.caption)
+          .foregroundStyle(.secondary)
         Button("Change Destination", systemImage: "folder.badge.plus") { vm.chooseDestination() }
         Text(vm.destinationURL?.path ?? "No destination selected")
           .font(.caption)

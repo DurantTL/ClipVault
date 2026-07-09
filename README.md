@@ -33,6 +33,10 @@ Open `SlateBox.xcodeproj` in Xcode 15 or newer on macOS 14+, select the `SlateBo
 7. Click **Start Copy**. SlateBox streams each file in chunks, updates progress during large copies, verifies the result, then generates metadata and a thumbnail only for successfully copied and verified clips.
 8. The library opens so clips can be previewed, marked Keep/Maybe/Reject, revealed in Finder, and moved into custom folders.
 
+### Camera and card metadata
+
+New Ingest includes a **Camera / Card Info** section for a camera label, camera name/model, operator, card or reel name, and optional shoot day. SlateBox suggests common labels plus recently used labels, saves the source assignment in the project JSON, and applies it to every copied clip from that source. Clip metadata can still be edited later as an override.
+
 ## Safety behavior
 
 - SlateBox never deletes source files.

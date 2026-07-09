@@ -36,6 +36,7 @@ struct ClipVaultProject: Identifiable, Codable {
   var cameraModel: String = ""
   var notes: String = ""
   var defaultTags: [String] = []
+  var ingestCameraCardMetadata: IngestCameraCardMetadata?
 
   init(
     id: UUID = UUID(),
@@ -90,7 +91,7 @@ struct ClipVaultProject: Identifiable, Codable {
     case totalSelectedClips, copiedClipCount, verifiedClipCount, failedClipCount, pendingClipCount
     case lastIngestDate, canResumeIngest, sourceSessions, selectedSessionIDs, customFolders, clips
     case projectTitle, productionName, clientOrOrganization, eventName, eventDate, location
-    case cameraOperator, cameraModel, notes, defaultTags
+    case cameraOperator, cameraModel, notes, defaultTags, ingestCameraCardMetadata
     case isComplete, complete, isInProgress, wasCanceled
   }
 
@@ -154,6 +155,7 @@ struct ClipVaultProject: Identifiable, Codable {
     cameraModel = try c.decodeIfPresent(String.self, forKey: .cameraModel) ?? ""
     notes = try c.decodeIfPresent(String.self, forKey: .notes) ?? ""
     defaultTags = try c.decodeIfPresent([String].self, forKey: .defaultTags) ?? []
+    ingestCameraCardMetadata = try c.decodeIfPresent(IngestCameraCardMetadata.self, forKey: .ingestCameraCardMetadata)
   }
 
   func encode(to encoder: Encoder) throws {
@@ -191,6 +193,7 @@ struct ClipVaultProject: Identifiable, Codable {
     try container.encode(cameraModel, forKey: .cameraModel)
     try container.encode(notes, forKey: .notes)
     try container.encode(defaultTags, forKey: .defaultTags)
+    try container.encodeIfPresent(ingestCameraCardMetadata, forKey: .ingestCameraCardMetadata)
   }
 
   private static func inferIngestStatus(

@@ -1,5 +1,22 @@
 import Foundation
 
+/// Metadata assigned once to a selected camera card at ingest. It is copied
+/// into the project record and each resulting clip, so later clip-level edits
+/// can override it without changing the source-card record.
+struct IngestCameraCardMetadata: Codable, Equatable {
+  var cameraLabel = ""
+  var cameraNameModel = ""
+  var operatorName = ""
+  var cardOrReelName = ""
+  var shootDay: Date?
+
+  var isEmpty: Bool {
+    cameraLabel.isEmpty && cameraNameModel.isEmpty && operatorName.isEmpty && cardOrReelName.isEmpty && shootDay == nil
+  }
+
+  static let defaults = ["A-Cam", "B-Cam", "A001", "A002"]
+}
+
 struct SourceVideo: Identifiable, Hashable, Codable {
   var id = UUID()
   let url: URL
