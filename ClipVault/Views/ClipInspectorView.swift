@@ -26,6 +26,16 @@ struct ClipInspectorView: View {
               Picker("Cull Status", selection: Binding(get: { clip.cullStatus }, set: { vm.setStatus($0) })) {
                 ForEach(CullStatus.allCases) { Text($0.label).tag($0) }
               }
+              HStack {
+                Text("Rating")
+                  .font(.caption)
+                Spacer()
+                StarRatingView(rating: clip.rating) { vm.setRating($0) }
+                if clip.rating > 0 {
+                  Button("Clear") { vm.setRating(0) }
+                    .controlSize(.mini)
+                }
+              }
             }
           }
           metadataSections(clip)
@@ -91,6 +101,12 @@ struct ClipInspectorView: View {
 
     inspectorCard("Analysis", systemImage: "waveform.and.magnifyingglass") {
       InfoRow("Analysis Status", clip.analysisStatus.label)
+      InfoRow("Quality Score", analysisValue(clip.analysisQualityScore))
+      InfoRow("Suggested Rating", clip.suggestedRating.map { "\($0) of 5" } ?? "Not analyzed")
+      if let suggested = clip.suggestedRating, suggested != clip.rating {
+        Button("Apply Suggested Rating (\(suggested)★)") { vm.setRating(suggested) }
+          .controlSize(.small)
+      }
       InfoRow("Focus", analysisValue(clip.focusScore, suffix: clip.focusWarning ? " — Possibly Out of Focus" : " — Sharp/Usable"))
       InfoRow("Stability", analysisValue(clip.stabilityScore, suffix: clip.possiblyShaky ? " — Possibly Shaky" : " — Stable"))
       InfoRow("Brightness", analysisValue(clip.brightnessScore, suffix: exposureLabel(clip)))

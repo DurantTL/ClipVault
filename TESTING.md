@@ -42,12 +42,28 @@ Use a small test folder with 5–10 short video clips before testing real SD car
 - [ ] Inspector is not too wide
 - [ ] Inspector can be hidden/shown
 - [ ] Spacebar preview works
-- [ ] 5 = Keep
-- [ ] 3 = Maybe
-- [ ] 1 = Reject
+- [ ] 5 = 5★ Keep/Favorite
+- [ ] 4 = 4★ Keep
+- [ ] 3 = 3★ Maybe
+- [ ] 2 = 2★ Maybe-Low
+- [ ] 1 = 1★ Reject
 - [ ] 0 = Unrated
+- [ ] Stars on cards and inspector set the rating
+- [ ] Setting cull status keeps a consistent rating (Keep does not downgrade 5★)
 - [ ] Auto-advance works in preview
 - [ ] Next/Previous preview works
+
+## Multi-Select and Batch
+
+- [ ] Command-click adds/removes clips from selection
+- [ ] Shift-click selects a range
+- [ ] Command-A selects all visible clips
+- [ ] Escape clears the multi-selection
+- [ ] Selection bar shows the selected count
+- [ ] Batch status/rating applies to all selected clips
+- [ ] Batch Add Tag / Remove Tag work
+- [ ] Batch Edit Metadata sheet applies tags, fields, and flags
+- [ ] Apply Suggested Ratings only changes unrated clips
 
 ## Persistence
 
@@ -60,6 +76,11 @@ Use a small test folder with 5–10 short video clips before testing real SD car
 
 ## Export
 
-- [ ] CSV export works
-- [ ] Copy Keeps to Edit Folder works
-- [ ] Export does not overwrite files
+- [ ] Copy Keeps to Edit Folder copies the right clips
+- [ ] Copy Keep + Maybe / 4–5 Star / Selected variants work
+- [ ] Export shows progress and a summary, then reveals the folder
+- [ ] Export does not overwrite files (duplicates get `_1`, `_2`)
+- [ ] Exporting with no matching clips shows an explanation instead of doing nothing
+- [ ] Clip Report / Keep List / Reject List CSVs export
+- [ ] Verification and Analysis report CSVs export
+- [ ] Source files are untouched after export

@@ -12,9 +12,82 @@ enum ClipSortOption: String, CaseIterable, Identifiable {
   case fileSize = "File Size"
   case cullStatus = "Cull Status"
   case ratingKeepStatus = "Rating/Keep Status"
+  case rating = "Star Rating"
+  case qualityScore = "Analysis Quality"
   case cameraType = "Camera Type"
 
   var id: String { rawValue }
+}
+
+enum ClipReportKind {
+  case allClips
+  case keeps
+  case rejects
+  case verification
+  case analysis
+
+  var defaultFilename: String {
+    switch self {
+    case .allClips: return "ClipVault-Clip-Report.csv"
+    case .keeps: return "ClipVault-Keep-List.csv"
+    case .rejects: return "ClipVault-Reject-List.csv"
+    case .verification: return "ClipVault-Verification-Report.csv"
+    case .analysis: return "ClipVault-Analysis-Report.csv"
+    }
+  }
+}
+
+enum EditFolderExportScope {
+  case keeps
+  case keepsAndMaybes
+  case fourPlusStars
+  case selected
+
+  var label: String {
+    switch self {
+    case .keeps: return "Keeps"
+    case .keepsAndMaybes: return "Keep + Maybe"
+    case .fourPlusStars: return "4–5 Star Clips"
+    case .selected: return "Selected Clips"
+    }
+  }
+}
+
+struct BatchMetadataEdit {
+  enum TagMode: String, CaseIterable, Identifiable {
+    case append = "Append"
+    case replace = "Replace"
+    case remove = "Remove"
+    var id: String { rawValue }
+  }
+
+  enum FlagAction: String, CaseIterable, Identifiable {
+    case leave = "Leave"
+    case set = "Set"
+    case clear = "Clear"
+    var id: String { rawValue }
+  }
+
+  var tagsText = ""
+  var tagMode: TagMode = .append
+  var peopleText = ""
+  var location = ""
+  var scene = ""
+  var shotType = ""
+  var notes = ""
+  var favorite: FlagAction = .leave
+  var broll: FlagAction = .leave
+  var sermon: FlagAction = .leave
+  var interview: FlagAction = .leave
+  var socialClipCandidate: FlagAction = .leave
+
+  var parsedTags: [String] {
+    tagsText.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+  }
+
+  var parsedPeople: [String] {
+    peopleText.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+  }
 }
 
 @MainActor final class LibraryViewModel: ObservableObject {
@@ -27,6 +100,10 @@ enum ClipSortOption: String, CaseIterable, Identifiable {
   @AppStorage("libraryInspectorVisible") var inspectorVisible = true
   @Published var previewClip: Clip?
   @Published var thumbnailSize: Double = 190
+  @Published var exportProgress: ClipExportProgress?
+  @Published var exportSummary: ClipExportSummary?
+  private var selectionAnchorID: UUID?
+  private let exporter = ClipExportService()
 
   let store = ProjectStore()
   let mover = FileMoveService()
@@ -59,7 +136,8 @@ enum ClipSortOption: String, CaseIterable, Identifiable {
 
   var smartFolders: [String] {
     [
-      "All Clips", "Unrated", "Keep", "Maybe", "Reject", "4K", "60p", "Has Audio", "No Audio",
+      "All Clips", "Unrated", "Keep", "Maybe", "Reject", "Favorites (5-Star)", "4+ Stars",
+      "Top Pick Suggestions", "Social Pick Suggestions", "4K", "60p", "Has Audio", "No Audio",
       "Short Clips", "Long Clips", "Large Files", "Sony", "Canon/DCF", "Recently Ingested", "Failed Preview",
       "Failed Verification", "Social Candidates", "Interviews", "B-Roll", "Sermon",
       "Possibly Out of Focus", "Faces", "Group Shots", "Close Faces", "Low Face Visibility",
@@ -77,8 +155,24 @@ enum ClipSortOption: String, CaseIterable, Identifiable {
   var selectionCount: Int { selectedClipIDs.isEmpty ? (selectedClipID == nil ? 0 : 1) : selectedClipIDs.count }
 
   func setStatus(_ status: CullStatus) {
-    updateSelected { $0.cullStatus = status }
+    updateSelected { $0.applyCullStatus(status) }
     if AppSettings.autoAdvanceAfterRating { advanceAfterRating() }
+  }
+
+  func setRating(_ value: Int) {
+    updateSelected { $0.applyRating(value) }
+    if AppSettings.autoAdvanceAfterRating { advanceAfterRating() }
+  }
+
+  /// Applies analysis-suggested ratings, but only to clips the user has not
+  /// rated yet. Suggestions never overwrite a human decision.
+  func applySuggestedRatingsToUnrated() {
+    for index in project.clips.indices {
+      let clip = project.clips[index]
+      guard clip.rating == 0, clip.cullStatus == .unrated, let suggested = clip.suggestedRating else { continue }
+      project.clips[index].applyRating(suggested)
+    }
+    save()
   }
 
   func updateSelected(_ edit: (inout Clip) -> Void) {
@@ -100,7 +194,34 @@ enum ClipSortOption: String, CaseIterable, Identifiable {
       }
     } else {
       selectedClipIDs = [clip.id]
+      selectionAnchorID = clip.id
     }
+  }
+
+  /// Shift-click: selects every visible clip between the selection anchor
+  /// (the last plain click) and the clicked clip.
+  func selectRange(to clip: Clip) {
+    let clips = filteredClips
+    guard let clickedIndex = clips.firstIndex(where: { $0.id == clip.id }) else { return }
+    let anchorID = selectionAnchorID ?? selectedClipID
+    guard let anchorIndex = anchorID.flatMap({ id in clips.firstIndex { $0.id == id } }) else {
+      select(clip)
+      return
+    }
+    let range = min(anchorIndex, clickedIndex)...max(anchorIndex, clickedIndex)
+    selectedClipIDs.formUnion(clips[range].map(\.id))
+    selectedClipID = clip.id
+  }
+
+  func selectAllVisible() {
+    let clips = filteredClips
+    selectedClipIDs = Set(clips.map(\.id))
+    if selectedClipID == nil { selectedClipID = clips.first?.id }
+  }
+
+  /// Escape: collapses a multi-selection back to the focused clip.
+  func clearMultiSelection() {
+    selectedClipIDs = Set(selectedClipID.map { [$0] } ?? [])
   }
 
   func selectNext() { select(offset: 1) }
@@ -309,6 +430,108 @@ enum ClipSortOption: String, CaseIterable, Identifiable {
     }
   }
 
+  func removeProductionTagFromSelection(_ tag: String) {
+    updateSelected { clip in
+      clip.productionTags.removeAll { $0 == tag }
+    }
+  }
+
+  /// Tags present on any clip in the current selection, for the Remove Tag menu.
+  var productionTagsInSelection: [String] {
+    let ids = activeSelectionIDs
+    let tags = project.clips.filter { ids.contains($0.id) }.flatMap(\.productionTags)
+    return Array(Set(tags)).sorted()
+  }
+
+  func applyBatchMetadata(_ edit: BatchMetadataEdit) {
+    let tags = edit.parsedTags
+    let people = edit.parsedPeople
+    updateSelected { clip in
+      switch edit.tagMode {
+      case .append:
+        for tag in tags where !clip.productionTags.contains(tag) { clip.productionTags.append(tag) }
+      case .replace:
+        if !tags.isEmpty { clip.productionTags = tags }
+      case .remove:
+        clip.productionTags.removeAll { tags.contains($0) }
+      }
+      for person in people where !clip.people.contains(person) { clip.people.append(person) }
+      if !edit.location.isEmpty { clip.location = edit.location }
+      if !edit.scene.isEmpty { clip.scene = edit.scene }
+      if !edit.shotType.isEmpty { clip.shotType = edit.shotType }
+      if !edit.notes.isEmpty { clip.customNotes = edit.notes }
+      apply(edit.favorite, to: &clip.favorite)
+      apply(edit.broll, to: &clip.isBroll)
+      apply(edit.sermon, to: &clip.isSermon)
+      apply(edit.interview, to: &clip.isInterview)
+      apply(edit.socialClipCandidate, to: &clip.isSocialClipCandidate)
+    }
+  }
+
+  private func apply(_ action: BatchMetadataEdit.FlagAction, to flag: inout Bool) {
+    switch action {
+    case .leave: break
+    case .set: flag = true
+    case .clear: flag = false
+    }
+  }
+
+  func copyToEditFolder(_ scope: EditFolderExportScope) {
+    let clips = exportableClips(for: scope)
+    guard !clips.isEmpty else {
+      let alert = NSAlert()
+      alert.messageText = "No clips to copy"
+      alert.informativeText = "No copied clips match \(scope.label). Rate or select clips first, and make sure they finished copying."
+      alert.runModal()
+      return
+    }
+    let panel = NSOpenPanel()
+    panel.title = "Choose Edit Folder"
+    panel.message = "ClipVault will copy \(clips.count) clip\(clips.count == 1 ? "" : "s") (\(scope.label)) into this folder. Nothing is moved or overwritten."
+    panel.prompt = "Copy Here"
+    panel.canChooseDirectories = true
+    panel.canChooseFiles = false
+    panel.allowsMultipleSelection = false
+    panel.canCreateDirectories = true
+    guard panel.runModal() == .OK, let destination = panel.url else { return }
+
+    let items = clips.compactMap { clip -> (clip: Clip, mediaURL: URL)? in
+      guard let url = resolvedMediaURL(for: clip) else { return nil }
+      return (clip, url)
+    }
+    exportSummary = nil
+    exportProgress = ClipExportProgress(completed: 0, total: items.count, currentFilename: "")
+    Task { [weak self] in
+      guard let self else { return }
+      let summary = await self.exporter.copyClips(items, to: destination) { progress in
+        self.exportProgress = progress
+      }
+      self.exportProgress = nil
+      self.exportSummary = summary
+      NSWorkspace.shared.activateFileViewerSelecting([destination])
+    }
+  }
+
+  private func exportableClips(for scope: EditFolderExportScope) -> [Clip] {
+    let eligible = filteredClipsForExport
+    switch scope {
+    case .keeps: return eligible.filter { $0.cullStatus == .keep }
+    case .keepsAndMaybes: return eligible.filter { $0.cullStatus == .keep || $0.cullStatus == .maybe }
+    case .fourPlusStars: return eligible.filter { $0.rating >= 4 }
+    case .selected:
+      let ids = activeSelectionIDs
+      return eligible.filter { ids.contains($0.id) }
+    }
+  }
+
+  /// Only copied project media leaves the project. Pending or failed clips
+  /// never export, so no export can ever read from a source card.
+  private var filteredClipsForExport: [Clip] {
+    project.clips.filter { clip in
+      (clip.copyStatus == .copied || clip.verificationStatus == .verified) && resolvedMediaURL(for: clip) != nil
+    }
+  }
+
   /// Fast, non-destructive duplicate detection for a large project. Candidates
   /// share an original filename and byte size; no media is read or altered.
   func findDuplicateCandidates() {
@@ -384,12 +607,17 @@ enum ClipSortOption: String, CaseIterable, Identifiable {
     return ordered
   }
 
-  func exportClipReport(keepsOnly: Bool = false) {
+  func exportClipReport(_ kind: ClipReportKind = .allClips) {
     let panel = NSSavePanel()
-    panel.nameFieldStringValue = keepsOnly ? "ClipVault-Keep-List.csv" : "ClipVault-Clip-Report.csv"
+    panel.nameFieldStringValue = kind.defaultFilename
     guard panel.runModal() == .OK, let url = panel.url else { return }
-    let clips = project.clips.filter { !keepsOnly || $0.cullStatus == .keep }
-    try? csv(for: clips).write(to: url, atomically: true, encoding: .utf8)
+    let clips: [Clip]
+    switch kind {
+    case .keeps: clips = project.clips.filter { $0.cullStatus == .keep }
+    case .rejects: clips = project.clips.filter { $0.cullStatus == .reject }
+    case .allClips, .verification, .analysis: clips = project.clips
+    }
+    try? csv(for: clips, kind: kind).write(to: url, atomically: true, encoding: .utf8)
   }
 
   func exportProjectMetadata() {
@@ -521,6 +749,10 @@ enum ClipSortOption: String, CaseIterable, Identifiable {
     case "Keep": return clip.cullStatus == .keep
     case "Maybe": return clip.cullStatus == .maybe
     case "Reject": return clip.cullStatus == .reject
+    case "Favorites (5-Star)": return clip.rating == 5
+    case "4+ Stars": return clip.rating >= 4
+    case "Top Pick Suggestions": return clip.automaticTags.contains("Top Pick Suggestion")
+    case "Social Pick Suggestions": return clip.automaticTags.contains("Social Pick Suggestion")
     case "Verified": return clip.verificationStatus == .verified
     case "Failed", "Failed Verification": return clip.verificationStatus == .failed
     case "Has Audio": return clip.hasAudio == true || clip.automaticTags.contains("Has Audio")
@@ -552,7 +784,9 @@ enum ClipSortOption: String, CaseIterable, Identifiable {
     case .modifiedDate: sorted = clips.sorted { ($0.modifiedAt ?? .distantPast) < ($1.modifiedAt ?? .distantPast) }
     case .duration: sorted = clips.sorted { ($0.duration ?? 0) < ($1.duration ?? 0) }
     case .fileSize: sorted = clips.sorted { $0.fileSize < $1.fileSize }
-    case .cullStatus, .ratingKeepStatus: sorted = clips.sorted { $0.cullStatus.rawValue < $1.cullStatus.rawValue }
+    case .cullStatus: sorted = clips.sorted { $0.cullStatus.rawValue < $1.cullStatus.rawValue }
+    case .ratingKeepStatus, .rating: sorted = clips.sorted { ($0.rating, $0.cullStatus.rawValue) < ($1.rating, $1.cullStatus.rawValue) }
+    case .qualityScore: sorted = clips.sorted { ($0.analysisQualityScore ?? -1) < ($1.analysisQualityScore ?? -1) }
     case .cameraType: sorted = clips.sorted { ($0.cardVolumeName ?? "").localizedStandardCompare($1.cardVolumeName ?? "") == .orderedAscending }
     }
     return sortAscending ? sorted : Array(sorted.reversed())
@@ -603,24 +837,88 @@ enum ClipSortOption: String, CaseIterable, Identifiable {
     }
   }
 
-  private func csv(for clips: [Clip]) -> String {
-    let header = "filename,cull status,duration,size,resolution,frame rate,codec,tags,notes,source path,destination path"
+  private struct CSVColumn {
+    let title: String
+    let value: (Clip) -> String
+
+    init(_ title: String, _ value: @escaping (Clip) -> String) {
+      self.title = title
+      self.value = value
+    }
+  }
+
+  private func csv(for clips: [Clip], kind: ClipReportKind = .allClips) -> String {
+    let columns = csvColumns(for: kind)
+    let header = columns.map(\.title).joined(separator: ",")
     let rows = clips.map { clip in
-      [
-        clip.currentFilename,
-        clip.cullStatus.label,
-        DurationFormatterUtil.string(clip.duration),
-        FileSizeFormatterUtil.string(clip.fileSize),
-        "\(clip.width.map(String.init) ?? "?")x\(clip.height.map(String.init) ?? "?")",
-        clip.frameRate.map { String(format: "%.2f", $0) } ?? "",
-        clip.codec ?? "",
-        clip.productionTags.joined(separator: "; "),
-        clip.customNotes,
-        clip.originalSourcePath,
-        clip.currentPath
-      ].map(escapeCSV).joined(separator: ",")
+      columns.map { escapeCSV($0.value(clip)) }.joined(separator: ",")
     }
     return ([header] + rows).joined(separator: "\n")
+  }
+
+  private func csvColumns(for kind: ClipReportKind) -> [CSVColumn] {
+    func score(_ value: Double?) -> String { value.map { String(format: "%.0f", $0) } ?? "" }
+    let identity: [CSVColumn] = [
+      CSVColumn("filename", { $0.currentFilename }),
+      CSVColumn("original filename", { $0.originalFilename })
+    ]
+    let cull: [CSVColumn] = [
+      CSVColumn("cull status", { $0.cullStatus.label }),
+      CSVColumn("rating", { String($0.rating) })
+    ]
+    let technical: [CSVColumn] = [
+      CSVColumn("duration", { DurationFormatterUtil.string($0.duration) }),
+      CSVColumn("file size", { FileSizeFormatterUtil.string($0.fileSize) }),
+      CSVColumn("resolution", { "\($0.width.map(String.init) ?? "?")x\($0.height.map(String.init) ?? "?")" }),
+      CSVColumn("frame rate", { $0.frameRate.map { String(format: "%.2f", $0) } ?? "" }),
+      CSVColumn("codec", { $0.codec ?? "" }),
+      CSVColumn("shot time", { $0.effectiveShotTime.map { DateFormatter.localizedString(from: $0, dateStyle: .short, timeStyle: .medium) } ?? "" }),
+      CSVColumn("shot time source", { $0.manualShotTime == nil ? $0.shotTimeSource.label : ShotTimeSource.manual.label })
+    ]
+    let production: [CSVColumn] = [
+      CSVColumn("tags", { $0.productionTags.joined(separator: "; ") }),
+      CSVColumn("people", { $0.people.joined(separator: "; ") }),
+      CSVColumn("location", { $0.location }),
+      CSVColumn("scene", { $0.scene }),
+      CSVColumn("shot type", { $0.shotType }),
+      CSVColumn("notes", { $0.customNotes }),
+      CSVColumn("automatic tags", { $0.automaticTags.joined(separator: "; ") })
+    ]
+    let analysis: [CSVColumn] = [
+      CSVColumn("analysis status", { $0.analysisStatus.label }),
+      CSVColumn("quality score", { score($0.analysisQualityScore) }),
+      CSVColumn("suggested rating", { $0.suggestedRating.map(String.init) ?? "" }),
+      CSVColumn("focus score", { score($0.focusScore) }),
+      CSVColumn("stability score", { score($0.stabilityScore) }),
+      CSVColumn("brightness", { score($0.brightnessScore) }),
+      CSVColumn("contrast", { score($0.contrastScore) }),
+      CSVColumn("white balance estimate", { $0.whiteBalanceKelvin.map { "\($0)K" } ?? "" }),
+      CSVColumn("face count", { $0.maxFaceCount.map(String.init) ?? "" }),
+      CSVColumn("face visibility", { score($0.faceVisibilityScore) })
+    ]
+    let paths: [CSVColumn] = [
+      CSVColumn("source path", { $0.originalSourcePath }),
+      CSVColumn("destination path", { $0.currentPath })
+    ]
+    let status: [CSVColumn] = [
+      CSVColumn("verification status", { $0.verificationStatus.rawValue }),
+      CSVColumn("thumbnail status", { $0.thumbnailStatus.rawValue })
+    ]
+    switch kind {
+    case .verification:
+      return identity + [
+        CSVColumn("expected size", { FileSizeFormatterUtil.string($0.expectedFileSize) }),
+        CSVColumn("copied size", { FileSizeFormatterUtil.string($0.fileSize) }),
+        CSVColumn("checksum", { $0.checksum ?? "" }),
+        CSVColumn("copy status", { $0.copyStatus.rawValue }),
+        CSVColumn("verification status", { $0.verificationStatus.rawValue }),
+        CSVColumn("error", { $0.errorMessage ?? "" })
+      ] + paths
+    case .analysis:
+      return identity + cull + analysis + [CSVColumn("sampled frames", { $0.sampledFrameCount.map(String.init) ?? "" })]
+    case .allClips, .keeps, .rejects:
+      return identity + cull + technical + production + analysis + paths + status
+    }
   }
 
   private func escapeCSV(_ value: String) -> String {

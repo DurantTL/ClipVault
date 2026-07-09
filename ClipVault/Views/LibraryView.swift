@@ -7,6 +7,9 @@ struct LibraryView: View {
   @State private var newFolder = ""
   @State private var showingSettings = false
   @State private var showingPreview = false
+  @State private var showingBatchMetadata = false
+  @State private var showingNewTagPrompt = false
+  @State private var newTagName = ""
 
   var body: some View {
     HSplitView {
@@ -15,6 +18,12 @@ struct LibraryView: View {
       VStack(spacing: 0) {
         if viewModel.project.ingestStatus != .complete {
           partialBanner
+        }
+        if let progress = viewModel.exportProgress {
+          exportBanner(progress)
+        }
+        if let summary = viewModel.exportSummary {
+          exportSummaryBanner(summary)
         }
         ClipGridView(vm: viewModel)
           .frame(minWidth: 650, maxWidth: .infinity, maxHeight: .infinity)
@@ -53,7 +62,7 @@ struct LibraryView: View {
 
       ToolbarItemGroup {
         Picker("Filter", selection: $viewModel.filter) {
-          ForEach(["All Clips", "Unrated", "Keep", "Maybe", "Reject", "Verified", "Failed", "Has Audio", "No Audio", "4K", "60p", "Short Clip", "Long Clip"], id: \.self) { filter in
+          ForEach(["All Clips", "Unrated", "Keep", "Maybe", "Reject", "Favorites (5-Star)", "4+ Stars", "Top Pick Suggestions", "Social Pick Suggestions", "Verified", "Failed", "Has Audio", "No Audio", "4K", "60p", "Short Clip", "Long Clip"], id: \.self) { filter in
             Text(filter).tag(filter)
           }
         }
@@ -75,10 +84,39 @@ struct LibraryView: View {
         }
 
         Menu("Batch") {
+          Button("Select All Visible (⌘A)") { viewModel.selectAllVisible() }
+          Button("Clear Multi-Selection (Esc)") { viewModel.clearMultiSelection() }
+          Divider()
           Button("Mark selected as Keep") { viewModel.setStatus(.keep) }
           Button("Mark selected as Maybe") { viewModel.setStatus(.maybe) }
           Button("Mark selected as Reject") { viewModel.setStatus(.reject) }
           Button("Clear rating") { viewModel.setStatus(.unrated) }
+          Menu("Set Rating") {
+            ForEach([5, 4, 3, 2, 1, 0], id: \.self) { value in
+              Button(value == 0 ? "0 — Unrated" : "\(value) \(String(repeating: "★", count: value))") {
+                viewModel.setRating(value)
+              }
+            }
+          }
+          Divider()
+          Menu("Add Tag") {
+            ForEach(viewModel.productionTags, id: \.self) { tag in
+              Button(tag) { viewModel.addProductionTagToSelection(tag) }
+            }
+            Divider()
+            Button("New Tag…") { showingNewTagPrompt = true }
+          }
+          Menu("Remove Tag") {
+            ForEach(viewModel.productionTagsInSelection, id: \.self) { tag in
+              Button(tag) { viewModel.removeProductionTagFromSelection(tag) }
+            }
+          }
+          Menu("Move to Folder") {
+            ForEach(viewModel.project.customFolders, id: \.self) { folder in
+              Button(folder) { viewModel.moveSelected(to: folder) }
+            }
+          }
+          Button("Batch Edit Metadata…") { showingBatchMetadata = true }
           Divider()
           Button("Copy filenames to clipboard") { viewModel.copySelectedFilenames() }
           Button("Reveal selected in Finder") { viewModel.reveal() }
@@ -88,11 +126,20 @@ struct LibraryView: View {
           Button("Regenerate Thumbnails for Selected Clips") { viewModel.regenerateThumbnailsForSelectedClips() }
           Divider()
           Button("Find Duplicate Candidates") { viewModel.findDuplicateCandidates() }
+          Button("Apply Suggested Ratings to Unrated Clips") { viewModel.applySuggestedRatingsToUnrated() }
         }
 
         Menu("Export") {
-          Button("Export Clip Report CSV") { viewModel.exportClipReport() }
-          Button("Export Keep List CSV") { viewModel.exportClipReport(keepsOnly: true) }
+          Button("Copy Keeps to Edit Folder…") { viewModel.copyToEditFolder(.keeps) }
+          Button("Copy Keep + Maybe to Edit Folder…") { viewModel.copyToEditFolder(.keepsAndMaybes) }
+          Button("Copy 4–5 Star Clips to Edit Folder…") { viewModel.copyToEditFolder(.fourPlusStars) }
+          Button("Copy Selected Clips to Folder…") { viewModel.copyToEditFolder(.selected) }
+          Divider()
+          Button("Export Clip Report CSV") { viewModel.exportClipReport(.allClips) }
+          Button("Export Keep List CSV") { viewModel.exportClipReport(.keeps) }
+          Button("Export Reject List CSV") { viewModel.exportClipReport(.rejects) }
+          Button("Export Verification Report CSV") { viewModel.exportClipReport(.verification) }
+          Button("Export Analysis Report CSV") { viewModel.exportClipReport(.analysis) }
           Button("Export Project Metadata JSON") { viewModel.exportProjectMetadata() }
           Divider()
           Button("Analyze Locally") { viewModel.analyzeLocally() }
@@ -104,6 +151,17 @@ struct LibraryView: View {
       }
     }
     .sheet(isPresented: $showingSettings) { SettingsView() }
+    .sheet(isPresented: $showingBatchMetadata) { BatchMetadataView(vm: viewModel) }
+    .alert("New Tag", isPresented: $showingNewTagPrompt) {
+      TextField("Tag name", text: $newTagName)
+      Button("Add to Selection") {
+        viewModel.addProductionTagToSelection(newTagName)
+        newTagName = ""
+      }
+      Button("Cancel", role: .cancel) { newTagName = "" }
+    } message: {
+      Text("Adds this tag to every selected clip.")
+    }
     .sheet(isPresented: $showingPreview) {
       PlayerPreviewView(
         library: viewModel,
@@ -116,10 +174,12 @@ struct LibraryView: View {
     .onChange(of: viewModel.previewClip) { _, clip in
       showingPreview = clip != nil
     }
-    .onReceive(NotificationCenter.default.publisher(for: .clipKeep)) { _ in viewModel.setStatus(.keep) }
-    .onReceive(NotificationCenter.default.publisher(for: .clipMaybe)) { _ in viewModel.setStatus(.maybe) }
-    .onReceive(NotificationCenter.default.publisher(for: .clipReject)) { _ in viewModel.setStatus(.reject) }
-    .onReceive(NotificationCenter.default.publisher(for: .clipUnrated)) { _ in viewModel.setStatus(.unrated) }
+    .onReceive(NotificationCenter.default.publisher(for: .clipKeep)) { _ in viewModel.setRating(5) }
+    .onReceive(NotificationCenter.default.publisher(for: .clipMaybe)) { _ in viewModel.setRating(3) }
+    .onReceive(NotificationCenter.default.publisher(for: .clipReject)) { _ in viewModel.setRating(1) }
+    .onReceive(NotificationCenter.default.publisher(for: .clipUnrated)) { _ in viewModel.setRating(0) }
+    .onReceive(NotificationCenter.default.publisher(for: .clipRating2)) { _ in viewModel.setRating(2) }
+    .onReceive(NotificationCenter.default.publisher(for: .clipRating4)) { _ in viewModel.setRating(4) }
     .onReceive(NotificationCenter.default.publisher(for: .clipReveal)) { _ in viewModel.reveal() }
     .onReceive(NotificationCenter.default.publisher(for: .clipPreview)) { _ in
       if showingPreview {
@@ -135,6 +195,35 @@ struct LibraryView: View {
       viewModel.closePreview()
       showingPreview = false
     }
+  }
+
+  private func exportBanner(_ progress: ClipExportProgress) -> some View {
+    HStack(spacing: 12) {
+      ProgressView(value: Double(progress.completed), total: Double(max(progress.total, 1)))
+        .frame(maxWidth: 260)
+      Text("Copying \(progress.completed + 1) of \(progress.total)\(progress.currentFilename.isEmpty ? "" : " — \(progress.currentFilename)")")
+        .font(.caption)
+        .lineLimit(1)
+      Spacer()
+    }
+    .padding(.horizontal, 16)
+    .padding(.vertical, 8)
+    .background(Color.blue.opacity(0.10))
+  }
+
+  private func exportSummaryBanner(_ summary: ClipExportSummary) -> some View {
+    HStack(spacing: 12) {
+      Label(summary.message, systemImage: summary.failedCount == 0 ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+        .font(.caption)
+        .foregroundStyle(summary.failedCount == 0 ? Color.green : Color.orange)
+        .lineLimit(2)
+      Spacer()
+      Button("Reveal") { NSWorkspace.shared.activateFileViewerSelecting([summary.destination]) }
+      Button("Dismiss") { viewModel.exportSummary = nil }
+    }
+    .padding(.horizontal, 16)
+    .padding(.vertical, 8)
+    .background((summary.failedCount == 0 ? Color.green : Color.orange).opacity(0.10))
   }
 
   private var partialBanner: some View {

@@ -76,6 +76,7 @@ struct Clip: Identifiable, Codable, Equatable, Transferable {
   var checksum: String?
   var verificationStatus: VerificationStatus = .pending
   var cullStatus: CullStatus = .unrated
+  var rating: Int = 0
   var assignedFolder: String?
   var thumbnailPath: String?
   var thumbnailStatus: ThumbnailStatus = .pending
@@ -141,7 +142,7 @@ struct Clip: Identifiable, Codable, Equatable, Transferable {
     case copyStatus, duration, width, height, frameRate, codec, bitDepth, hasAudio, audioChannelCount
     case orientation, estimatedBitrate, createdAt, modifiedAt, capturedAt, shotStartTime, manualShotTime
     case shotTimeSource, ingestDate, sonyCardFolderPath, cardVolumeName
-    case checksum, verificationStatus, cullStatus, assignedFolder, thumbnailPath, thumbnailStatus, thumbnailErrorMessage, errorMessage
+    case checksum, verificationStatus, cullStatus, rating, assignedFolder, thumbnailPath, thumbnailStatus, thumbnailErrorMessage, errorMessage
     case previewUnavailable, title, description, productionTags, people, location, scene, shotType, camera
     case lens, audioNotes, transcriptNotes, usageNotes, colorLabel, favorite, isBroll, isSermon
     case isInterview, isSocialClipCandidate, customNotes, automaticTags, analysisStatus, focusScore
@@ -207,6 +208,9 @@ struct Clip: Identifiable, Codable, Equatable, Transferable {
     let legacyVerified = try c.decodeIfPresent(Bool.self, forKey: .verified) ?? false
     verificationStatus = try c.decodeIfPresent(VerificationStatus.self, forKey: .verificationStatus) ?? (legacyVerified ? .verified : .pending)
     cullStatus = try c.decodeIfPresent(CullStatus.self, forKey: .cullStatus) ?? .unrated
+    // Older projects have no rating; derive one from the cull status so
+    // existing Keep/Maybe/Reject decisions carry into the 0–5 scale.
+    rating = try c.decodeIfPresent(Int.self, forKey: .rating) ?? cullStatus.defaultRating
     thumbnailStatus = try c.decodeIfPresent(ThumbnailStatus.self, forKey: .thumbnailStatus) ?? .pending
     analysisStatus = try c.decodeIfPresent(AnalysisStatus.self, forKey: .analysisStatus) ?? .notAnalyzed
     // Decode remaining optional/simple fields with defaults.
@@ -324,6 +328,7 @@ struct Clip: Identifiable, Codable, Equatable, Transferable {
     try c.encodeIfPresent(checksum, forKey: .checksum)
     try c.encode(verificationStatus, forKey: .verificationStatus)
     try c.encode(cullStatus, forKey: .cullStatus)
+    try c.encode(rating, forKey: .rating)
     try c.encodeIfPresent(assignedFolder, forKey: .assignedFolder)
     try c.encodeIfPresent(thumbnailPath, forKey: .thumbnailPath)
     try c.encode(thumbnailStatus, forKey: .thumbnailStatus)
@@ -384,6 +389,22 @@ struct Clip: Identifiable, Codable, Equatable, Transferable {
   }
 
   var effectiveShotTime: Date? { manualShotTime ?? shotStartTime ?? capturedAt ?? createdAt ?? modifiedAt }
+
+  /// Sets the 0–5 rating and keeps the coarse cull status in sync
+  /// (0 → Unrated, 1 → Reject, 2–3 → Maybe, 4–5 → Keep).
+  mutating func applyRating(_ value: Int) {
+    rating = min(5, max(0, value))
+    cullStatus = CullStatus.status(forRating: rating)
+  }
+
+  /// Sets the cull status directly. The rating is only adjusted when it
+  /// disagrees with the new status, so a 5-star clip marked Keep stays 5-star.
+  mutating func applyCullStatus(_ status: CullStatus) {
+    cullStatus = status
+    if !status.consistentRatings.contains(rating) {
+      rating = status.defaultRating
+    }
+  }
 
   static var transferRepresentation: some TransferRepresentation {
     CodableRepresentation(contentType: .data)
