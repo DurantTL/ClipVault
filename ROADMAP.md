@@ -78,12 +78,12 @@ Make the existing core loop provably reliable before adding surface area.
 ## Phase 2 — Distribution (make it a product)
 
 - **Final name decision** — blocked on App Store Connect availability; now a one-file change plus the `AppBrand.swift` checklist.
-- **Real brand asset**: replace the generated placeholder icon and SwiftUI logo with final artwork; commit real icon assets.
-- **Developer ID signing + notarization**, DMG packaging, and a GitHub Actions release workflow (tag → build → sign → notarize → DMG → GitHub Release).
-- **Versioning + changelog**: semantic versions, `CHANGELOG.md`, marketing version bumps in CI.
-- **Updates**: Sparkle or manual download checks. Mac App Store build optional later (sandboxing is already in place).
-- **First-launch onboarding**: set up your drives → copy with protection → organize by project → cull faster → export to edit; plus an in-app keyboard-shortcut cheat sheet.
-- **Save Diagnostics**: local log export for support. Local-first; no telemetry.
+- **Real brand asset**: replace the generated placeholder icon and SwiftUI logo with final artwork; commit real icon assets. Do this together with the name decision.
+- ✅ **Developer ID signing + notarization, DMG packaging, release workflow** — shipped as `.github/workflows/release.yml`: push a `vX.Y.Z` tag → Release build + tests → optional signing/notarization (activates automatically once the Apple secrets are configured in repo settings) → DMG → GitHub Release. Unsigned DMGs publish for testing until the secrets exist.
+- ✅ **Versioning + changelog** — `CHANGELOG.md` added; the release workflow stamps `MARKETING_VERSION` from the tag and the build number from the CI run.
+- **Updates**: manual download checks against GitHub Releases first (keeps the app Apple-frameworks-only); Sparkle only if auto-update becomes a real need. Mac App Store build optional later (sandboxing is already in place).
+- ✅ **First-launch onboarding** — five-step walkthrough on first launch, re-openable via Help → Welcome; plus Help → Keyboard Shortcuts cheat sheet.
+- ✅ **Save Diagnostics** — Help → Save Diagnostics Report… writes a local plain-text report (app, system profile, settings, recent projects). Local-first; no telemetry.
 
 ## Phase 3 — Workflow-completing features (priority order)
 

@@ -34,6 +34,13 @@ struct ClipVaultApp: App {
         Button("Close Preview") { NotificationCenter.default.post(name: .clipClosePreview, object: nil) }
           .keyboardShortcut(.escape, modifiers: [])
       }
+      CommandGroup(after: .help) {
+        Divider()
+        Button("Welcome to \(AppBrand.appName)") { NotificationCenter.default.post(name: .showOnboarding, object: nil) }
+        Button("Keyboard Shortcuts") { NotificationCenter.default.post(name: .showKeyboardShortcuts, object: nil) }
+        Divider()
+        Button("Save Diagnostics Report…") { DiagnosticsReportService().saveViaPanel() }
+      }
     }
 
     Settings {
@@ -55,4 +62,6 @@ extension Notification.Name {
   static let clipNext = Notification.Name("clipNext")
   static let clipPrevious = Notification.Name("clipPrevious")
   static let clipClosePreview = Notification.Name("clipClosePreview")
+  static let showOnboarding = Notification.Name("showOnboarding")
+  static let showKeyboardShortcuts = Notification.Name("showKeyboardShortcuts")
 }
