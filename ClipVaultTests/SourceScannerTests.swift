@@ -1,0 +1,95 @@
+import XCTest
+
+@testable import SlateBox
+
+final class SourceScannerTests: XCTestCase {
+  private var card: URL!
+  private let scanner = SourceScanner()
+
+  override func setUpWithError() throws {
+    card = FileManager.default.temporaryDirectory
+      .appendingPathComponent("clipvault-scan-test-\(UUID().uuidString)", isDirectory: true)
+    try FileManager.default.createDirectory(at: card, withIntermediateDirectories: true)
+  }
+
+  override func tearDownWithError() throws {
+    try? FileManager.default.removeItem(at: card)
+  }
+
+  private func addFile(_ relativePath: String, bytes: Int = 64) throws {
+    let url = card.appendingPathComponent(relativePath)
+    try FileManager.default.createDirectory(
+      at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+    try Data(repeating: 0x1, count: bytes).write(to: url)
+  }
+
+  func testDetectsSonyLayoutAndScansOnlyClipFolder() throws {
+    try addFile("PRIVATE/M4ROOT/CLIP/C0001.MP4")
+    try addFile("PRIVATE/M4ROOT/CLIP/C0002.MP4")
+    try addFile("stray-root-video.mp4")
+
+    XCTAssertEqual(scanner.detectCardType(source: card), .sony)
+    let videos = try scanner.scan(source: card, includeProxyFiles: false)
+
+    XCTAssertEqual(videos.map(\.relativePath), [
+      "PRIVATE/M4ROOT/CLIP/C0001.MP4",
+      "PRIVATE/M4ROOT/CLIP/C0002.MP4"
+    ], "a Sony card scans only PRIVATE/M4ROOT/CLIP, not the card root")
+    XCTAssertTrue(videos.allSatisfy { $0.cardType == DetectedCardType.sony.rawValue })
+    XCTAssertTrue(videos.allSatisfy { $0.sonyCardFolderPath != nil })
+  }
+
+  func testSonyProxySubExcludedByDefaultIncludedOnOptIn() throws {
+    try addFile("PRIVATE/M4ROOT/CLIP/C0001.MP4")
+    try addFile("PRIVATE/M4ROOT/SUB/C0001S03.MP4")
+
+    let withoutProxies = try scanner.scan(source: card, includeProxyFiles: false)
+    XCTAssertEqual(withoutProxies.map(\.relativePath), ["PRIVATE/M4ROOT/CLIP/C0001.MP4"])
+
+    let withProxies = try scanner.scan(source: card, includeProxyFiles: true)
+    XCTAssertEqual(withProxies.map(\.relativePath), [
+      "PRIVATE/M4ROOT/CLIP/C0001.MP4",
+      "PRIVATE/M4ROOT/SUB/C0001S03.MP4"
+    ])
+  }
+
+  func testDetectsCanonDCIMAndIgnoresPhotoSidecars() throws {
+    try addFile("DCIM/100CANON/MVI_0001.MP4")
+    try addFile("DCIM/100CANON/IMG_0002.CR3")
+    try addFile("DCIM/100CANON/MVI_0001.THM")
+    try addFile("DCIM/100CANON/MVI_0001.XML")
+
+    XCTAssertEqual(scanner.detectCardType(source: card), .canonDCF)
+    let videos = try scanner.scan(source: card, includeProxyFiles: false)
+
+    XCTAssertEqual(videos.map(\.relativePath), ["DCIM/100CANON/MVI_0001.MP4"],
+      "photo and sidecar formats must be ignored on Canon/DCF cards")
+    XCTAssertTrue(videos.allSatisfy { $0.cardType == DetectedCardType.canonDCF.rawValue })
+  }
+
+  func testGenericRecursiveScanWithRelativePathsAndNaturalSort() throws {
+    try addFile("shoot/A10.mp4")
+    try addFile("shoot/A2.mp4")
+    try addFile("extra/B1.MOV")
+
+    XCTAssertEqual(scanner.detectCardType(source: card), .generic)
+    let videos = try scanner.scan(source: card, includeProxyFiles: false)
+
+    XCTAssertEqual(videos.map(\.relativePath), [
+      "extra/B1.MOV",
+      "shoot/A2.mp4",
+      "shoot/A10.mp4"
+    ], "generic scans recurse and sort naturally, so A2 comes before A10")
+    XCTAssertTrue(videos.allSatisfy { $0.size == 64 })
+  }
+
+  func testSkipsHiddenAndUnsupportedExtensions() throws {
+    try addFile("clips/A001.mp4")
+    try addFile("clips/.hidden.mp4")
+    try addFile("clips/notes.txt")
+    try addFile("clips/photo.jpg")
+
+    let videos = try scanner.scan(source: card, includeProxyFiles: false)
+    XCTAssertEqual(videos.map(\.relativePath), ["clips/A001.mp4"])
+  }
+}
