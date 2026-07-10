@@ -14,7 +14,7 @@ final class IngestPreviewThumbnailService {
     let base = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first
       ?? URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
     let cache = base
-      .appendingPathComponent("ClipVault", isDirectory: true)
+      .appendingPathComponent(AppBrand.previewCacheFolderName, isDirectory: true)
       .appendingPathComponent("IngestPreviewThumbnails", isDirectory: true)
     try FileManager.default.createDirectory(at: cache, withIntermediateDirectories: true)
     return cache

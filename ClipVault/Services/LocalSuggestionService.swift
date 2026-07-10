@@ -15,7 +15,7 @@ struct RuleBasedSuggestionService: LocalSuggestionService {
   }
 
   func projectDescription(for project: ClipVaultProject) -> String {
-    "Local ClipVault project with \(project.clips.count) clips."
+    "Local \(AppBrand.appName) project with \(project.clips.count) clips."
   }
 
   func suggestedFolderName(for clips: [Clip]) -> String? {

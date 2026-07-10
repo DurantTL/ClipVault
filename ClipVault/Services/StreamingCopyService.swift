@@ -3,7 +3,11 @@ import Foundation
 final class StreamingCopyService {
   var isCancelled: () -> Bool = { false }
   var isPaused: () -> Bool = { false }
-  private let chunkSize = 8 * 1024 * 1024
+  private let chunkSize: Int
+
+  init(chunkSize: Int = 8 * 1024 * 1024) {
+    self.chunkSize = chunkSize
+  }
 
   func copy(
     from source: URL, to destination: URL, alreadyCopiedBytes: Int64, totalBytes: Int64,
@@ -11,7 +15,7 @@ final class StreamingCopyService {
   ) async throws -> Int64 {
     try await Task.detached(priority: .userInitiated) { [chunkSize, isCancelled, isPaused] in
       let partialDestination = destination.deletingLastPathComponent()
-        .appendingPathComponent(destination.lastPathComponent + ".clipvault-partial")
+        .appendingPathComponent(destination.lastPathComponent + AppBrand.partialFileSuffix)
       let fm = FileManager.default
       let start = Date()
       let sourceValues = try source.resourceValues(forKeys: [.fileSizeKey])

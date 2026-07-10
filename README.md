@@ -16,7 +16,7 @@ SlateBox is designed for Apple Silicon Macs and the app target builds for `arm64
 - Fast SSD recommended.
 - macOS 15+ or newer recommended; the deployment target may remain lower, but newer systems get the best performance.
 
-SlateBox uses an automatic performance profile based on safe Apple APIs: arm64 architecture, physical memory, and Metal device availability. Performance Mode can be set to Automatic, Fast, Balanced, or Quality to tune thumbnail concurrency, local-analysis sampling, contact-sheet preparation, and background work priority.
+SlateBox uses an automatic performance profile based on safe Apple APIs: arm64 architecture, physical memory, and Metal device availability. Performance Mode can be set to Automatic, Fast, Balanced, or Quality to tune thumbnail concurrency, local-analysis sampling, and background work priority.
 
 ## Build
 
@@ -43,9 +43,9 @@ New Ingest includes a **Camera / Card Info** section for a camera label, camera 
 - SlateBox never formats or erases cards.
 - SlateBox never modifies original media.
 - SlateBox never writes thumbnails to source cards.
-- New Ingest may generate temporary read-only thumbnails from source media for identification only, stored in `~/Library/Caches/SlateBox/IngestPreviewThumbnails/`.
+- New Ingest may generate temporary read-only thumbnails from source media for identification only, stored in `~/Library/Caches/ClipVault/IngestPreviewThumbnails/`.
 - Full playback preview, culling, rating, metadata editing, analysis, aliases, export, and library thumbnails use copied project files only.
-- Library thumbnails are generated from copied files only and stored in `.SlateBox-cache/thumbnails/`.
+- Library thumbnails are generated from copied files only and stored in `.clipvault-cache/thumbnails/`.
 - SlateBox never overwrites destination files; conflicts receive `_1`, `_2`, etc.
 - Ingest copy uses security-scoped access for selected source, destination, and project folders so SD cards, external SSDs, and mounted NAS locations continue working after the user grants access.
 - If ingest is canceled during a large file copy, copied files are left in place, source files are untouched, and the project is marked incomplete.
@@ -70,7 +70,11 @@ The default verification mode is **Fast size check**, which confirms the copied 
 
 ## Project files and recent projects
 
-Each project folder contains a hidden `.SlateBox-project.json` metadata file. **Open Existing Project** accepts either the project folder or the hidden JSON file. Recent projects are stored as project metadata-file paths and display a friendly error if an external SSD or NAS volume is disconnected or unavailable.
+Each project folder contains a hidden `.clipvault-project.json` metadata file. **Open Existing Project** accepts either the project folder or the hidden JSON file. Recent projects are stored as project metadata-file paths and display a friendly error if an external SSD or NAS volume is disconnected or unavailable.
+
+### On-disk names
+
+The hidden on-disk identifiers — `.clipvault-project.json`, `.clipvault-cache/`, `.clipvault-partial`, and the `~/Library/Caches/ClipVault/` preview cache — intentionally keep the legacy `clipvault` spelling. They are permanent format identifiers, independent of the product name, so every existing project remains openable forever regardless of future renames. All of them are defined in one place, `AppBrand.swift`.
 
 ## Sony a7R V focus
 
@@ -152,7 +156,7 @@ SlateBox detects Sony-style media layouts and surfaces `PRIVATE/M4ROOT/CLIP` as 
 
 ### Metadata behavior
 
-Project and clip metadata are stored in `.SlateBox-project.json`. Clip metadata includes cull status, production tags, people, location, scene, shot type, notes, favorites, B-roll, sermon, interview, and social candidate flags. Automatic tags are rule-based and local only.
+Project and clip metadata are stored in `.clipvault-project.json`. Clip metadata includes cull status, production tags, people, location, scene, shot type, notes, favorites, B-roll, sermon, interview, and social candidate flags. Automatic tags are rule-based and local only.
 
 ### Export behavior
 
@@ -180,7 +184,7 @@ SlateBox includes menu actions for Clip Report CSV, Keep List CSV, and Project M
 
 ### Transfer controls and destinations
 
-- Streaming copies now use `.SlateBox-partial` temporary files and only move into place after the file is fully copied.
+- Streaming copies now use `.clipvault-partial` temporary files and only move into place after the file is fully copied.
 - Ingest can be paused and resumed between copy chunks without destructive SD card operations.
 - The ingest sheet includes a primary destination plus optional Backup 1 and Backup 2 destination fields.
 - Backups are intended to be copied from the verified primary destination so the SD card is read once.
@@ -231,9 +235,9 @@ The generated PNG files are ignored by git at `ClipVault/Assets.xcassets/AppIcon
 
 SlateBox now reviews source media as detected sessions before copying. Sessions are grouped by recording/creation date with a 90-minute gap split so a day with multiple shoots can be selected in chunks. Session cards show the date/time range, clip count, total size, camera/card type (Sony, Canon/DCF, or Generic), and a lightweight thumbnail strip placeholder before ingest starts.
 
-The ingest panel keeps rename off by default. When enabled, files are copied as `[Project Name]-[YYYY][MM][DD]-[Sequence].EXT`, and the original filename remains stored in `.SlateBox-project.json`. Start Ingest stays disabled until there is a destination, project name, and at least one selected clip/session.
+The ingest panel keeps rename off by default. When enabled, files are copied as `[Project Name]-[YYYY][MM][DD]-[Sequence].EXT`, and the original filename remains stored in `.clipvault-project.json`. Start Ingest stays disabled until there is a destination, project name, and at least one selected clip/session.
 
-Parallel options include thumbnail generation during ingest, local analysis after ingest, and contact-sheet preparation toggles. Analysis remains local-only and runs only after files are safely copied into the destination project.
+A parallel option enables thumbnail generation during ingest. Analysis remains local-only and runs only after files are safely copied into the destination project. Post-ingest analysis and contact-sheet toggles are hidden until those pipelines are implemented.
 
 ## Local analysis details and disclaimers
 
@@ -277,7 +281,7 @@ The script writes `ClipVault/Assets.xcassets/AppIcon.appiconset/icon_16.png` thr
 - Pending clips remain in the project metadata as non-destructive records and are not previewed unless a destination file exists.
 
 ### Shot-time sorting and manual production time
-- Clips now store `capturedAt`, `shotStartTime`, `manualShotTime`, and `shotTimeSource` in `.SlateBox-project.json` metadata.
+- Clips now store `capturedAt`, `shotStartTime`, `manualShotTime`, and `shotTimeSource` in `.clipvault-project.json` metadata.
 - Library sorting includes Ingest Order, Shot Time, Filename, Created Date, Modified Date, Duration, File Size, Cull Status, Rating/Keep Status, and Camera Type, plus Ascending/Descending order.
 - Shot Time uses a manual override first when present, then camera/media metadata, file creation, file modified date, and available fallback metadata.
 - The inspector shows Shot Time and source and allows setting, using current time for, or clearing a Manual Shot Time override.
@@ -290,10 +294,10 @@ The script writes `ClipVault/Assets.xcassets/AppIcon.appiconset/icon_16.png` thr
 ### Compatibility and safety
 - SlateBox continues to use Apple APIs only and does not require FFmpeg.
 - Source media and SD-card contents are never modified or deleted.
-- App metadata remains in `.SlateBox-project.json`; SlateBox does not write metadata into MP4/MOV files by default.
+- App metadata remains in `.clipvault-project.json`; SlateBox does not write metadata into MP4/MOV files by default.
 
 ## Project JSON Compatibility
 
-SlateBox stores project metadata in `.SlateBox-project.json` files inside project folders. The project JSON now includes a `schemaVersion` field so future migrations can be detected and handled safely while preserving existing media and metadata.
+SlateBox stores project metadata in `.clipvault-project.json` files inside project folders. The project JSON now includes a `schemaVersion` field so future migrations can be detected and handled safely while preserving existing media and metadata.
 
 Older project files that do not include `schemaVersion` should remain openable with backward-compatible defaults for newer ingest, session, and metadata fields. Codable unit tests protect project and clip JSON from breaking changes, including partial or canceled ingests that must remain reopenable.

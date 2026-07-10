@@ -34,7 +34,7 @@ struct RecentProjectSummary: Identifiable {
     panel.canChooseFiles = true
     panel.allowsMultipleSelection = false
     panel.treatsFilePackagesAsDirectories = true
-    panel.message = "Select a SlateBox project folder or its hidden .clipvault-project.json file."
+    panel.message = "Select a \(AppBrand.appName) project folder or its hidden \(AppBrand.metadataFileName) file."
     guard panel.runModal() == .OK, let url = panel.url else { return nil }
     return loadProject(at: url)
   }

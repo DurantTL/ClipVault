@@ -2,6 +2,18 @@
 
 Use a small test folder with 5–10 short video clips before testing real SD cards.
 
+## Automated coverage
+
+The following mechanics are covered by unit tests in `ClipVaultTests/` and run in CI, so the manual checklist can focus on real-media and permission behavior:
+
+- Streaming copy: byte-identical copies, chunked progress, cancel leaving a resumable partial, resume from a partial, stale-partial discard, never overwriting a destination (`StreamingCopyServiceTests`).
+- Verification: fast size check and strong SHA256 pass/fail behavior (`VerificationServiceTests`).
+- Source scanning: Sony `PRIVATE/M4ROOT/CLIP` prioritization, proxy exclusion/opt-in, Canon `DCIM` detection, sidecar filtering, recursive generic scans (`SourceScannerTests`).
+- Export: copy-only exports, safe `_1`/`_2` duplicate naming, missing-source skips (`ClipExportServiceTests`, `RatingAndSuggestionTests`).
+- Project/clip JSON compatibility and rating/status mapping (`ProjectCodableTests`, `ClipCodableTests`, `RatingAndSuggestionTests`).
+
+Still manual only (needs real media, hardware, or relaunch): thumbnail generation from real video, mid-copy pause/resume timing, security-scoped bookmark persistence across relaunch, removable-volume detection, and backup destinations end-to-end.
+
 ## Build
 
 - [ ] `make icons` works

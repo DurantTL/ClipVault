@@ -1,12 +1,12 @@
-# SlateBox Roadmap — Next Steps and Future Ideas
+# SlateBox Roadmap — Path to a Final Product
 
-Updated: July 9, 2026
+Updated: July 10, 2026
 
 ## Project Summary
 
-ClipVault is a native macOS video ingest, verification, culling, metadata, and editor handoff app.
+SlateBox is a native macOS video ingest, verification, culling, metadata, and editor handoff app.
 
-The goal is not just to copy files like a transfer utility. The goal is to create a daily project-based video workflow:
+The goal is not just to copy files like a transfer utility. The goal is a daily project-based video workflow:
 
     Create Daily Project
     → Choose source card/folder
@@ -18,11 +18,15 @@ The goal is not just to copy files like a transfer utility. The goal is to creat
 
 Core tagline: **Ingest. Verify. Cull. Hand off.**
 
-ClipVault is being designed mainly for Apple Silicon Macs and a Sony a7R V workflow:
+SlateBox is designed mainly for Apple Silicon Macs and a Sony a7R V workflow:
 
 - 4K 60p, 4:2:2, 10-bit, non-log footage
 - Sony card structure: `PRIVATE/M4ROOT/CLIP`
 - Canon/DCF support as a secondary workflow
+
+### Naming note
+
+The product may be renamed again ("SlateBox" appears taken on App Store Connect). All user-visible brand strings flow through `AppBrand.swift`, so a rename is a one-file change plus the checklist documented in that file. The hidden on-disk identifiers (`.clipvault-project.json`, `.clipvault-cache`, `.clipvault-partial`, `~/Library/Caches/ClipVault/`) are **permanent format identifiers** and never change with the product name.
 
 ## Important Safety Rules
 
@@ -43,205 +47,99 @@ These must stay true for every future feature:
 13. Partial/canceled ingests must always remain reopenable.
 14. Old project JSON files must remain openable.
 
-## Immediate Next Steps
+## Shipped
 
-### Step 1 — Verify the latest source picker changes
+- Detected source picker with stable permission grants (no re-prompt for granted sources).
+- Guided ingest: session scan, Sony `PRIVATE/M4ROOT/CLIP` + Canon `DCIM` + generic detection, proxy exclusion/opt-in, individual clip selection.
+- Streaming chunked copy with `.clipvault-partial` temp files, pause/resume/cancel, and reopenable partial ingests.
+- Fast size and Strong SHA256 verification; primary + Backup 1 + Backup 2 destinations.
+- 0–5 star ratings synced with Keep/Maybe/Reject; multi-select; batch actions and bulk metadata.
+- Copy Keeps to Edit Folder; CSV reports (clip/keep/reject/verification/analysis) + project metadata JSON.
+- Aliases (symbolic links to copied project media only); editor folder handoff for Finder, DaVinci Resolve, Final Cut Pro.
+- Camera/card metadata on ingest; local rule-based + Vision analysis with suggested ratings (never auto-applied).
+- Apple Silicon performance profiles and background work coordination; bounded thumbnail memory cache and preview prewarming.
+- Brand-agnostic string handling via `AppBrand.swift`; automated safety-pipeline tests (copy, verify, scan, export naming) in CI.
 
-Manual test checklist:
+## Phase 1 — Trustworthiness (in progress)
 
-1. Open ClipVault and click New Ingest.
-2. Confirm New Ingest opens as a large standalone window that remembers size/position.
-3. Confirm detected source cards appear; click a detected source.
-4. Confirm the sandbox permission prompt appears at most once per source.
-5. Confirm swapping between sources does not re-prompt for granted sources.
-6. Confirm sessions scan and ingest thumbnails appear.
-7. Confirm session and individual clip selection work.
-8. Choose destination, start a small ingest, cancel halfway.
-9. Confirm the partial library opens, copied clips show thumbnails, pending clips do not crash.
-10. Resume ingest and confirm the library opens after completion.
-11. Preview copied clips, cull with keyboard shortcuts.
-12. Close and reopen the project; confirm statuses, metadata, thumbnails, and partial ingest state persist.
+Make the existing core loop provably reliable before adding surface area.
 
-### Step 2 — Stabilize before major features
+- ✅ Brand-agnosticism pass: user-visible strings flow through `AppBrand.appName`; on-disk names frozen and documented.
+- ✅ No dead controls: settings toggles without an implementation (contact sheets, Finder tags export, XMP sidecar export, post-ingest analysis, technical details) are hidden until their features exist. Keys remain reserved.
+- ✅ Automated tests for the safety-critical pipeline: `StreamingCopyServiceTests`, `VerificationServiceTests`, `SourceScannerTests`, `ClipExportServiceTests` run in CI alongside the Codable/rating/alias tests.
+- Error-recovery audit: disk-full during copy, volume disconnect mid-ingest, NAS drop and retry, permission loss mid-session. Each failure needs a clear user-facing message and a safe, resumable state.
+- Decompose `LibraryViewModel` (~1,000 lines) into focused pieces (selection, filtering/sorting, thumbnails, export, analysis) before the next feature pass.
+- Continue the regression loop in TESTING.md for every PR:
 
-Before adding large new features, make sure this loop is solid:
+      Source selection → Session scan → Ingest thumbnails → Select sessions/clips
+      → Copy → Verify → Cancel halfway → Open partial library → Resume
+      → Library thumbnails → Preview → Cull → Close/reopen
 
-    Source selection → Session scan → Ingest thumbnails → Select sessions/clips
-    → Copy → Verify → Cancel halfway → Open partial library → Resume
-    → Library thumbnails → Preview → Cull → Close/reopen
+## Phase 2 — Distribution (make it a product)
 
-If any part of this is unreliable, fix that before adding more features.
+- **Final name decision** — blocked on App Store Connect availability; now a one-file change plus the `AppBrand.swift` checklist.
+- **Real brand asset**: replace the generated placeholder icon and SwiftUI logo with final artwork; commit real icon assets.
+- **Developer ID signing + notarization**, DMG packaging, and a GitHub Actions release workflow (tag → build → sign → notarize → DMG → GitHub Release).
+- **Versioning + changelog**: semantic versions, `CHANGELOG.md`, marketing version bumps in CI.
+- **Updates**: Sparkle or manual download checks. Mac App Store build optional later (sandboxing is already in place).
+- **First-launch onboarding**: set up your drives → copy with protection → organize by project → cull faster → export to edit; plus an in-app keyboard-shortcut cheat sheet.
+- **Save Diagnostics**: local log export for support. Local-first; no telemetry.
 
-### Step 3 — Merge only when GitHub Actions is green
+## Phase 3 — Workflow-completing features (priority order)
 
-Do not merge PRs unless the build passes, tests pass, project JSON compatibility tests pass, and a manual ingest test passes for at least a small folder.
+1. **Preflight Media Check / Already-Imported detection** — the biggest real-workflow gap. Before ingest, compare source files against the project destination, backups, NAS folders, recent projects, and optional comparison folders using filename, size, duration, modified date, and optional checksum. Clip-level statuses (New, Already in Project, Already on Backup, Already on NAS, Possible Duplicate, Same Name Different Size, Missing From Backup, Previously Verified) and ingest choices (copy new only, skip already imported, retry missing backups only, copy all with safe names). Results stored in project JSON and reports. Never overwrite, never delete.
+2. **MHL (Media Hash List) checksum reports** — industry-standard proof-of-transfer (Hedge/Silverstack parity). Builds on the existing SHA256 code; big credibility win for paid production work.
+3. **Contact sheets / filmstrip hover-scrub** — settings key and background-work plumbing already exist; implement generation from copied media only, then re-enable the hidden toggle.
+4. **Finder tags + XMP sidecar export** — implement the writers behind the reserved `finderTagsExport` / `xmpSidecarExport` keys, then re-enable the hidden toggles. Sidecars only; never write into MP4/MOV media.
+5. **FCPXML / Resolve-friendly handoff** — carry ratings, tags, and notes into the NLE (FCPXML keywords/ratings; Resolve CSV/EDL-style metadata) instead of folder-open only.
+6. **Project templates** and ingest rename/folder-pattern tokens (project, source, session, original filename, counter, date/shot-time components, camera type). Defaults stay safe: preserve original filenames, flat copy, never overwrite.
 
-### Step 4 — Keep AGENTS.md, README, and TESTING updated
+## Performance and Apple Silicon
 
-Every major architectural decision should be written into AGENTS.md, README.md, and TESTING.md — especially safety rules, thumbnail rules, source permission behavior, project JSON compatibility, and Apple Silicon performance expectations.
+Shipped baseline: bounded in-memory thumbnail cache and adjacent-preview prewarming. Continue to measure time-to-first-thumbnail and time-to-first-preview before adding heavier processing.
 
-## Near-Term Feature Pass
-
-The next big feature group: **Ratings, Multi-Select, Bulk Metadata, Export, and Editor Handoff.**
-
-This completes the real workflow: Ingest → Verify → Cull → Rate → Tag → Export/Open in editor.
-
-### Feature 1 — Multi-Select Clips
-
-- Command-click: add/remove clip from selection; Shift-click: range select; Command-A: select all visible; Escape: clear.
-- Clear selected visual state.
-- Batch actions: Mark Keep/Maybe/Reject, clear status, set rating, add/remove tag, assign to custom folder, create aliases, analyze, generate/regenerate thumbnails, copy filenames, reveal in Finder, export selected.
-
-### Feature 2 — 0–5 Star Rating
-
-Keep Keep/Maybe/Reject, add a 0–5 rating with keyboard mapping 0–5 and automatic cull status: 0 → Unrated, 1 → Reject, 2–3 → Maybe, 4–5 → Keep.
-
-### Feature 3 — Bulk Metadata Editing
-
-Batch edit tags, people, location, scene, shot type, notes, flags (Favorite, B-Roll, Sermon, Interview, Social Clip Candidate), custom folder, and manual shot time. Append tags by default; allow replace, clear, and remove-specific.
-
-### Feature 4 — Custom Folders and Aliases
-
-Aliases are lightweight organization; originals remain in `Original Ingest/`. Alias actions for Keep, Maybe, 4–5 stars, tags, and custom folders. Aliases must point to copied project files only; removing aliases never affects originals.
-
-Suggested project structure:
-
-    2026-07-09 Project Name/
-      .clipvault-project.json
-      .clipvault-cache/ (thumbnails, contact-sheets, analysis)
-      Original Ingest/
-      Aliases/ (Keep, Maybe, Sermon, B-Roll, Social Media)
-      Exports/ (Keep Copies, Keep + Maybe Copies, Clip Reports)
-
-### Feature 5 — Copy Keeps to Edit Folder
-
-Copy (never move) Keeps, 4–5 stars, Keep+Maybe, selected clips, by tag, or by custom folder to a chosen folder. Never overwrite; safe duplicate names; flatten or preserve organization; show progress and an export summary (copied/skipped/failed/total size/destination); reveal folder after completion.
-
-### Feature 6 — CSV / JSON Reports
-
-Clip report, keep list, reject list, metadata JSON, verification report, and analysis report exports with full per-clip fields (filename, status, rating, duration, size, resolution, frame rate, codec, shot time, tags, analysis scores, paths, verification status, and more).
-
-### Feature 7 — Editor Handoff
-
-First version: reveal edit folder, open DaVinci Resolve / Final Cut Pro / Finder at the export folder. Later: FCPXML export, Resolve CSV/EDL/XML-style export, export by rating/status/tag, optional proxy folder.
-
-### Feature 8 — Ingest Camera / Card Metadata — ✅ first pass shipped
-
-- Add a **Camera / Card Info** section to New Ingest.
-- Let the user assign camera label, camera name/model, operator, card/reel name, and shoot day.
-- Auto-suggest labels such as A-Cam, B-Cam, A001, and A002 from project history.
-- Store camera/card metadata in `.clipvault-project.json` without changing source-card files.
-- Apply metadata to every clip copied from that source unless a clip has an explicit override.
-- Allow library filtering by camera, card, operator, and shoot day.
-- Allow folder presets to use camera/card metadata.
-
-### Feature 9 — Preflight Media Check / Already Imported Detection
-
-- Before ingest, compare source files against the project destination, backup destinations, NAS folders, recent projects, and optional comparison folders.
-- Detect files that already exist using filename, size, duration, modified date, and optional checksum.
-- Show clip-level statuses:
-  - New
-  - Already in Project
-  - Already on Backup
-  - Already on NAS
-  - Possible Duplicate
-  - Same Name Different Size
-  - Missing From Backup
-  - Previously Verified
-- Allow ingest choices:
-  - Copy new files only
-  - Skip already imported
-  - Retry missing backups only
-  - Copy all with safe duplicate names
-- Store comparison results in `.clipvault-project.json` and transfer reports.
-- Never overwrite destination files.
-- Never delete source files.
-
-## Performance and Apple Silicon Roadmap
-
-Shipped local responsiveness baseline: the library caches decoded visible thumbnails in memory and prewarms adjacent copied preview assets. Continue to measure time-to-first-thumbnail and time-to-first-preview before adding heavier processing.
-
-- Apple Silicon required/strongly recommended; M2 Pro or better for large 4K/10-bit workloads; 16 GB RAM minimum, 32 GB+ for large events; fast SSD; macOS 15+ recommended.
-- Use runtime performance profiles (SystemPerformanceProfile: arm64, memory, Metal, tier, recommended concurrency) instead of pretending chip detection is perfect.
-- Performance modes: Automatic, Fast, Balanced, Quality.
-- BackgroundWorkCoordinator manages ingest copy, verification, thumbnails, contact sheets, analysis, exports, and future cloud transfers.
-- Prioritize visible work; cancel background jobs when views close.
-- Keep the UI responsive: no main-thread scanning, thumbnailing, or analysis; batch project JSON saves carefully but keep frequent safety saves during ingest.
+- Runtime performance profiles (arm64, memory, Metal, tier, recommended concurrency); modes Automatic, Fast, Balanced, Quality.
+- `BackgroundWorkCoordinator` manages ingest copy, verification, thumbnails, analysis, exports, and future contact sheets/cloud transfers; every background task must be cancelable.
+- No main-thread scanning, thumbnailing, or analysis; frequent safety saves during ingest.
 - Log scan duration, copy speed, verification speed, thumbnails/sec, analysis time, and failure counts.
 
-## AI / Smart Features Roadmap
+## AI / Smart Features (after Phase 3)
 
-- **Phase 1 (local rules):** better focus/stability/face-visibility scoring, social-clip candidate scoring, best-frame thumbnails, best-clip suggestions, talking-head detection, stage/worship detection, high-motion detection, lighting warnings.
-- **Phase 2 (local Apple frameworks — Vision, Core Image, Core ML, Foundation Models):** suggest tags, scene names, folder names, descriptions, social selects; summarize sessions/projects; detect duplicates; choose best thumbnail frames. Prefer local processing, never upload by default, keep suggestions editable, never auto-identify people by name.
-- **Phase 3 (optional cloud, opt-in only):** transcription, summaries, advanced tagging, searchable transcripts, captions. Clear privacy warnings; user chooses which clips to send.
+- **Phase A (local rules):** better focus/stability/face-visibility scoring, social-clip candidate scoring, best-frame thumbnails, talking-head detection, high-motion detection, lighting warnings.
+- **Phase B (local Apple frameworks — Vision, Core Image, Core ML, Foundation Models):** suggest tags, scene names, folder names, descriptions, social selects; summarize sessions/projects; duplicate detection; best thumbnail frames. Local processing, never upload by default, suggestions always editable, never auto-identify people by name. `FoundationModelSuggestionService` stays a guarded placeholder until a real integration lands.
+- **Phase C (optional cloud, opt-in only):** transcription, summaries, advanced tagging, captions. Clear privacy warnings; the user chooses which clips to send.
 
-## Cloud Storage Roadmap
+## Cloud Storage (after Phase 3)
 
-- **Phase 1:** treat mounted synced folders (Google Drive, OneDrive, Dropbox, iCloud, Box, Synology, SMB/NAS) as sources/destinations with cloud badges, availability warnings, and post-ingest sync reminders.
-- **Phase 2:** cloud-aware workflow — online-only detection, keep-awake helper, backup verification summary.
-- **Phase 3:** direct uploads (Drive, OneDrive, Dropbox, Box, B2, Wasabi, S3, WebDAV) with resumable/retryable verified uploads and a local queue.
-- **Phase 4:** cloud as a source with verified, resumable downloads — only after local workflows are stable.
+- **Phase A:** treat mounted synced folders (Google Drive, OneDrive, Dropbox, iCloud, Box, Synology, SMB/NAS) as sources/destinations with cloud badges, availability warnings, and post-ingest sync reminders.
+- **Phase B:** cloud-aware workflow — online-only detection, keep-awake helper, backup verification summary.
+- **Phase C:** direct uploads (Drive, OneDrive, Dropbox, Box, B2, Wasabi, S3, WebDAV) with resumable, verified uploads and a local queue.
+- **Phase D:** cloud as a source with verified, resumable downloads — only after local workflows are stable.
 
-## Ingest / Copy UX Direction
+## Settings Direction
 
-Borrow from Hedge/OffShoot: clear Sources/Destinations areas, clickable source cards, storage icons, verification messaging, simple transfer status. But ClipVault is a daily project ingest + culling library, not just a transfer app:
-
-    Hedge/OffShoot: Source → Destination → Transfer
-    ClipVault:      Source → Daily Project Library → Cull/Organize/Export
-
-Future New Ingest structure: Left = Sources, Center = Detected Sessions / Transfer Queue, Right = Project Setup + Destinations. Later: backup destination cards, recent destinations, organize settings (rename patterns, folder patterns, ignore rules, tokens).
-
-## Naming Roadmap
-
-Default stays safe: preserve original filenames, flat copy into `Original Ingest/`, never overwrite. Optional future folder structures (by date, session, camera, source) and rename patterns with tokens (project, source, session, original filename, counter, date/shot-time components, camera type).
-
-## Settings Roadmap
-
-Future tabs: General, Sources, Destinations, Organize, Transfers, Reports, Analysis, Performance, Cloud, Advanced — including source auto-detection settings, default destinations, verification mode, report defaults, analysis toggles, performance tuning, cache cleanup, and project repair tools.
-
-## Onboarding Ideas
-
-First-launch intro: set up your drives → copy with protection → organize by project → cull faster → export to edit.
+Future tabs: General, Sources, Destinations, Organize, Transfers, Reports, Analysis, Performance, Cloud, Advanced — source auto-detection settings, default destinations, verification mode, report defaults, analysis toggles, performance tuning, cache cleanup, and project repair tools. Rule: a control only ships when its feature works.
 
 ## Testing Strategy
 
-Automated: project/clip Codable round-trips and old-JSON decodes, rating/status mapping, export duplicate naming, thumbnail path resolution, source permission helpers where possible.
+Automated (in CI): project/clip Codable round-trips and old-JSON decodes, rating/status mapping, streaming copy (identical bytes, cancel/resume, partial handling, never overwrite), verification (size + SHA256), source scanning (Sony/Canon/generic, proxy and sidecar rules), export duplicate naming, alias safety.
 
 Manual: keep a folder of 5–10 short clips for every PR and run the regression checklist in TESTING.md, ending with "confirm no source files were modified."
 
 ## Build Discipline
 
-1. Every PR must pass GitHub Actions.
+1. Every PR must pass GitHub Actions (build + tests).
 2. Every model/schema change needs Codable compatibility coverage.
 3. Every new background task must be cancelable.
 4. Every new file operation must respect the safety rules.
 5. Anything touching source media must be read-only unless it is copied project media.
 6. Every large UI change must be checked against the manual workflow.
 7. Do not let feature work break ingest stability.
-
-## Priority Order
-
-1. Stabilize the detected source picker (permissions must not re-prompt) — ✅ shipped
-2. Confirm New Ingest window stays large and remembered
-3. Confirm ingest source thumbnails work and remain read-only
-4. Confirm partial ingest/resume
-5. Add 0–5 ratings — ✅ shipped
-6. Add multi-select — ✅ shipped
-7. Add bulk metadata — ✅ shipped
-8. Add Copy Keeps to Edit Folder — ✅ shipped
-9. Add CSV/JSON export — ✅ shipped (clip/keep/reject/verification/analysis CSVs + metadata JSON)
-10. Add aliases — ✅ shipped (symbolic links in `Aliases/`, copied project media only)
-11. Add editor handoff — ✅ shipped (Finder, DaVinci Resolve, Final Cut Pro folder handoff)
-12. Add project templates
-13. Add better contact sheets
-14. Add cloud-synced folder support
-15. Add improved local AI analysis
-16. Add direct cloud upload later
-17. Add optional cloud AI later
+8. No settings control ships before its feature is implemented.
 
 ## Key Product Direction
 
-ClipVault should be safer than manually dragging files, more project-focused than Hedge, faster for culling than Finder, simpler than full NLE import workflows, local-first and privacy-friendly, optimized for Apple Silicon, and built around real video workflows.
+SlateBox should be safer than manually dragging files, more project-focused than Hedge, faster for culling than Finder, simpler than full NLE import workflows, local-first and privacy-friendly, optimized for Apple Silicon, and built around real video workflows.
 
 Core identity: **a daily project-based video ingest and culling app for Apple Silicon Macs.**
 

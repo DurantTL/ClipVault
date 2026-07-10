@@ -118,7 +118,7 @@ import Foundation
       return
     }
     guard let grant = ensureAccessForDetectedSource(source) else {
-      error = "Access not granted. Choose the card or folder before SlateBox scans it."
+      error = "Access not granted. Choose the card or folder before \(AppBrand.appName) scans it."
       return
     }
     var grantedSource = volumeSourceService.manualSource(for: grant.url)
@@ -182,8 +182,8 @@ import Foundation
     }
 
     let panel = NSOpenPanel()
-    panel.title = "Allow SlateBox to Access This Source"
-    panel.message = "Choose this card or folder so SlateBox can scan it."
+    panel.title = "Allow \(AppBrand.appName) to Access This Source"
+    panel.message = "Choose this card or folder so \(AppBrand.appName) can scan it."
     panel.prompt = "Allow Access"
     panel.canChooseDirectories = true
     panel.canChooseFiles = false

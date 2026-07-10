@@ -36,9 +36,6 @@ struct SettingsView: View {
         Picker("Local analysis mode", selection: $settings.localAnalysisMode) {
           ForEach(["Off", "Fast", "Balanced", "Detailed"], id: \.self) { Text($0).tag($0) }
         }
-        Toggle("Show technical details", isOn: $settings.showTechnicalDetails)
-        Toggle("Finder tags export", isOn: $settings.finderTagsExport)
-        Toggle("XMP sidecar export", isOn: $settings.xmpSidecarExport)
       }
     }
     .padding()

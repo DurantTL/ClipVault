@@ -13,7 +13,7 @@ actor ThumbnailService {
   func thumbnailURL(for clip: Clip, in project: ClipVaultProject) -> URL {
     let projectFolder = security.projectFolderURL(for: project)
     return projectFolder
-      .appendingPathComponent(".clipvault-cache", isDirectory: true)
+      .appendingPathComponent(AppBrand.cacheFolderName, isDirectory: true)
       .appendingPathComponent("thumbnails", isDirectory: true)
       .appendingPathComponent(clip.id.uuidString)
       .appendingPathExtension("jpg")
@@ -43,7 +43,7 @@ actor ThumbnailService {
     return try await security.withAccessAsync(to: projectFolder) {
       try await security.withAccessAsync(to: mediaURL) {
         let cache = projectFolder
-          .appendingPathComponent(".clipvault-cache", isDirectory: true)
+          .appendingPathComponent(AppBrand.cacheFolderName, isDirectory: true)
           .appendingPathComponent("thumbnails", isDirectory: true)
         try FileManager.default.createDirectory(at: cache, withIntermediateDirectories: true)
 
