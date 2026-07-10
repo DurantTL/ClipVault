@@ -22,6 +22,7 @@ final class AppSettings: ObservableObject {
   @AppStorage("verificationMode") var verificationModeRaw = VerificationMode.fast.rawValue
   @AppStorage("preserveSourceStructure") var preserveSourceStructure = false
   @AppStorage("thumbnailQuality") var thumbnailQualityRaw = ThumbnailQuality.balanced.rawValue
+  // Not yet implemented — no UI exposed until a feature consumes it.
   @AppStorage("showTechnicalDetails") var showTechnicalDetails = false
   @AppStorage("includeProxyFiles") var includeProxyFiles = false
   @AppStorage("autoAdvanceAfterRating") var autoAdvanceAfterRating = false
@@ -32,10 +33,13 @@ final class AppSettings: ObservableObject {
   @AppStorage("backupTransferMode") var backupTransferMode = "Primary only"
   @AppStorage("backupDestination1Path") var backupDestination1Path = ""
   @AppStorage("backupDestination2Path") var backupDestination2Path = ""
+  // Not yet implemented — no UI exposed until the export writers exist.
   @AppStorage("finderTagsExport") var finderTagsExport = false
   @AppStorage("xmpSidecarExport") var xmpSidecarExport = false
   @AppStorage("renameFilesDuringIngest") var renameFilesDuringIngest = false
   @AppStorage("generateThumbnailsDuringIngest") var generateThumbnailsDuringIngest = true
+  // Not yet implemented — no UI exposed until post-ingest analysis/contact
+  // sheet generation is wired up.
   @AppStorage("runAnalysisAfterIngest") var runAnalysisAfterIngest = false
   @AppStorage("generateContactSheetsAfterIngest") var generateContactSheetsAfterIngest = false
   @AppStorage("performanceMode") var performanceModeRaw = PerformanceMode.automatic.rawValue

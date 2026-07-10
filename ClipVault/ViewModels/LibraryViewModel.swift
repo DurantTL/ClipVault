@@ -28,11 +28,11 @@ enum ClipReportKind {
 
   var defaultFilename: String {
     switch self {
-    case .allClips: return "SlateBox-Clip-Report.csv"
-    case .keeps: return "SlateBox-Keep-List.csv"
-    case .rejects: return "SlateBox-Reject-List.csv"
-    case .verification: return "SlateBox-Verification-Report.csv"
-    case .analysis: return "SlateBox-Analysis-Report.csv"
+    case .allClips: return "\(AppBrand.appName)-Clip-Report.csv"
+    case .keeps: return "\(AppBrand.appName)-Keep-List.csv"
+    case .rejects: return "\(AppBrand.appName)-Reject-List.csv"
+    case .verification: return "\(AppBrand.appName)-Verification-Report.csv"
+    case .analysis: return "\(AppBrand.appName)-Analysis-Report.csv"
     }
   }
 }
@@ -266,7 +266,7 @@ struct BatchMetadataEdit {
   func thumbnailURL(for clip: Clip, in project: ClipVaultProject? = nil) -> URL {
     let project = project ?? self.project
     return security.projectFolderURL(for: project)
-      .appendingPathComponent(".clipvault-cache", isDirectory: true)
+      .appendingPathComponent(AppBrand.cacheFolderName, isDirectory: true)
       .appendingPathComponent("thumbnails", isDirectory: true)
       .appendingPathComponent(clip.id.uuidString)
       .appendingPathExtension("jpg")
@@ -454,7 +454,7 @@ struct BatchMetadataEdit {
   func handOffEditFolder(to applicationIdentifier: String?) {
     let panel = NSOpenPanel()
     panel.title = "Choose Edit Folder"
-    panel.message = "Choose the folder SlateBox should reveal or open in your editor."
+    panel.message = "Choose the folder \(AppBrand.appName) should reveal or open in your editor."
     panel.prompt = applicationIdentifier == nil ? "Reveal" : "Open"
     panel.canChooseDirectories = true
     panel.canChooseFiles = false
@@ -540,7 +540,7 @@ struct BatchMetadataEdit {
     }
     let panel = NSOpenPanel()
     panel.title = "Choose Edit Folder"
-    panel.message = "SlateBox will copy \(clips.count) clip\(clips.count == 1 ? "" : "s") (\(scope.label)) into this folder. Nothing is moved or overwritten."
+    panel.message = "\(AppBrand.appName) will copy \(clips.count) clip\(clips.count == 1 ? "" : "s") (\(scope.label)) into this folder. Nothing is moved or overwritten."
     panel.prompt = "Copy Here"
     panel.canChooseDirectories = true
     panel.canChooseFiles = false
@@ -675,7 +675,7 @@ struct BatchMetadataEdit {
 
   func exportProjectMetadata() {
     let panel = NSSavePanel()
-    panel.nameFieldStringValue = "SlateBox-Project-Metadata.json"
+    panel.nameFieldStringValue = "\(AppBrand.appName)-Project-Metadata.json"
     guard panel.runModal() == .OK, let url = panel.url else { return }
     if let data = try? JSONEncoder().encode(project) { try? data.write(to: url) }
   }

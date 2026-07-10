@@ -32,7 +32,7 @@ final class ProjectStore {
           domain: "ClipVault", code: 10,
           userInfo: [
             NSLocalizedDescriptionKey:
-              "ClipVault could not find the project file. If this project is on an external drive or NAS, make sure it is connected and mounted."
+              "\(AppBrand.appName) could not find the project file. If this project is on an external drive or NAS, make sure it is connected and mounted."
           ])
       }
       let dec = JSONDecoder()
