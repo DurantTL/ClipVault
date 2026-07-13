@@ -44,15 +44,10 @@ struct ClipVaultApp: App {
     }
 
     Settings {
-      ScrollView(.vertical) {
-        SettingsView()
-          .environmentObject(settings)
-          .frame(maxWidth: .infinity, alignment: .topLeading)
-      }
-      .scrollIndicators(.visible)
-      .frame(minWidth: 720, idealWidth: 820, minHeight: 560, idealHeight: 760)
+      SettingsView()
+        .environmentObject(settings)
     }
-    .defaultSize(width: 820, height: 760)
+    .defaultSize(width: 900, height: 700)
     .windowResizability(.contentMinSize)
   }
 }

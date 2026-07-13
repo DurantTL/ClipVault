@@ -3,9 +3,17 @@ import SwiftUI
 
 struct SettingsView: View {
   @EnvironmentObject var settings: AppSettings
+  @State private var selectedTab: SettingsTab = .storage
   @State private var localPreviewUsage: Int64 = 0
   @State private var internalAvailable: Int64?
   @State private var storageMessage = ""
+
+  private enum SettingsTab: Hashable {
+    case ingest
+    case storage
+    case workflow
+    case performance
+  }
 
   private enum FolderKind {
     case sourcePreview
@@ -15,44 +23,126 @@ struct SettingsView: View {
   }
 
   var body: some View {
-    Form {
-      Section("Ingest") {
-        Picker("Default verification mode", selection: $settings.verificationModeRaw) {
-          ForEach(VerificationMode.allCases) { Text($0.label).tag($0.rawValue) }
+    TabView(selection: $selectedTab) {
+      ingestPage
+        .tabItem { Label("Ingest", systemImage: "tray.and.arrow.down") }
+        .tag(SettingsTab.ingest)
+
+      storagePage
+        .tabItem { Label("Storage", systemImage: "externaldrive") }
+        .tag(SettingsTab.storage)
+
+      workflowPage
+        .tabItem { Label("Workflow", systemImage: "film.stack") }
+        .tag(SettingsTab.workflow)
+
+      performancePage
+        .tabItem { Label("Performance", systemImage: "gauge.with.dots.needle.67percent") }
+        .tag(SettingsTab.performance)
+    }
+    .frame(minWidth: 780, idealWidth: 900, minHeight: 560, idealHeight: 700)
+    .onAppear { refreshStorageInformation() }
+  }
+
+  private var ingestPage: some View {
+    settingsScrollPage {
+      settingsCard("Ingest Defaults") {
+        settingRow(
+          "Verification mode",
+          description: "Fast compares file sizes. Strong verification also checks file contents."
+        ) {
+          Picker("", selection: $settings.verificationModeRaw) {
+            ForEach(VerificationMode.allCases) { Text($0.label).tag($0.rawValue) }
+          }
+          .labelsHidden()
+          .frame(maxWidth: 260)
         }
-        Toggle("Preserve source folder structure", isOn: $settings.preserveSourceStructure)
-        Toggle("Include Sony proxies by default", isOn: $settings.includeProxyFiles)
-        Picker("Thumbnail quality", selection: $settings.thumbnailQualityRaw) {
-          ForEach(ThumbnailQuality.allCases) { Text($0.rawValue.capitalized).tag($0.rawValue) }
+
+        rowDivider
+
+        settingRow(
+          "Preserve source folders",
+          description: "Keep the camera card's folder structure inside the project destination."
+        ) {
+          Toggle("", isOn: $settings.preserveSourceStructure)
+            .labelsHidden()
+        }
+
+        rowDivider
+
+        settingRow(
+          "Include Sony proxies",
+          description: "Include files from Sony proxy folders when scanning a card."
+        ) {
+          Toggle("", isOn: $settings.includeProxyFiles)
+            .labelsHidden()
+        }
+
+        rowDivider
+
+        settingRow(
+          "Thumbnail quality",
+          description: "Controls the quality and processing cost of newly generated thumbnails."
+        ) {
+          Picker("", selection: $settings.thumbnailQualityRaw) {
+            ForEach(ThumbnailQuality.allCases) {
+              Text($0.rawValue.capitalized).tag($0.rawValue)
+            }
+          }
+          .labelsHidden()
+          .frame(maxWidth: 260)
+        }
+      }
+    }
+  }
+
+  private var storagePage: some View {
+    settingsScrollPage {
+      settingsCard("Storage Preset") {
+        settingRow(
+          "Preset",
+          description: "Choose a recommended setup or select Custom to control each location separately."
+        ) {
+          Picker("", selection: storagePresetBinding) {
+            ForEach(StoragePreset.allCases) { Text($0.rawValue).tag($0.rawValue) }
+          }
+          .labelsHidden()
+          .frame(maxWidth: 300)
         }
       }
 
-      Section("Storage & Cache") {
-        Picker("Storage preset", selection: storagePresetBinding) {
-          ForEach(StoragePreset.allCases) { Text($0.rawValue).tag($0.rawValue) }
-        }
+      settingsCard("Where SlateBox Stores Things") {
+        storageMapRow("Original video files", "Selected ingest destination")
+        rowDivider
+        storageMapRow("Partial/resume video files", "Beside the final video on the same destination — fixed for safety")
+        rowDivider
+        storageMapRow("Project metadata", "Inside the project folder — fixed")
+        rowDivider
+        storageMapRow("Source preview JPEGs", sourcePreviewLocationDescription)
+        rowDivider
+        storageMapRow("Project/library thumbnails", projectThumbnailLocationDescription)
+        rowDivider
+        storageMapRow("Exports and edit handoff", "Ask every time")
+        rowDivider
+        storageMapRow("Diagnostic logging", "macOS unified log")
+      }
 
-        GroupBox("Where SlateBox Stores Things") {
-          Grid(alignment: .leading, horizontalSpacing: 18, verticalSpacing: 8) {
-            storageMapRow("Original video files", "Selected ingest destination")
-            storageMapRow("Partial/resume video files", "Beside the final video — fixed for safety")
-            storageMapRow("Project metadata", "Inside the project folder — fixed")
-            storageMapRow("Source preview JPEGs", sourcePreviewLocationDescription)
-            storageMapRow("Project/library thumbnails", projectThumbnailLocationDescription)
-            storageMapRow("Exports and edit handoff", "Ask every time")
-            storageMapRow("Diagnostic logging", "macOS unified log")
+      settingsCard("Preview and Thumbnail Locations") {
+        settingRow(
+          "Source preview thumbnails",
+          description: "Small JPEGs shown before ingest. They never contain full-resolution video."
+        ) {
+          Picker("", selection: sourcePreviewLocationBinding) {
+            ForEach(SourcePreviewStorageLocation.allCases) {
+              Text($0.rawValue).tag($0.rawValue)
+            }
           }
-          .padding(.vertical, 4)
+          .labelsHidden()
+          .frame(maxWidth: 320)
         }
-
-        Picker("Source preview thumbnails", selection: sourcePreviewLocationBinding) {
-          ForEach(SourcePreviewStorageLocation.allCases) { Text($0.rawValue).tag($0.rawValue) }
-        }
-        Text("These are small JPEGs shown before ingest. Choosing Project Destination or Custom Folder avoids storing them on the Mac.")
-          .font(.caption)
-          .foregroundStyle(.secondary)
 
         if settings.sourcePreviewStorageLocation == .customFolder {
+          rowDivider
           folderChooser(
             label: "Source preview folder",
             path: settings.sourcePreviewCustomFolderPath,
@@ -64,14 +154,23 @@ struct SettingsView: View {
           )
         }
 
-        Picker("Project/library thumbnails", selection: projectThumbnailLocationBinding) {
-          ForEach(ProjectThumbnailStorageLocation.allCases) { Text($0.rawValue).tag($0.rawValue) }
+        rowDivider
+
+        settingRow(
+          "Project/library thumbnails",
+          description: "Controls where newly generated library thumbnails are stored."
+        ) {
+          Picker("", selection: projectThumbnailLocationBinding) {
+            ForEach(ProjectThumbnailStorageLocation.allCases) {
+              Text($0.rawValue).tag($0.rawValue)
+            }
+          }
+          .labelsHidden()
+          .frame(maxWidth: 320)
         }
-        Text("This controls newly generated library thumbnails. Existing project thumbnails remain usable in their current location.")
-          .font(.caption)
-          .foregroundStyle(.secondary)
 
         if settings.projectThumbnailStorageLocation == .customFolder {
+          rowDivider
           folderChooser(
             label: "Project thumbnail folder",
             path: settings.projectThumbnailCustomFolderPath,
@@ -82,41 +181,79 @@ struct SettingsView: View {
             }
           )
         }
+      }
 
-        Picker("Source preview cache limit", selection: previewLimitBinding) {
-          ForEach([100, 250, 500, 1_024, 2_048, 5_120], id: \.self) { value in
-            Text(value >= 1_024 ? "\(value / 1_024) GB" : "\(value) MB").tag(value)
+      settingsCard("Preview Cache") {
+        settingRow(
+          "Cache limit",
+          description: "SlateBox removes the oldest source-preview JPEGs when the selected limit is exceeded."
+        ) {
+          Picker("", selection: previewLimitBinding) {
+            ForEach([100, 250, 500, 1_024, 2_048, 5_120], id: \.self) { value in
+              Text(value >= 1_024 ? "\(value / 1_024) GB" : "\(value) MB").tag(value)
+            }
           }
+          .labelsHidden()
+          .frame(maxWidth: 220)
         }
 
-        Picker("Clear source previews", selection: previewCleanupBinding) {
-          ForEach(SourcePreviewCleanupPolicy.allCases) { Text($0.rawValue).tag($0.rawValue) }
+        rowDivider
+
+        settingRow(
+          "Automatic cleanup",
+          description: "Choose when source-preview JPEGs are removed."
+        ) {
+          Picker("", selection: previewCleanupBinding) {
+            ForEach(SourcePreviewCleanupPolicy.allCases) {
+              Text($0.rawValue).tag($0.rawValue)
+            }
+          }
+          .labelsHidden()
+          .frame(maxWidth: 300)
         }
 
-        HStack {
-          VStack(alignment: .leading, spacing: 2) {
-            Text("Mac preview cache: \(FileSizeFormatterUtil.string(localPreviewUsage))")
-            Text("Available on Mac: \(internalAvailable.map { FileSizeFormatterUtil.string($0) } ?? "Unavailable")")
+        rowDivider
+
+        HStack(alignment: .center, spacing: 16) {
+          VStack(alignment: .leading, spacing: 4) {
+            Text("Mac preview cache")
+              .fontWeight(.medium)
+            Text("Using \(FileSizeFormatterUtil.string(localPreviewUsage)) • \(internalAvailable.map { FileSizeFormatterUtil.string($0) } ?? "Unavailable") available")
+              .font(.caption)
               .foregroundStyle(.secondary)
           }
-          Spacer()
+          Spacer(minLength: 16)
           Button("Reveal") { reveal(StoragePreferences.internalSourcePreviewDirectory) }
-          Button("Clear Mac Preview Cache") { clearMacPreviewCache() }
+          Button("Clear Cache") { clearMacPreviewCache() }
         }
 
         if !storageMessage.isEmpty {
           Text(storageMessage)
             .font(.caption)
             .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
       }
 
-      Section("Backup Destinations") {
-        Picker("Copy during ingest", selection: $settings.backupTransferMode) {
-          ForEach(["Primary only", "Primary + Backup 1", "Primary + Backup 1 + Backup 2"], id: \.self) {
-            Text($0).tag($0)
+      settingsCard("Backup Destinations") {
+        settingRow(
+          "Copy during ingest",
+          description: "Create verified backup copies after the primary destination copy is complete."
+        ) {
+          Picker("", selection: $settings.backupTransferMode) {
+            ForEach([
+              "Primary only",
+              "Primary + Backup 1",
+              "Primary + Backup 1 + Backup 2"
+            ], id: \.self) {
+              Text($0).tag($0)
+            }
           }
+          .labelsHidden()
+          .frame(maxWidth: 340)
         }
+
+        rowDivider
 
         folderChooser(
           label: "Backup 1",
@@ -128,6 +265,8 @@ struct SettingsView: View {
           }
         )
 
+        rowDivider
+
         folderChooser(
           label: "Backup 2",
           path: settings.backupDestination2Path,
@@ -138,36 +277,149 @@ struct SettingsView: View {
           }
         )
 
-        Text("Each backup can be a different external drive or NAS folder. SlateBox remembers access using a macOS security-scoped bookmark.")
+        Text("Each backup can use a different external drive or NAS folder. SlateBox remembers access with a macOS security-scoped bookmark.")
           .font(.caption)
           .foregroundStyle(.secondary)
+          .fixedSize(horizontal: false, vertical: true)
       }
+    }
+  }
 
-      Section("Culling") {
-        Toggle("Auto-advance after rating", isOn: $settings.autoAdvanceAfterRating)
-        Toggle("Skip already rated clips", isOn: $settings.skipAlreadyRatedClips)
-        Toggle("Loop at end", isOn: $settings.loopAtEnd)
-        Toggle("Advance direction: Previous", isOn: $settings.advanceDirectionPrevious)
-      }
-
-      Section("Performance") {
-        Picker("Performance mode", selection: $settings.performanceModeRaw) {
-          ForEach(PerformanceMode.allCases) { Text($0.rawValue).tag($0.rawValue) }
+  private var workflowPage: some View {
+    settingsScrollPage {
+      settingsCard("Culling") {
+        settingRow(
+          "Auto-advance after rating",
+          description: "Move to the next clip after assigning a rating or cull status."
+        ) {
+          Toggle("", isOn: $settings.autoAdvanceAfterRating)
+            .labelsHidden()
         }
-        Text("Automatic tunes thumbnail and analysis concurrency from Apple Silicon, memory, and Metal availability.")
-          .font(.caption)
-          .foregroundStyle(.secondary)
-      }
 
-      Section("Analysis and Export") {
-        Picker("Local analysis mode", selection: $settings.localAnalysisMode) {
-          ForEach(["Off", "Fast", "Balanced", "Detailed"], id: \.self) { Text($0).tag($0) }
+        rowDivider
+
+        settingRow(
+          "Skip already rated clips",
+          description: "When advancing, bypass clips that already have a rating."
+        ) {
+          Toggle("", isOn: $settings.skipAlreadyRatedClips)
+            .labelsHidden()
+        }
+
+        rowDivider
+
+        settingRow(
+          "Loop at end",
+          description: "Return to the first clip after reaching the end of the current view."
+        ) {
+          Toggle("", isOn: $settings.loopAtEnd)
+            .labelsHidden()
+        }
+
+        rowDivider
+
+        settingRow(
+          "Advance direction",
+          description: "Use Previous instead of Next when auto-advancing."
+        ) {
+          Picker("", selection: $settings.advanceDirectionPrevious) {
+            Text("Next").tag(false)
+            Text("Previous").tag(true)
+          }
+          .labelsHidden()
+          .frame(maxWidth: 180)
         }
       }
     }
-    .padding()
-    .frame(minWidth: 720, idealWidth: 720, maxWidth: 720, minHeight: 720)
-    .onAppear { refreshStorageInformation() }
+  }
+
+  private var performancePage: some View {
+    settingsScrollPage {
+      settingsCard("Performance") {
+        settingRow(
+          "Performance mode",
+          description: "Automatic tunes thumbnail and analysis work using the Mac's processor, memory, and Metal support."
+        ) {
+          Picker("", selection: $settings.performanceModeRaw) {
+            ForEach(PerformanceMode.allCases) { Text($0.rawValue).tag($0.rawValue) }
+          }
+          .labelsHidden()
+          .frame(maxWidth: 240)
+        }
+      }
+
+      settingsCard("Analysis") {
+        settingRow(
+          "Local analysis mode",
+          description: "Choose how much on-device clip analysis SlateBox performs."
+        ) {
+          Picker("", selection: $settings.localAnalysisMode) {
+            ForEach(["Off", "Fast", "Balanced", "Detailed"], id: \.self) {
+              Text($0).tag($0)
+            }
+          }
+          .labelsHidden()
+          .frame(maxWidth: 240)
+        }
+      }
+    }
+  }
+
+  private func settingsScrollPage<Content: View>(
+    @ViewBuilder content: () -> Content
+  ) -> some View {
+    ScrollView(.vertical) {
+      VStack(alignment: .leading, spacing: 18) {
+        content()
+      }
+      .padding(24)
+      .frame(maxWidth: 920, alignment: .topLeading)
+      .frame(maxWidth: .infinity, alignment: .top)
+    }
+    .scrollIndicators(.visible)
+  }
+
+  private func settingsCard<Content: View>(
+    _ title: String,
+    @ViewBuilder content: () -> Content
+  ) -> some View {
+    GroupBox {
+      VStack(alignment: .leading, spacing: 14) {
+        content()
+      }
+      .padding(.vertical, 6)
+      .frame(maxWidth: .infinity, alignment: .leading)
+    } label: {
+      Text(title)
+        .font(.headline)
+    }
+  }
+
+  private func settingRow<Content: View>(
+    _ title: String,
+    description: String? = nil,
+    @ViewBuilder control: () -> Content
+  ) -> some View {
+    HStack(alignment: .top, spacing: 24) {
+      VStack(alignment: .leading, spacing: 3) {
+        Text(title)
+          .fontWeight(.medium)
+        if let description {
+          Text(description)
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+        }
+      }
+      .frame(width: 250, alignment: .leading)
+
+      control()
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+  }
+
+  private var rowDivider: some View {
+    Divider()
   }
 
   private var storagePresetBinding: Binding<String> {
@@ -249,40 +501,43 @@ struct SettingsView: View {
     }
   }
 
-  @ViewBuilder
   private func storageMapRow(_ name: String, _ location: String) -> some View {
-    GridRow {
-      Text(name).fontWeight(.medium)
+    HStack(alignment: .top, spacing: 24) {
+      Text(name)
+        .fontWeight(.medium)
+        .frame(width: 220, alignment: .leading)
       Text(location)
         .foregroundStyle(.secondary)
-        .lineLimit(2)
         .textSelection(.enabled)
+        .fixedSize(horizontal: false, vertical: true)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
   }
 
-  @ViewBuilder
   private func folderChooser(
     label: String,
     path: String,
     choose: @escaping () -> Void,
     clear: @escaping () -> Void
   ) -> some View {
-    HStack {
-      VStack(alignment: .leading, spacing: 2) {
-        Text(label).fontWeight(.medium)
-        Text(path.isEmpty ? "Not selected" : path)
-          .font(.caption)
-          .foregroundStyle(.secondary)
-          .lineLimit(1)
-          .truncationMode(.middle)
-          .textSelection(.enabled)
+    VStack(alignment: .leading, spacing: 8) {
+      HStack(alignment: .center, spacing: 12) {
+        Text(label)
+          .fontWeight(.medium)
+        Spacer(minLength: 16)
+        if !path.isEmpty {
+          Button("Reveal") { reveal(URL(fileURLWithPath: path, isDirectory: true)) }
+          Button("Reset") { clear() }
+        }
+        Button("Choose Folder…") { choose() }
       }
-      Spacer()
-      if !path.isEmpty {
-        Button("Reveal") { reveal(URL(fileURLWithPath: path, isDirectory: true)) }
-        Button("Reset") { clear() }
-      }
-      Button("Choose Folder…") { choose() }
+
+      Text(path.isEmpty ? "Not selected" : path)
+        .font(.caption)
+        .foregroundStyle(.secondary)
+        .textSelection(.enabled)
+        .fixedSize(horizontal: false, vertical: true)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
   }
 
@@ -321,14 +576,20 @@ struct SettingsView: View {
   }
 
   private func clearMacPreviewCache() {
-    let result = StoragePreferences.clearFolderContents(at: StoragePreferences.internalSourcePreviewDirectory)
+    let result = StoragePreferences.clearFolderContents(
+      at: StoragePreferences.internalSourcePreviewDirectory
+    )
     storageMessage = "Cleared \(result.files) item(s), freeing \(FileSizeFormatterUtil.string(result.bytes))."
     refreshStorageInformation()
   }
 
   private func refreshStorageInformation() {
-    localPreviewUsage = StoragePreferences.folderUsage(at: StoragePreferences.internalSourcePreviewDirectory)
-    internalAvailable = VolumeCapacity.availableCapacity(for: StoragePreferences.internalCacheRoot)
+    localPreviewUsage = StoragePreferences.folderUsage(
+      at: StoragePreferences.internalSourcePreviewDirectory
+    )
+    internalAvailable = VolumeCapacity.availableCapacity(
+      for: StoragePreferences.internalCacheRoot
+    )
   }
 
   private func reveal(_ url: URL) {
