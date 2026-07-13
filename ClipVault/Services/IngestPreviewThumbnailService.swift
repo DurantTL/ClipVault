@@ -23,10 +23,28 @@ final class IngestPreviewThumbnailService {
   func cleanCache() {
     do {
       let cache = try cacheDirectory()
-      let contents = try FileManager.default.contentsOfDirectory(at: cache, includingPropertiesForKeys: nil)
+      let contents = try FileManager.default.contentsOfDirectory(
+        at: cache,
+        includingPropertiesForKeys: [.fileSizeKey],
+        options: [.skipsHiddenFiles]
+      )
+      var removedFiles = 0
+      var removedBytes: Int64 = 0
       for url in contents {
-        try? FileManager.default.removeItem(at: url)
+        let size = Int64((try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
+        do {
+          try FileManager.default.removeItem(at: url)
+          removedFiles += 1
+          removedBytes += size
+        } catch {
+          print("ClipVault ingest preview thumbnail cleanup failure: file=\(url.path), error=\(error.localizedDescription)")
+        }
       }
+      PerformanceLogger.shared.previewCacheCleared(
+        fileCount: removedFiles,
+        bytes: removedBytes,
+        path: cache.path
+      )
     } catch {
       print("ClipVault ingest preview thumbnail cleanup failure: error=\(error.localizedDescription)")
     }
