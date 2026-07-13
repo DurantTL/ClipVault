@@ -92,4 +92,99 @@ final class SourceScannerTests: XCTestCase {
     let videos = try scanner.scan(source: card, includeProxyFiles: false)
     XCTAssertEqual(videos.map(\.relativePath), ["clips/A001.mp4"])
   }
+
+  func testNetworkCapacityDoesNotUseImportantUsageEstimate() {
+    XCTAssertEqual(
+      VolumeCapacity.preferredAvailableCapacity(
+        isLocal: false,
+        important: 900,
+        regular: 400,
+        fileSystem: 300
+      ),
+      400
+    )
+  }
+
+  func testLocalCapacityPrefersImportantUsageEstimate() {
+    XCTAssertEqual(
+      VolumeCapacity.preferredAvailableCapacity(
+        isLocal: true,
+        important: 900,
+        regular: 400,
+        fileSystem: 300
+      ),
+      900
+    )
+  }
+
+  func testCapacityFallsBackToFilesystemValue() {
+    XCTAssertEqual(
+      VolumeCapacity.preferredAvailableCapacity(
+        isLocal: false,
+        important: nil,
+        regular: nil,
+        fileSystem: 300
+      ),
+      300
+    )
+  }
+
+  func testProjectDestinationPreviewPathStaysInsideProject() {
+    let destination = URL(fileURLWithPath: "/Volumes/NAS/Project", isDirectory: true)
+    let storage = StoragePreferences.sourcePreviewDirectory(
+      location: .projectDestination,
+      destinationRoot: destination,
+      customFolder: nil
+    )
+
+    XCTAssertEqual(
+      storage?.directoryURL.path,
+      "/Volumes/NAS/Project/.clipvault-cache/ingest-previews"
+    )
+    XCTAssertEqual(storage?.accessURL.path, destination.path)
+  }
+
+  func testDisabledSourcePreviewsHaveNoStorageDirectory() {
+    XCTAssertNil(
+      StoragePreferences.sourcePreviewDirectory(
+        location: .disabled,
+        destinationRoot: nil,
+        customFolder: nil
+      )
+    )
+  }
+
+  func testCustomProjectThumbnailPathUsesProjectSpecificFolder() {
+    let projectID = UUID(uuidString: "11111111-2222-3333-4444-555555555555")!
+    let custom = URL(fileURLWithPath: "/Volumes/Cache", isDirectory: true)
+    let project = URL(fileURLWithPath: "/Volumes/NAS/Project", isDirectory: true)
+    let storage = StoragePreferences.projectThumbnailDirectory(
+      location: .customFolder,
+      projectID: projectID,
+      projectFolder: project,
+      customFolder: custom
+    )
+
+    XCTAssertEqual(
+      storage.directoryURL.path,
+      "/Volumes/Cache/SlateBox/ProjectThumbnails/11111111-2222-3333-4444-555555555555"
+    )
+    XCTAssertEqual(storage.accessURL.path, custom.path)
+  }
+
+  func testProjectThumbnailDefaultStaysInsideProject() {
+    let projectID = UUID()
+    let project = URL(fileURLWithPath: "/Volumes/NAS/Project", isDirectory: true)
+    let storage = StoragePreferences.projectThumbnailDirectory(
+      location: .projectFolder,
+      projectID: projectID,
+      projectFolder: project,
+      customFolder: nil
+    )
+
+    XCTAssertEqual(
+      storage.directoryURL.path,
+      "/Volumes/NAS/Project/.clipvault-cache/thumbnails"
+    )
+  }
 }

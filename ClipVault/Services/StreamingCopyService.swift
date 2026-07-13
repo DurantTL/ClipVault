@@ -64,6 +64,12 @@ final class StreamingCopyService {
         try? fm.removeItem(at: manifestURL)
       }
 
+      PerformanceLogger.shared.transferStarted(
+        source: source,
+        destination: destination,
+        resumedBytes: copied
+      )
+
       if !fm.fileExists(atPath: partialDestination.path) {
         guard fm.createFile(atPath: partialDestination.path, contents: nil) else {
           throw CocoaError(.fileWriteUnknown)

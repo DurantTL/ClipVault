@@ -187,9 +187,13 @@ struct LibraryView: View {
           Divider()
           Button("Analyze Locally") { viewModel.analyzeLocally() }
           Divider()
-          Button("Reveal an Edit Folder in Finder…") { viewModel.handOffEditFolder(to: nil) }
-          Button("Open an Edit Folder in DaVinci Resolve…") { viewModel.handOffEditFolder(to: "com.blackmagic-design.DaVinciResolve") }
-          Button("Open an Edit Folder in Final Cut Pro…") { viewModel.handOffEditFolder(to: "com.apple.FinalCut") }
+          Button("Reveal an Edit Folder in Finder…") { EditFolderHandoff.chooseFolderAndHandOff(to: nil) }
+          Button("Reveal Edit Folder + Open DaVinci Resolve…") {
+            EditFolderHandoff.chooseFolderAndHandOff(to: "com.blackmagic-design.DaVinciResolve")
+          }
+          Button("Reveal Edit Folder + Open Final Cut Pro…") {
+            EditFolderHandoff.chooseFolderAndHandOff(to: "com.apple.FinalCut")
+          }
         }
 
         Button { showingSettings = true } label: {
@@ -257,6 +261,44 @@ struct LibraryView: View {
     .padding(.horizontal, 16)
     .padding(.vertical, 10)
     .background(Color.orange.opacity(0.12))
+  }
+}
+
+private enum EditFolderHandoff {
+  @MainActor
+  static func chooseFolderAndHandOff(to applicationIdentifier: String?) {
+    let panel = NSOpenPanel()
+    panel.title = "Choose Edit Folder"
+    panel.message = "Choose the folder SlateBox should reveal for your editing application."
+    panel.prompt = applicationIdentifier == nil ? "Reveal" : "Reveal and Open App"
+    panel.canChooseDirectories = true
+    panel.canChooseFiles = false
+    panel.allowsMultipleSelection = false
+    guard panel.runModal() == .OK, let folder = panel.url else { return }
+
+    NSWorkspace.shared.activateFileViewerSelecting([folder])
+    guard let applicationIdentifier else { return }
+    guard let applicationURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: applicationIdentifier) else {
+      showAlert(title: "Editor not found", message: "Install the selected editor, then try the handoff again.")
+      return
+    }
+
+    let configuration = NSWorkspace.OpenConfiguration()
+    configuration.activates = true
+    NSWorkspace.shared.openApplication(at: applicationURL, configuration: configuration) { _, error in
+      guard let error else { return }
+      DispatchQueue.main.async {
+        showAlert(title: "Could not open editor", message: error.localizedDescription)
+      }
+    }
+  }
+
+  @MainActor
+  private static func showAlert(title: String, message: String) {
+    let alert = NSAlert()
+    alert.messageText = title
+    alert.informativeText = message
+    alert.runModal()
   }
 }
 

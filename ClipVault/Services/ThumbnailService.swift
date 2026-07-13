@@ -11,10 +11,7 @@ actor ThumbnailService {
   private let security = SecurityScopedBookmarkManager()
 
   func thumbnailURL(for clip: Clip, in project: ClipVaultProject) -> URL {
-    let projectFolder = security.projectFolderURL(for: project)
-    return projectFolder
-      .appendingPathComponent(AppBrand.cacheFolderName, isDirectory: true)
-      .appendingPathComponent("thumbnails", isDirectory: true)
+    StoragePreferences.projectThumbnailDirectory(for: project).directoryURL
       .appendingPathComponent(clip.id.uuidString)
       .appendingPathExtension("jpg")
   }
@@ -40,48 +37,51 @@ actor ThumbnailService {
     force: Bool = false
   ) async throws -> Result {
     let projectFolder = security.projectFolderURL(for: project)
+    let storage = StoragePreferences.projectThumbnailDirectory(for: project)
     return try await security.withAccessAsync(to: projectFolder) {
       try await security.withAccessAsync(to: mediaURL) {
-        let cache = projectFolder
-          .appendingPathComponent(AppBrand.cacheFolderName, isDirectory: true)
-          .appendingPathComponent("thumbnails", isDirectory: true)
-        try FileManager.default.createDirectory(at: cache, withIntermediateDirectories: true)
+        try await security.withAccessAsync(to: storage.accessURL) {
+          let cache = storage.directoryURL
+          try FileManager.default.createDirectory(at: cache, withIntermediateDirectories: true)
 
-        let dest = self.thumbnailURL(for: clip, in: project)
-        if !force, FileManager.default.fileExists(atPath: dest.path) {
-          return Result(path: dest.path, relativePath: self.relativeThumbnailPath(for: dest, projectFolder: projectFolder))
-        }
-
-        let asset = AVURLAsset(url: mediaURL)
-        let generator = AVAssetImageGenerator(asset: asset)
-        generator.appliesPreferredTrackTransform = true
-        generator.maximumSize = CGSize(width: quality.maxPixelSize, height: quality.maxPixelSize)
-        generator.requestedTimeToleranceBefore = CMTime(seconds: 0.25, preferredTimescale: 600)
-        generator.requestedTimeToleranceAfter = CMTime(seconds: 0.25, preferredTimescale: 600)
-
-        let duration = try? await asset.load(.duration)
-        let seconds = self.thumbnailSeconds(for: duration)
-        let time = CMTime(seconds: seconds, preferredTimescale: 600)
-
-        do {
-          let start = Date()
-          let cgImage = try await generator.image(at: time).image
-          guard let data = NSBitmapImageRep(cgImage: cgImage).representation(
-            using: .jpeg,
-            properties: [.compressionFactor: 0.82]
-          ) else {
-            throw CocoaError(.fileWriteUnknown)
+          let dest = cache
+            .appendingPathComponent(clip.id.uuidString)
+            .appendingPathExtension("jpg")
+          if !force, FileManager.default.fileExists(atPath: dest.path) {
+            return Result(path: dest.path, relativePath: self.relativeThumbnailPath(for: dest, projectFolder: projectFolder))
           }
-          try data.write(to: dest, options: .atomic)
-          PerformanceLogger.shared.thumbnail(duration: Date().timeIntervalSince(start), failed: false)
-          return Result(path: dest.path, relativePath: self.relativeThumbnailPath(for: dest, projectFolder: projectFolder))
-        } catch {
-          PerformanceLogger.shared.thumbnail(duration: 0, failed: true)
-          let exists = FileManager.default.fileExists(atPath: mediaURL.path)
-          print("""
-          ClipVault thumbnail failure: filename=\(clip.currentFilename), resolvedMediaURL=\(mediaURL.path), mediaFileExists=\(exists), cacheThumbnailURL=\(dest.path), assetDuration=\(duration?.seconds.description ?? "nil"), requestedThumbnailTime=\(seconds), error=\(error.localizedDescription)
-          """)
-          throw error
+
+          let asset = AVURLAsset(url: mediaURL)
+          let generator = AVAssetImageGenerator(asset: asset)
+          generator.appliesPreferredTrackTransform = true
+          generator.maximumSize = CGSize(width: quality.maxPixelSize, height: quality.maxPixelSize)
+          generator.requestedTimeToleranceBefore = CMTime(seconds: 0.25, preferredTimescale: 600)
+          generator.requestedTimeToleranceAfter = CMTime(seconds: 0.25, preferredTimescale: 600)
+
+          let duration = try? await asset.load(.duration)
+          let seconds = self.thumbnailSeconds(for: duration)
+          let time = CMTime(seconds: seconds, preferredTimescale: 600)
+
+          do {
+            let start = Date()
+            let cgImage = try await generator.image(at: time).image
+            guard let data = NSBitmapImageRep(cgImage: cgImage).representation(
+              using: .jpeg,
+              properties: [.compressionFactor: 0.82]
+            ) else {
+              throw CocoaError(.fileWriteUnknown)
+            }
+            try data.write(to: dest, options: .atomic)
+            PerformanceLogger.shared.thumbnail(duration: Date().timeIntervalSince(start), failed: false)
+            return Result(path: dest.path, relativePath: self.relativeThumbnailPath(for: dest, projectFolder: projectFolder))
+          } catch {
+            PerformanceLogger.shared.thumbnail(duration: 0, failed: true)
+            let exists = FileManager.default.fileExists(atPath: mediaURL.path)
+            print("""
+            ClipVault thumbnail failure: filename=\(clip.currentFilename), resolvedMediaURL=\(mediaURL.path), mediaFileExists=\(exists), cacheThumbnailURL=\(dest.path), assetDuration=\(duration?.seconds.description ?? "nil"), requestedThumbnailTime=\(seconds), error=\(error.localizedDescription)
+            """)
+            throw error
+          }
         }
       }
     }

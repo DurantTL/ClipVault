@@ -1,13 +1,51 @@
 import AppKit
 import Foundation
 
+private final class IngestWindowPreviewCleanup: @unchecked Sendable {
+  private let lock = NSLock()
+  private var destinationRoot: URL?
+  private var cleaned = false
+
+  func update(destinationRoot: URL?) {
+    lock.lock()
+    self.destinationRoot = destinationRoot
+    cleaned = false
+    lock.unlock()
+  }
+
+  func cleanIfNeeded() {
+    lock.lock()
+    guard !cleaned else {
+      lock.unlock()
+      return
+    }
+    cleaned = true
+    let destinationRoot = self.destinationRoot
+    lock.unlock()
+
+    if StoragePreferences.sourcePreviewCleanupPolicy == .whenIngestWindowCloses {
+      IngestPreviewThumbnailService().cleanCache(destinationRoot: destinationRoot)
+    }
+  }
+
+  deinit {
+    cleanIfNeeded()
+  }
+}
+
 @MainActor final class NewIngestViewModel: ObservableObject {
   private static let rememberedSourceBookmarksKey = "rememberedSourceBookmarks"
   private static let rememberedManualSourcePathsKey = "rememberedManualSourcePaths"
   @Published var sourceURL: URL?
-  @Published var destinationURL: URL?
-  @Published var projectName = ""
-  @Published var shootName = ""
+  @Published var destinationURL: URL? {
+    didSet { updateWindowCleanupDestination() }
+  }
+  @Published var projectName = "" {
+    didSet { updateWindowCleanupDestination() }
+  }
+  @Published var shootName = "" {
+    didSet { updateWindowCleanupDestination() }
+  }
   @Published var videos: [SourceVideo] = []
   @Published var sessions: [IngestSession] = []
   @Published var progress = IngestProgress()
@@ -32,6 +70,7 @@ import Foundation
   let bookmarks = SecurityScopedBookmarkManager()
   let ingestService = IngestService()
   private let ingestPreviewThumbnails = IngestPreviewThumbnailService()
+  private let windowPreviewCleanup = IngestWindowPreviewCleanup()
   private var queuedPreviewThumbnailIDs = Set<UUID>()
   private var pendingPreviewThumbnailClips: [ScannedVideo] = []
   private var activePreviewThumbnailCount = 0
@@ -61,10 +100,11 @@ import Foundation
       option.bookmarkData = sourceBookmarkDataByID[option.id]
       return option
     }
-    ingestPreviewThumbnails.cleanCache()
+    ingestPreviewThumbnails.cleanCache(destinationRoot: nil)
     let formatter = DateFormatter()
     formatter.dateFormat = "yyyy-MM-dd"
     projectName = "\(formatter.string(from: Date())) Video Ingest"
+    updateWindowCleanupDestination()
     refreshSources()
   }
 
@@ -75,6 +115,10 @@ import Foundation
       url.appendPathComponent(SafeFilename.safeFolderName(shootName), isDirectory: true)
     }
     return url
+  }
+
+  private func updateWindowCleanupDestination() {
+    windowPreviewCleanup.update(destinationRoot: finalOutputURL)
   }
 
   func chooseSource(settings: AppSettings) {
@@ -244,16 +288,23 @@ import Foundation
   }
 
   func chooseDestination() {
-    destinationURL = pickFolder(canCreateDirectories: true)
+    guard let url = pickFolder(canCreateDirectories: true) else { return }
+    destinationURL = url
+    retainAccess(to: url)
     updateFreeSpace()
+    queueInitialPreviewThumbnails()
   }
 
   func chooseBackup1(settings: AppSettings) {
-    settings.backupDestination1Path = pickFolder(canCreateDirectories: true)?.path ?? ""
+    guard let url = pickFolder(canCreateDirectories: true) else { return }
+    settings.backupDestination1Path = url.path
+    settings.backupDestination1BookmarkBase64 = (try? bookmarks.bookmark(for: url))?.base64EncodedString() ?? ""
   }
 
   func chooseBackup2(settings: AppSettings) {
-    settings.backupDestination2Path = pickFolder(canCreateDirectories: true)?.path ?? ""
+    guard let url = pickFolder(canCreateDirectories: true) else { return }
+    settings.backupDestination2Path = url.path
+    settings.backupDestination2BookmarkBase64 = (try? bookmarks.bookmark(for: url))?.base64EncodedString() ?? ""
   }
 
   func pickFolder(canCreateDirectories: Bool) -> URL? {
@@ -277,7 +328,7 @@ import Foundation
     detectSonyCard()
     cancelPreviewThumbnailWork()
     maxConcurrentPreviewThumbnails = settings.performanceTuning().ingestPreviewThumbnailConcurrency
-    ingestPreviewThumbnails.cleanCache()
+    ingestPreviewThumbnails.cleanCache(destinationRoot: finalOutputURL)
     queuedPreviewThumbnailIDs.removeAll()
     pendingPreviewThumbnailClips.removeAll()
     activePreviewThumbnailCount = 0
@@ -335,6 +386,9 @@ import Foundation
         cameraCardMetadata: cameraCardMetadata
       ) { self.progress = $0 }
       Self.rememberCameraLabel(cameraCardMetadata.cameraLabel)
+      if settings.sourcePreviewCleanupPolicy == .afterSuccessfulIngest {
+        ingestPreviewThumbnails.cleanCache(destinationRoot: finalOutputURL)
+      }
       return project
     } catch is CancellationError {
       canceledSummary = "Ingest canceled. \(progress.currentIndex) of \(progress.totalCount) files copied."
@@ -355,7 +409,7 @@ import Foundation
     let clean = label.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !clean.isEmpty else { return }
     let values = ([clean] + loadCameraLabelHistory().filter { $0.caseInsensitiveCompare(clean) != .orderedSame })
-    UserDefaults.standard.set(Array(values.prefix(12)), forKey: cameraLabelHistoryKey)
+    UserDefaults.standard.set(Array(values.prefix(12)), forKey: Self.cameraLabelHistoryKey)
   }
 
   var selectedSessions: [IngestSession] { sessions.filter(\.selected) }
@@ -415,6 +469,7 @@ import Foundation
 
   func queuePreviewThumbnail(for clip: ScannedVideo) {
     guard let sourceURL else { return }
+    guard StoragePreferences.sourcePreviewDirectory(destinationRoot: finalOutputURL) != nil else { return }
     guard clip.previewThumbnailStatus == .pending || clip.previewThumbnailStatus == .failed else { return }
     guard !queuedPreviewThumbnailIDs.contains(clip.id) else { return }
     queuedPreviewThumbnailIDs.insert(clip.id)
@@ -429,13 +484,18 @@ import Foundation
     guard !pendingPreviewThumbnailClips.isEmpty else { return }
 
     let clip = pendingPreviewThumbnailClips.removeFirst()
+    let destinationRoot = finalOutputURL
     activePreviewThumbnailCount += 1
 
     let task = Task(priority: .utility) {
       do {
         let workID = await BackgroundWorkCoordinator.shared.begin(kind: .ingestPreviewThumbnail, label: clip.filename)
         defer { Task { await BackgroundWorkCoordinator.shared.finish(workID) } }
-        let result = try await ingestPreviewThumbnails.generate(for: clip, sourceRoot: sourceURL)
+        let result = try await ingestPreviewThumbnails.generate(
+          for: clip,
+          sourceRoot: sourceURL,
+          destinationRoot: destinationRoot
+        )
         await MainActor.run {
           self.finishPreviewThumbnail(
             clipID: clip.id,
@@ -469,6 +529,7 @@ import Foundation
   }
 
   deinit {
+    windowPreviewCleanup.cleanIfNeeded()
     for url in activeAccessURLsByPath.values { url.stopAccessingSecurityScopedResource() }
   }
 
@@ -585,7 +646,6 @@ import Foundation
 
   private func updateFreeSpace() {
     guard let destinationURL else { return }
-    destinationFreeSpace = try? destinationURL.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])
-      .volumeAvailableCapacityForImportantUsage
+    destinationFreeSpace = VolumeCapacity.availableCapacity(for: destinationURL)
   }
 }
