@@ -3,11 +3,23 @@ import SwiftUI
 @main
 struct ClipVaultApp: App {
   @StateObject private var settings = AppSettings()
+  @AppStorage("appAppearance") private var appAppearanceRaw = AppAppearance.system.rawValue
+  @AppStorage("appAccentColor") private var appAccentColorRaw = AppAccentColor.system.rawValue
+
+  private var appAppearance: AppAppearance {
+    AppAppearance(rawValue: appAppearanceRaw) ?? .system
+  }
+
+  private var appAccentColor: AppAccentColor {
+    AppAccentColor(rawValue: appAccentColorRaw) ?? .system
+  }
 
   var body: some Scene {
     WindowGroup(AppBrand.appName) {
       RootView()
         .environmentObject(settings)
+        .preferredColorScheme(appAppearance.colorScheme)
+        .tint(appAccentColor.color)
     }
     .commands {
       CommandMenu("Clip") {
@@ -46,6 +58,8 @@ struct ClipVaultApp: App {
     Settings {
       SettingsView()
         .environmentObject(settings)
+        .preferredColorScheme(appAppearance.colorScheme)
+        .tint(appAccentColor.color)
     }
     .defaultSize(width: 900, height: 700)
     .windowResizability(.contentMinSize)
