@@ -96,7 +96,7 @@ struct SettingsView: View {
         HStack {
           VStack(alignment: .leading, spacing: 2) {
             Text("Mac preview cache: \(FileSizeFormatterUtil.string(localPreviewUsage))")
-            Text("Available on Mac: \(internalAvailable.map(FileSizeFormatterUtil.string) ?? "Unavailable")")
+            Text("Available on Mac: \(internalAvailable.map { FileSizeFormatterUtil.string($0) } ?? "Unavailable")")
               .foregroundStyle(.secondary)
           }
           Spacer()
@@ -166,7 +166,7 @@ struct SettingsView: View {
       }
     }
     .padding()
-    .frame(width: 720, minHeight: 720)
+    .frame(minWidth: 720, idealWidth: 720, maxWidth: 720, minHeight: 720)
     .onAppear { refreshStorageInformation() }
   }
 
@@ -316,6 +316,7 @@ struct SettingsView: View {
       settings.backupDestination2Path = url.path
       settings.backupDestination2BookmarkBase64 = bookmark
     }
+    StoragePreferences.activateConfiguredBookmarks()
     refreshStorageInformation()
   }
 
