@@ -1,13 +1,51 @@
 import AppKit
 import Foundation
 
+private final class IngestWindowPreviewCleanup: @unchecked Sendable {
+  private let lock = NSLock()
+  private var destinationRoot: URL?
+  private var cleaned = false
+
+  func update(destinationRoot: URL?) {
+    lock.lock()
+    self.destinationRoot = destinationRoot
+    cleaned = false
+    lock.unlock()
+  }
+
+  func cleanIfNeeded() {
+    lock.lock()
+    guard !cleaned else {
+      lock.unlock()
+      return
+    }
+    cleaned = true
+    let destinationRoot = self.destinationRoot
+    lock.unlock()
+
+    if StoragePreferences.sourcePreviewCleanupPolicy == .whenIngestWindowCloses {
+      IngestPreviewThumbnailService().cleanCache(destinationRoot: destinationRoot)
+    }
+  }
+
+  deinit {
+    cleanIfNeeded()
+  }
+}
+
 @MainActor final class NewIngestViewModel: ObservableObject {
   private static let rememberedSourceBookmarksKey = "rememberedSourceBookmarks"
   private static let rememberedManualSourcePathsKey = "rememberedManualSourcePaths"
   @Published var sourceURL: URL?
-  @Published var destinationURL: URL?
-  @Published var projectName = ""
-  @Published var shootName = ""
+  @Published var destinationURL: URL? {
+    didSet { updateWindowCleanupDestination() }
+  }
+  @Published var projectName = "" {
+    didSet { updateWindowCleanupDestination() }
+  }
+  @Published var shootName = "" {
+    didSet { updateWindowCleanupDestination() }
+  }
   @Published var videos: [SourceVideo] = []
   @Published var sessions: [IngestSession] = []
   @Published var progress = IngestProgress()
@@ -32,6 +70,7 @@ import Foundation
   let bookmarks = SecurityScopedBookmarkManager()
   let ingestService = IngestService()
   private let ingestPreviewThumbnails = IngestPreviewThumbnailService()
+  private let windowPreviewCleanup = IngestWindowPreviewCleanup()
   private var queuedPreviewThumbnailIDs = Set<UUID>()
   private var pendingPreviewThumbnailClips: [ScannedVideo] = []
   private var activePreviewThumbnailCount = 0
@@ -65,6 +104,7 @@ import Foundation
     let formatter = DateFormatter()
     formatter.dateFormat = "yyyy-MM-dd"
     projectName = "\(formatter.string(from: Date())) Video Ingest"
+    updateWindowCleanupDestination()
     refreshSources()
   }
 
@@ -75,6 +115,10 @@ import Foundation
       url.appendPathComponent(SafeFilename.safeFolderName(shootName), isDirectory: true)
     }
     return url
+  }
+
+  private func updateWindowCleanupDestination() {
+    windowPreviewCleanup.update(destinationRoot: finalOutputURL)
   }
 
   func chooseSource(settings: AppSettings) {
@@ -365,7 +409,7 @@ import Foundation
     let clean = label.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !clean.isEmpty else { return }
     let values = ([clean] + loadCameraLabelHistory().filter { $0.caseInsensitiveCompare(clean) != .orderedSame })
-    UserDefaults.standard.set(Array(values.prefix(12)), forKey: cameraLabelHistoryKey)
+    UserDefaults.standard.set(Array(values.prefix(12)), forKey: Self.cameraLabelHistoryKey)
   }
 
   var selectedSessions: [IngestSession] { sessions.filter(\.selected) }
@@ -485,19 +529,7 @@ import Foundation
   }
 
   deinit {
-    if StoragePreferences.sourcePreviewCleanupPolicy == .whenIngestWindowCloses {
-      let destinationRoot: URL?
-      if let destinationURL {
-        var url = destinationURL.appendingPathComponent(projectName, isDirectory: true)
-        if !shootName.trimmingCharacters(in: .whitespaces).isEmpty {
-          url.appendPathComponent(SafeFilename.safeFolderName(shootName), isDirectory: true)
-        }
-        destinationRoot = url
-      } else {
-        destinationRoot = nil
-      }
-      ingestPreviewThumbnails.cleanCache(destinationRoot: destinationRoot)
-    }
+    windowPreviewCleanup.cleanIfNeeded()
     for url in activeAccessURLsByPath.values { url.stopAccessingSecurityScopedResource() }
   }
 
