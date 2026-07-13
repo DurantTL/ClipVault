@@ -585,7 +585,6 @@ import Foundation
 
   private func updateFreeSpace() {
     guard let destinationURL else { return }
-    destinationFreeSpace = try? destinationURL.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])
-      .volumeAvailableCapacityForImportantUsage
+    destinationFreeSpace = VolumeCapacity.availableCapacity(for: destinationURL)
   }
 }
