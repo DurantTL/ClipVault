@@ -486,7 +486,17 @@ import Foundation
 
   deinit {
     if StoragePreferences.sourcePreviewCleanupPolicy == .whenIngestWindowCloses {
-      ingestPreviewThumbnails.cleanCache(destinationRoot: finalOutputURL)
+      let destinationRoot: URL?
+      if let destinationURL {
+        var url = destinationURL.appendingPathComponent(projectName, isDirectory: true)
+        if !shootName.trimmingCharacters(in: .whitespaces).isEmpty {
+          url.appendPathComponent(SafeFilename.safeFolderName(shootName), isDirectory: true)
+        }
+        destinationRoot = url
+      } else {
+        destinationRoot = nil
+      }
+      ingestPreviewThumbnails.cleanCache(destinationRoot: destinationRoot)
     }
     for url in activeAccessURLsByPath.values { url.stopAccessingSecurityScopedResource() }
   }
