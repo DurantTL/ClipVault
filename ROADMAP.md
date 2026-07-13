@@ -28,6 +28,8 @@ SlateBox is designed mainly for Apple Silicon Macs and a Sony a7R V workflow:
 
 The product may be renamed again ("SlateBox" appears taken on App Store Connect). All user-visible brand strings flow through `AppBrand.swift`, so a rename is a one-file change plus the checklist documented in that file. The hidden on-disk identifiers (`.clipvault-project.json`, `.clipvault-cache`, `.clipvault-partial`, `~/Library/Caches/ClipVault/`) are **permanent format identifiers** and never change with the product name.
 
+The App Store listing does not have to use only the short base brand. A distinctive brand can be paired with a concise functional phrase—for example, `<Brand>: Video Ingest`—while the app keeps the shorter brand in its logo and interface. See [`NAMING.md`](NAMING.md) for limits, candidate patterns, subtitle ideas, and the final decision process.
+
 ## Important Safety Rules
 
 These must stay true for every future feature:
@@ -77,7 +79,7 @@ Make the existing core loop provably reliable before adding surface area.
 
 ## Phase 2 — Distribution (make it a product)
 
-- **Final name decision** — blocked on App Store Connect availability; now a one-file change plus the `AppBrand.swift` checklist.
+- **Final name decision** — blocked on App Store Connect availability. Test a distinctive base brand alone and in full-name variations such as `<Brand>: Video Ingest`, then choose a complementary subtitle. Follow the strategy and checklist in [`NAMING.md`](NAMING.md); the code rename remains a one-file change plus the `AppBrand.swift` checklist.
 - **Real brand asset**: replace the generated placeholder icon and SwiftUI logo with final artwork; commit real icon assets. Do this together with the name decision.
 - ✅ **Developer ID signing + notarization, DMG packaging, release workflow** — shipped as `.github/workflows/release.yml`: push a `vX.Y.Z` tag → Release build + tests → optional signing/notarization (activates automatically once the Apple secrets are configured in repo settings) → DMG → GitHub Release. Unsigned DMGs publish for testing until the secrets exist.
 - ✅ **Versioning + changelog** — `CHANGELOG.md` added; the release workflow stamps `MARKETING_VERSION` from the tag and the build number from the CI run.
