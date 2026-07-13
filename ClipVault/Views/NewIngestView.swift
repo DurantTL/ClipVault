@@ -5,6 +5,7 @@ struct NewIngestView: View {
   @EnvironmentObject var settings: AppSettings
   @Environment(\.dismiss) var dismiss
   @StateObject var vm = NewIngestViewModel()
+  @StateObject private var preflight = PreflightMediaCheckViewModel()
   let openProject: (ClipVaultProject) -> Void
   var onClose: (() -> Void)? = nil
 
@@ -21,6 +22,12 @@ struct NewIngestView: View {
     .onAppear { vm.refreshSources() }
     .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
       vm.refreshSources()
+    }
+    .onChange(of: vm.selectedSourceID) { _ in
+      preflight.reset()
+    }
+    .onChange(of: vm.destinationURL?.standardizedFileURL.path) { _ in
+      preflight.reset()
     }
   }
 
@@ -49,16 +56,24 @@ struct NewIngestView: View {
         .font(.caption)
         .foregroundStyle(.secondary)
         .lineLimit(3)
-      Label(vm.detectedCardType.summary, systemImage: vm.detectedCardType == .generic ? "folder" : "checkmark.seal.fill")
-        .font(.caption)
-        .foregroundStyle(vm.detectedCardType == .generic ? Color.secondary : Color.green)
+      Label(
+        vm.detectedCardType.summary,
+        systemImage: vm.detectedCardType == .generic ? "folder" : "checkmark.seal.fill"
+      )
+      .font(.caption)
+      .foregroundStyle(vm.detectedCardType == .generic ? Color.secondary : Color.green)
     }
     .padding(18)
     .frame(width: 230)
   }
 
-  private func sourceSection(_ title: String, kinds: [SourceVolumeKind], includeManual: Bool = false) -> some View {
-    let options = vm.sourceOptions.filter { kinds.contains($0.volumeKind) } + (includeManual ? vm.recentManualSources : [])
+  private func sourceSection(
+    _ title: String,
+    kinds: [SourceVolumeKind],
+    includeManual: Bool = false
+  ) -> some View {
+    let options = vm.sourceOptions.filter { kinds.contains($0.volumeKind) }
+      + (includeManual ? vm.recentManualSources : [])
     return VStack(alignment: .leading, spacing: 7) {
       Text(title)
         .font(.caption.bold())
@@ -96,11 +111,28 @@ struct NewIngestView: View {
             Button("Select All") { vm.selectAllSessions() }
             Button("Clear Selection") { vm.clearSessionSelection() }
             Button("Select Today") { vm.selectTodaySessions() }
-            Button("Select New Only") { vm.selectNewOnlySessions() }
-            DatePicker("Select by Date", selection: $vm.selectDate, displayedComponents: .date)
-              .labelsHidden()
+            Button("Select New Only") {
+              if preflight.hasResults {
+                preflight.applyNewOnlySelection(to: vm)
+              } else {
+                vm.selectNewOnlySessions()
+              }
+            }
+            DatePicker(
+              "Select by Date",
+              selection: $vm.selectDate,
+              displayedComponents: .date
+            )
+            .labelsHidden()
             Button("Select by Date") { vm.selectSessions(on: vm.selectDate) }
-            Button("Reload") { vm.scan(settings: settings) }
+            Button(preflight.hasResults ? "Refresh Preflight" : "Run Preflight") {
+              runPreflight()
+            }
+            .disabled(!canRunPreflight || preflight.isRunning)
+            Button("Reload") {
+              preflight.reset()
+              vm.scan(settings: settings)
+            }
           }
           .padding(.bottom, 2)
         }
@@ -113,6 +145,13 @@ struct NewIngestView: View {
           }
         }
       }
+
+      PreflightSummaryCard(
+        preflight: preflight,
+        canRun: canRunPreflight,
+        onRun: runPreflight
+      )
+
       ScrollView {
         LazyVStack(spacing: 12) {
           ForEach(vm.sessions) { session in
@@ -121,15 +160,24 @@ struct NewIngestView: View {
               selected: Binding(get: {
                 vm.sessions.first(where: { $0.id == session.id })?.selected ?? false
               }, set: { vm.setSession(session, selected: $0) }),
+              preflightResults: preflight.results,
               onToggleSession: { vm.toggleSession(session) },
-              onSetClip: { clip, selected in vm.setClip(clip, in: session, selected: selected) },
+              onSetClip: { clip, selected in
+                vm.setClip(clip, in: session, selected: selected)
+              },
               onQueueClipThumbnail: { clip in vm.queuePreviewThumbnail(for: clip) },
-              onQueueSessionThumbnails: { session in vm.queuePreviewThumbnails(for: session, limit: 24) }
+              onQueueSessionThumbnails: { session in
+                vm.queuePreviewThumbnails(for: session, limit: 24)
+              }
             )
           }
           if vm.sessions.isEmpty {
-            ContentUnavailableView("No sessions scanned", systemImage: "film.stack", description: Text("Add a source or reload the selected source."))
-              .padding(40)
+            ContentUnavailableView(
+              "No sessions scanned",
+              systemImage: "film.stack",
+              description: Text("Add a source or reload the selected source.")
+            )
+            .padding(40)
           }
         }
       }
@@ -167,7 +215,11 @@ struct NewIngestView: View {
           .textFieldStyle(.roundedBorder)
         Toggle("Set shoot day", isOn: Binding(
           get: { vm.cameraCardMetadata.shootDay != nil },
-          set: { vm.cameraCardMetadata.shootDay = $0 ? (vm.cameraCardMetadata.shootDay ?? Date()) : nil }
+          set: {
+            vm.cameraCardMetadata.shootDay = $0
+              ? (vm.cameraCardMetadata.shootDay ?? Date())
+              : nil
+          }
         ))
         if let shootDay = Binding($vm.cameraCardMetadata.shootDay) {
           DatePicker("Shoot day", selection: shootDay, displayedComponents: .date)
@@ -175,7 +227,9 @@ struct NewIngestView: View {
         Text("Applied to copied clips from this source. Per-clip metadata remains editable after ingest.")
           .font(.caption)
           .foregroundStyle(.secondary)
-        Button("Change Destination", systemImage: "folder.badge.plus") { vm.chooseDestination() }
+        Button("Change Destination", systemImage: "folder.badge.plus") {
+          vm.chooseDestination()
+        }
         Text(vm.destinationURL?.path ?? "No destination selected")
           .font(.caption)
           .foregroundStyle(.secondary)
@@ -190,17 +244,35 @@ struct NewIngestView: View {
         Picker("Already Imported", selection: $vm.alreadyImportedMode) {
           ForEach(AlreadyImportedMode.allCases) { Text($0.rawValue).tag($0) }
         }
+        Button(preflight.hasResults ? "Refresh Media Check" : "Check for Existing Media") {
+          runPreflight()
+        }
+        .disabled(!canRunPreflight || preflight.isRunning)
+        if preflight.hasResults {
+          Text(
+            "\(preflight.summary.newCount) new • "
+            + "\(preflight.summary.alreadyImportedCount) imported • "
+            + "\(preflight.summary.reviewCount) review"
+          )
+          .font(.caption.bold())
+          .foregroundStyle(.secondary)
+        }
         Picker("Verification Mode", selection: $settings.verificationModeRaw) {
           ForEach(VerificationMode.allCases) { Text($0.label).tag($0.rawValue) }
         }
         Picker("Thumbnail Quality", selection: $settings.thumbnailQualityRaw) {
-          ForEach(ThumbnailQuality.allCases) { Text($0.rawValue.capitalized).tag($0.rawValue) }
+          ForEach(ThumbnailQuality.allCases) {
+            Text($0.rawValue.capitalized).tag($0.rawValue)
+          }
         }
         Toggle("Rename files", isOn: $settings.renameFilesDuringIngest)
         Text("When enabled: [Project Name]-[YYYY][MM][DD]-[Sequence]. Original filenames remain in project metadata.")
           .font(.caption)
           .foregroundStyle(.secondary)
-        Toggle("Generate thumbnails during ingest", isOn: $settings.generateThumbnailsDuringIngest)
+        Toggle(
+          "Generate thumbnails during ingest",
+          isOn: $settings.generateThumbnailsDuringIngest
+        )
         Text("\(AppBrand.appName) can use ingest downtime to prepare previews and local analysis after files are safely copied.")
           .font(.caption)
           .foregroundStyle(.secondary)
@@ -226,7 +298,13 @@ struct NewIngestView: View {
           }
         }
         .buttonStyle(.borderedProminent)
-        .disabled(vm.isScanning || vm.selectedVideos.isEmpty || vm.projectName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || vm.destinationURL == nil)
+        .disabled(
+          vm.isScanning
+            || preflight.isRunning
+            || vm.selectedVideos.isEmpty
+            || vm.projectName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || vm.destinationURL == nil
+        )
         Button("Cancel") {
           vm.cancelPreviewThumbnailWork()
           if vm.isIngesting { vm.ingestService.cancel() }
@@ -236,6 +314,16 @@ struct NewIngestView: View {
       .padding(20)
     }
     .frame(width: 360)
+  }
+
+  private var canRunPreflight: Bool {
+    !vm.isScanning && !vm.videos.isEmpty && vm.destinationURL != nil
+  }
+
+  private func runPreflight() {
+    Task {
+      await preflight.run(ingest: vm, settings: settings)
+    }
   }
 
   private func closeIngestWindow() {
@@ -249,12 +337,20 @@ struct NewIngestView: View {
   @ViewBuilder private var statusArea: some View {
     let message = vm.statusMessage
     if !message.isEmpty {
-      Label(message, systemImage: vm.error == nil ? "info.circle" : "exclamationmark.triangle.fill")
-        .font(.caption)
-        .foregroundStyle(vm.error == nil ? Color.secondary : Color.red)
-        .padding(10)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background((vm.error == nil ? Color.secondary : Color.red).opacity(0.10), in: RoundedRectangle(cornerRadius: 10))
+      Label(
+        message,
+        systemImage: vm.error == nil
+          ? "info.circle"
+          : "exclamationmark.triangle.fill"
+      )
+      .font(.caption)
+      .foregroundStyle(vm.error == nil ? Color.secondary : Color.red)
+      .padding(10)
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .background(
+        (vm.error == nil ? Color.secondary : Color.red).opacity(0.10),
+        in: RoundedRectangle(cornerRadius: 10)
+      )
     }
   }
 
@@ -282,6 +378,7 @@ struct NewIngestView: View {
 struct SessionCard: View {
   let session: IngestSession
   @Binding var selected: Bool
+  let preflightResults: [UUID: PreflightClipResult]
   let onToggleSession: () -> Void
   let onSetClip: (ScannedVideo, Bool) -> Void
   let onQueueClipThumbnail: (ScannedVideo) -> Void
@@ -298,9 +395,22 @@ struct SessionCard: View {
             Text(session.title)
               .font(.headline)
             badge(session.cameraType, color: .secondary)
-            if selected && !session.isPartiallySelected { badge("Selected", color: .accentColor) }
-            if session.isPartiallySelected { badge("Partial selection", color: .orange) }
+            if selected && !session.isPartiallySelected {
+              badge("Selected", color: .accentColor)
+            }
+            if session.isPartiallySelected {
+              badge("Partial selection", color: .orange)
+            }
           }
+
+          if !sessionPreflightResults.isEmpty {
+            HStack(spacing: 6) {
+              if newCount > 0 { badge("New \(newCount)", color: .green) }
+              if importedCount > 0 { badge("Imported \(importedCount)", color: .blue) }
+              if reviewCount > 0 { badge("Review \(reviewCount)", color: .orange) }
+            }
+          }
+
           Text("\(session.selectedClipCount) of \(session.clips.count) videos selected • \(FileSizeFormatterUtil.string(session.selectedSize)) • \(timeRange)")
             .font(.caption)
             .foregroundStyle(.secondary)
@@ -308,7 +418,10 @@ struct SessionCard: View {
         }
         Spacer()
         Button { expanded.toggle() } label: {
-          Label(expanded ? "Collapse" : "Expand", systemImage: expanded ? "chevron.up" : "chevron.down")
+          Label(
+            expanded ? "Collapse" : "Expand",
+            systemImage: expanded ? "chevron.up" : "chevron.down"
+          )
         }
         .buttonStyle(.borderless)
       }
@@ -317,11 +430,19 @@ struct SessionCard: View {
 
       if expanded {
         Divider()
-        LazyVGrid(columns: [GridItem(.adaptive(minimum: 180), spacing: 8)], alignment: .leading, spacing: 8) {
+        LazyVGrid(
+          columns: [GridItem(.adaptive(minimum: 220), spacing: 8)],
+          alignment: .leading,
+          spacing: 8
+        ) {
           ForEach(session.clips) { clip in
             ClipSelectionRow(
               clip: clip,
-              isSelected: Binding(get: { clip.selected }, set: { onSetClip(clip, $0) }),
+              isSelected: Binding(
+                get: { clip.selected },
+                set: { onSetClip(clip, $0) }
+              ),
+              preflightResult: preflightResults[clip.id],
               onQueueThumbnail: { onQueueClipThumbnail(clip) }
             )
           }
@@ -329,10 +450,18 @@ struct SessionCard: View {
       }
     }
     .padding(14)
-    .background(selected ? Color.accentColor.opacity(0.12) : Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 16))
+    .background(
+      selected
+        ? Color.accentColor.opacity(0.12)
+        : Color(nsColor: .controlBackgroundColor),
+      in: RoundedRectangle(cornerRadius: 16)
+    )
     .overlay(
       RoundedRectangle(cornerRadius: 16)
-        .stroke(selected ? Color.accentColor : Color.secondary.opacity(0.16), lineWidth: selected ? 2 : 1)
+        .stroke(
+          selected ? Color.accentColor : Color.secondary.opacity(0.16),
+          lineWidth: selected ? 2 : 1
+        )
     )
     .onAppear { onQueueSessionThumbnails(session) }
     .onChange(of: expanded) { isExpanded in
@@ -340,12 +469,38 @@ struct SessionCard: View {
     }
   }
 
+  private var sessionPreflightResults: [PreflightClipResult] {
+    session.clips.compactMap { preflightResults[$0.id] }
+  }
+
+  private var newCount: Int {
+    sessionPreflightResults.filter { $0.status == .newMedia }.count
+  }
+
+  private var importedCount: Int {
+    sessionPreflightResults.filter {
+      $0.status == .alreadyInDestination
+        || $0.status == .alreadyInAnotherProject
+        || $0.status == .alreadyOnBackup
+    }.count
+  }
+
+  private var reviewCount: Int {
+    sessionPreflightResults.filter { $0.status.needsReview }.count
+  }
+
   private var thumbnailStrip: some View {
     HStack(spacing: 6) {
       ForEach(Array(session.clips.prefix(7).enumerated()), id: \.element.id) { _, clip in
         IngestPreviewThumbnailView(clip: clip, width: 54, height: 38)
           .overlay(alignment: .topTrailing) {
-            if clip.selected {
+            if let result = preflightResults[clip.id], result.status != .newMedia {
+              Image(systemName: result.status.systemImage)
+                .font(.caption2.bold())
+                .foregroundStyle(result.status.color)
+                .background(.thinMaterial, in: Circle())
+                .padding(3)
+            } else if clip.selected {
               Image(systemName: "checkmark.circle.fill")
                 .font(.caption)
                 .foregroundStyle(Color.accentColor)
@@ -383,6 +538,7 @@ struct SessionCard: View {
 struct ClipSelectionRow: View {
   let clip: ScannedVideo
   @Binding var isSelected: Bool
+  let preflightResult: PreflightClipResult?
   let onQueueThumbnail: () -> Void
 
   var body: some View {
@@ -390,19 +546,29 @@ struct ClipSelectionRow: View {
       IngestPreviewThumbnailView(clip: clip, width: 54, height: 38)
         .onAppear(perform: onQueueThumbnail)
       Toggle(isOn: $isSelected) {
-        VStack(alignment: .leading, spacing: 3) {
+        VStack(alignment: .leading, spacing: 4) {
           Text(clip.filename)
-          .font(.caption.bold())
-          .lineLimit(1)
+            .font(.caption.bold())
+            .lineLimit(1)
           Text(FileSizeFormatterUtil.string(clip.fileSize))
             .font(.caption2)
             .foregroundStyle(.secondary)
+          if let preflightResult {
+            PreflightStatusBadge(result: preflightResult, compact: true)
+          }
         }
       }
       .toggleStyle(.checkbox)
     }
     .padding(8)
-    .background(isSelected ? Color.accentColor.opacity(0.10) : Color.secondary.opacity(0.06), in: RoundedRectangle(cornerRadius: 10))
+    .background(rowBackground, in: RoundedRectangle(cornerRadius: 10))
+  }
+
+  private var rowBackground: Color {
+    if let preflightResult, preflightResult.status.needsReview {
+      return preflightResult.status.color.opacity(isSelected ? 0.14 : 0.08)
+    }
+    return isSelected ? Color.accentColor.opacity(0.10) : Color.secondary.opacity(0.06)
   }
 }
 
@@ -437,13 +603,13 @@ struct IngestPreviewThumbnailView: View {
   }
 
   private var previewImage: NSImage? {
-    guard let path = clip.previewThumbnailPath, FileManager.default.fileExists(atPath: path) else {
+    guard let path = clip.previewThumbnailPath,
+      FileManager.default.fileExists(atPath: path) else {
       return nil
     }
     return NSImage(contentsOfFile: path)
   }
 }
-
 
 struct SourceVolumeCard: View {
   let option: SourceVolumeOption
@@ -479,7 +645,12 @@ struct SourceVolumeCard: View {
             if option.structureBadge != .noVideosFound {
               Text(option.structureBadge.rawValue)
                 .font(.caption2.bold())
-                .foregroundStyle(option.structureBadge == .sony || option.structureBadge == .canonDCF ? .green : .secondary)
+                .foregroundStyle(
+                  option.structureBadge == .sony
+                    || option.structureBadge == .canonDCF
+                    ? .green
+                    : .secondary
+                )
             }
           }
         }
@@ -487,8 +658,20 @@ struct SourceVolumeCard: View {
       }
       .padding(9)
       .frame(maxWidth: .infinity, alignment: .leading)
-      .background(isSelected ? Color.accentColor.opacity(0.18) : Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 10))
-      .overlay(RoundedRectangle(cornerRadius: 10).stroke(isSelected ? Color.accentColor.opacity(0.55) : Color.secondary.opacity(0.12)))
+      .background(
+        isSelected
+          ? Color.accentColor.opacity(0.18)
+          : Color(nsColor: .controlBackgroundColor),
+        in: RoundedRectangle(cornerRadius: 10)
+      )
+      .overlay(
+        RoundedRectangle(cornerRadius: 10)
+          .stroke(
+            isSelected
+              ? Color.accentColor.opacity(0.55)
+              : Color.secondary.opacity(0.12)
+          )
+      )
     }
     .buttonStyle(.plain)
     .disabled(!option.isAvailable)
