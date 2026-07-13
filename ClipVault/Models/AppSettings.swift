@@ -58,6 +58,27 @@ struct ResolvedStorageDirectory {
   let directoryURL: URL
 }
 
+private final class StorageAccessRegistry: @unchecked Sendable {
+  private let lock = NSLock()
+  private var retainedURLs: [String: URL] = [:]
+
+  func retain(_ url: URL) {
+    let path = url.standardizedFileURL.path
+    lock.lock()
+    defer { lock.unlock() }
+    guard retainedURLs[path] == nil else { return }
+    if url.startAccessingSecurityScopedResource() {
+      retainedURLs[path] = url
+    }
+  }
+
+  deinit {
+    for url in retainedURLs.values {
+      url.stopAccessingSecurityScopedResource()
+    }
+  }
+}
+
 enum StoragePreferences {
   static let sourcePreviewLocationKey = "sourcePreviewStorageLocation"
   static let projectThumbnailLocationKey = "projectThumbnailStorageLocation"
@@ -65,10 +86,13 @@ enum StoragePreferences {
   static let sourcePreviewCustomBookmarkKey = "sourcePreviewCustomFolderBookmarkBase64"
   static let projectThumbnailCustomPathKey = "projectThumbnailCustomFolderPath"
   static let projectThumbnailCustomBookmarkKey = "projectThumbnailCustomFolderBookmarkBase64"
+  static let backup1PathKey = "backupDestination1Path"
+  static let backup2PathKey = "backupDestination2Path"
   static let backup1BookmarkKey = "backupDestination1BookmarkBase64"
   static let backup2BookmarkKey = "backupDestination2BookmarkBase64"
   static let previewLimitKey = "sourcePreviewCacheLimitMB"
   static let previewCleanupKey = "sourcePreviewCleanupPolicy"
+  private static let accessRegistry = StorageAccessRegistry()
 
   static var internalCacheRoot: URL {
     let base = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first
@@ -78,6 +102,26 @@ enum StoragePreferences {
 
   static var internalSourcePreviewDirectory: URL {
     internalCacheRoot.appendingPathComponent("IngestPreviewThumbnails", isDirectory: true)
+  }
+
+  static func activateConfiguredBookmarks() {
+    _ = resolvedFolder(
+      pathKey: sourcePreviewCustomPathKey,
+      bookmarkKey: sourcePreviewCustomBookmarkKey
+    )
+    _ = resolvedFolder(
+      pathKey: projectThumbnailCustomPathKey,
+      bookmarkKey: projectThumbnailCustomBookmarkKey
+    )
+    let defaults = UserDefaults.standard
+    _ = backupURL(
+      path: defaults.string(forKey: backup1PathKey) ?? "",
+      bookmarkBase64: defaults.string(forKey: backup1BookmarkKey) ?? ""
+    )
+    _ = backupURL(
+      path: defaults.string(forKey: backup2PathKey) ?? "",
+      bookmarkBase64: defaults.string(forKey: backup2BookmarkKey) ?? ""
+    )
   }
 
   static func sourcePreviewDirectory(destinationRoot: URL?) -> ResolvedStorageDirectory? {
@@ -198,6 +242,7 @@ enum StoragePreferences {
   static func backupURL(path: String, bookmarkBase64: String) -> URL? {
     if let data = Data(base64Encoded: bookmarkBase64),
       let resolved = try? SecurityScopedBookmarkManager().resolve(data) {
+      accessRegistry.retain(resolved)
       return resolved
     }
     guard !path.isEmpty else { return nil }
@@ -240,6 +285,7 @@ enum StoragePreferences {
   private static func resolvedFolder(pathKey: String, bookmarkKey: String) -> URL? {
     if let data = bookmarkData(forKey: bookmarkKey),
       let resolved = try? SecurityScopedBookmarkManager().resolve(data) {
+      accessRegistry.retain(resolved)
       return resolved
     }
     let path = UserDefaults.standard.string(forKey: pathKey) ?? ""
@@ -289,6 +335,10 @@ final class AppSettings: ObservableObject {
   @AppStorage("sourcePreviewCustomFolderBookmarkBase64") var sourcePreviewCustomFolderBookmarkBase64 = ""
   @AppStorage("projectThumbnailCustomFolderPath") var projectThumbnailCustomFolderPath = ""
   @AppStorage("projectThumbnailCustomFolderBookmarkBase64") var projectThumbnailCustomFolderBookmarkBase64 = ""
+
+  init() {
+    StoragePreferences.activateConfiguredBookmarks()
+  }
 
   static var autoAdvanceAfterRating: Bool {
     UserDefaults.standard.bool(forKey: "autoAdvanceAfterRating")
