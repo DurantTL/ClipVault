@@ -107,7 +107,10 @@ jobs:
           echo "DMG_NAME=$DMG_NAME" >> "$GITHUB_ENV"
 
       - name: Notarize and staple DMG
-        if: env.APPLE_ID != '' && env.APPLE_TEAM_ID != '' && env.APPLE_APP_SPECIFIC_PASSWORD != ''
+        # Notarization requires a Developer ID-signed app, so the certificate
+        # gates this step too; notary credentials alone must not break the
+        # unsigned-DMG fallback.
+        if: env.MACOS_CERTIFICATE_BASE64 != '' && env.APPLE_ID != '' && env.APPLE_TEAM_ID != '' && env.APPLE_APP_SPECIFIC_PASSWORD != ''
         run: |
           xcrun notarytool submit "$DMG_NAME" \
             --apple-id "$APPLE_ID" \
@@ -125,7 +128,7 @@ jobs:
           else
             SIGNING_NOTE="This build is unsigned (signing secrets not configured). To open it, right-click the app and choose Open the first time."
           fi
-          if [ -n "$APPLE_ID" ]; then
+          if [ -n "$MACOS_CERTIFICATE_BASE64" ] && [ -n "$APPLE_ID" ] && [ -n "$APPLE_TEAM_ID" ] && [ -n "$APPLE_APP_SPECIFIC_PASSWORD" ]; then
             SIGNING_NOTE="$SIGNING_NOTE Notarized and stapled."
           fi
           gh release create "$GITHUB_REF_NAME" "$DMG_NAME" \
