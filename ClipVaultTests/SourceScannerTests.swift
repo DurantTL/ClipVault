@@ -92,4 +92,40 @@ final class SourceScannerTests: XCTestCase {
     let videos = try scanner.scan(source: card, includeProxyFiles: false)
     XCTAssertEqual(videos.map(\.relativePath), ["clips/A001.mp4"])
   }
+
+  func testNetworkCapacityDoesNotUseImportantUsageEstimate() {
+    XCTAssertEqual(
+      VolumeCapacity.preferredAvailableCapacity(
+        isLocal: false,
+        important: 900,
+        regular: 400,
+        fileSystem: 300
+      ),
+      400
+    )
+  }
+
+  func testLocalCapacityPrefersImportantUsageEstimate() {
+    XCTAssertEqual(
+      VolumeCapacity.preferredAvailableCapacity(
+        isLocal: true,
+        important: 900,
+        regular: 400,
+        fileSystem: 300
+      ),
+      900
+    )
+  }
+
+  func testCapacityFallsBackToFilesystemValue() {
+    XCTAssertEqual(
+      VolumeCapacity.preferredAvailableCapacity(
+        isLocal: false,
+        important: nil,
+        regular: nil,
+        fileSystem: 300
+      ),
+      300
+    )
+  }
 }
