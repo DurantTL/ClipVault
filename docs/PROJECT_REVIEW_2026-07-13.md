@@ -28,16 +28,20 @@ These are **written on the main actor** by the ingest UI (`ClipVault/Views/NewIn
 
 Suggested fix: make the flags actor-isolated, guard them with `OSAllocatedUnfairLock`/`NSLock`, or use `ManagedAtomic<Bool>`. Related: because `IngestService` is a shared non-isolated object held by a `@MainActor` view model, nothing structurally prevents overlapping `ingest`/`resume` runs from stomping the shared `copyService.isCancelled`/`isPaused` closures.
 
-### 1.2 (High) Backup pickers can wipe a stored bookmark — violates AGENTS.md:39
+### 1.2 (High) Folder pickers can wipe stored bookmarks — violates AGENTS.md:39
 
-`ClipVault/ViewModels/NewIngestViewModel.swift:301` and `:307`:
+Two UI surfaces persist bookmarks with a `?? ""` fallback, overwriting the previously stored bookmark with an empty string when creation fails:
 
-```swift
-settings.backupDestination1BookmarkBase64 =
-  (try? bookmarks.bookmark(for: url))?.base64EncodedString() ?? ""
-```
+- `ClipVault/ViewModels/NewIngestViewModel.swift:301` and `:307` (`chooseBackup1/2`):
 
-If bookmark creation fails, the previously persisted bookmark is overwritten with an empty string. `AGENTS.md:39` says: "never overwrite a stored bookmark with a failed creation." Every other bookmark write site honors this (e.g. `NewIngestViewModel.swift:128, 184-186` only store non-nil results). Real-world risk is low (the URL comes from a fresh `NSOpenPanel` grant, so creation normally succeeds), but the `?? ""` fallback is the wrong default and this is the one place in the codebase that contradicts the rule.
+  ```swift
+  settings.backupDestination1BookmarkBase64 =
+    (try? bookmarks.bookmark(for: url))?.base64EncodedString() ?? ""
+  ```
+
+- `ClipVault/Views/SettingsView.swift:861-882` (`chooseFolder`): the same pattern feeds **four** persisted settings — `sourcePreviewCustomFolderBookmarkBase64`, `projectThumbnailCustomFolderBookmarkBase64`, `backupDestination1BookmarkBase64`, and `backupDestination2BookmarkBase64`.
+
+`AGENTS.md:39` says: "never overwrite a stored bookmark with a failed creation." The ingest-flow bookmark sites honor this (e.g. `NewIngestViewModel.swift:128, 184-186` only store non-nil results); these two picker paths do not. Real-world risk is low (the URL comes from a fresh `NSOpenPanel` grant, so creation normally succeeds), but the `?? ""` fallback is the wrong default, and a fix must cover both call sites — patching only `NewIngestViewModel` would leave the Settings UI able to clear persisted bookmarks.
 
 Suggested fix: only assign when creation succeeds; leave the stored value untouched on failure.
 
@@ -198,7 +202,7 @@ The real implementations were consolidated into files whose names no longer desc
 ## 8. Prioritized recommendations
 
 1. Fix the ingest cancel/pause data race (1.1) — small, mechanical, protects the most safety-critical path.
-2. Fix the `?? ""` bookmark overwrite (1.2) and the Rename Folder no-op (1.3).
+2. Fix the `?? ""` bookmark overwrites in both `NewIngestViewModel` and `SettingsView.chooseFolder` (1.2) and the Rename Folder no-op (1.3).
 3. Delete the six orphaned placeholder files (3.1) and re-home the preflight code into properly named files (3.2).
 4. Correct the docs: move Preflight Media Check to Shipped, fix `README.md:101`, add it to the changelog; rename ClipVault→SlateBox in AGENTS.md; fix the icon-filename claim (§6).
 5. Set `SWIFT_OPTIMIZATION_LEVEL = -O` for Release and adopt `SWIFT_STRICT_CONCURRENCY = targeted` (§5).
