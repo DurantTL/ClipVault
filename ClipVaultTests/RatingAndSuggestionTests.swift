@@ -154,6 +154,24 @@ final class RatingAndSuggestionTests: XCTestCase {
     XCTAssertEqual(SafeFilename.uniqueURL(for: desired).lastPathComponent, "A001_2.MP4")
   }
 
+  func testUniqueURLReservesDuplicateNamesBeforeFilesExist() throws {
+    let dir = FileManager.default.temporaryDirectory
+      .appendingPathComponent("clipvault-reservation-test-\(UUID().uuidString)", isDirectory: true)
+    try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: dir) }
+
+    let desired = dir.appendingPathComponent("C0001.MP4")
+    var reserved = Set<String>()
+    let first = SafeFilename.uniqueURL(for: desired, reserving: &reserved)
+    let second = SafeFilename.uniqueURL(for: desired, reserving: &reserved)
+    let third = SafeFilename.uniqueURL(for: desired, reserving: &reserved)
+
+    XCTAssertEqual(first.lastPathComponent, "C0001.MP4")
+    XCTAssertEqual(second.lastPathComponent, "C0001_1.MP4")
+    XCTAssertEqual(third.lastPathComponent, "C0001_2.MP4")
+    XCTAssertFalse(FileManager.default.fileExists(atPath: first.path), "reservation must work before copying creates files")
+  }
+
   func testAliasesPointOnlyAtCopiedMediaAndNeverReplaceIt() throws {
     let project = FileManager.default.temporaryDirectory
       .appendingPathComponent("clipvault-alias-test-\(UUID().uuidString)", isDirectory: true)
