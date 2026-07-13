@@ -22,6 +22,22 @@ SlateBox uses an automatic performance profile based on safe Apple APIs: arm64 a
 
 Open `SlateBox.xcodeproj` in Xcode 15 or newer on macOS 14+, select the `SlateBox` scheme, and run. The app uses only Apple frameworks: SwiftUI, AVFoundation, AVKit, Foundation/FileManager, UniformTypeIdentifiers, CryptoKit, and AppKit where macOS-specific APIs are needed.
 
+## Releases
+
+Releases are cut by pushing a version tag:
+
+```bash
+git tag v1.0.0 && git push origin v1.0.0
+```
+
+The `Release SlateBox` GitHub Actions workflow builds a Release app, runs the test suite, packages a DMG, and publishes a GitHub Release with the DMG attached. Signing and notarization run automatically when the repository secrets `MACOS_CERTIFICATE_BASE64`, `MACOS_CERTIFICATE_PASSWORD`, `APPLE_ID`, `APPLE_TEAM_ID`, and `APPLE_APP_SPECIFIC_PASSWORD` are configured; without them the workflow still publishes an unsigned DMG for testing (right-click → Open on first launch). Changes are tracked in `CHANGELOG.md`.
+
+## Help menu
+
+- **Welcome** reopens the first-launch onboarding walkthrough.
+- **Keyboard Shortcuts** shows the culling and navigation cheat sheet.
+- **Save Diagnostics Report…** writes a local plain-text report (app version, system profile, settings, recent project paths) for support. The report stays on your Mac; nothing is uploaded.
+
 ## Ingest workflow
 
 1. Click **New Ingest**.
