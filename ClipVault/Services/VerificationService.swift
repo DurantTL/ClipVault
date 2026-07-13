@@ -24,7 +24,11 @@ final class VerificationService {
                 userInfo: [NSLocalizedDescriptionKey: "SHA256 checksum mismatch."])
             }
           }
-          PerformanceLogger.shared.transfer(kind: "verification", bytes: Int64(d), duration: Date().timeIntervalSince(start))
+          PerformanceLogger.shared.verification(
+            mode: mode,
+            bytes: Int64(d),
+            duration: Date().timeIntervalSince(start)
+          )
         }
       }
     }.value
