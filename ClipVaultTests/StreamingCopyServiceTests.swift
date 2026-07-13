@@ -15,16 +15,25 @@ final class StreamingCopyServiceTests: XCTestCase {
     try? FileManager.default.removeItem(at: directory)
   }
 
-  private func makeSource(named name: String = "A001.MP4", bytes: Int) throws -> (url: URL, data: Data) {
-    let data = Data((0..<bytes).map { UInt8($0 % 251) })
-    let url = directory.appendingPathComponent(name)
+  private func makeSource(
+    relativePath: String = "A001.MP4",
+    bytes: Int,
+    seed: Int = 0
+  ) throws -> (url: URL, data: Data) {
+    let data = Data((0..<bytes).map { UInt8(($0 + seed) % 251) })
+    let url = directory.appendingPathComponent(relativePath)
+    try FileManager.default.createDirectory(
+      at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
     try data.write(to: url)
     return (url, data)
   }
 
   private func partialURL(for destination: URL) -> URL {
-    destination.deletingLastPathComponent()
-      .appendingPathComponent(destination.lastPathComponent + AppBrand.partialFileSuffix)
+    StreamingCopyService.partialURL(for: destination)
+  }
+
+  private func manifestURL(for destination: URL) -> URL {
+    StreamingCopyService.partialManifestURL(for: destination)
   }
 
   func testCopyProducesIdenticalBytesAndRemovesPartial() async throws {
@@ -40,6 +49,7 @@ final class StreamingCopyServiceTests: XCTestCase {
     XCTAssertEqual(copied, Int64(data.count))
     XCTAssertEqual(try Data(contentsOf: destination), data)
     XCTAssertFalse(FileManager.default.fileExists(atPath: partialURL(for: destination).path))
+    XCTAssertFalse(FileManager.default.fileExists(atPath: manifestURL(for: destination).path))
     XCTAssertEqual(try Data(contentsOf: source), data, "source must never be modified")
   }
 
@@ -59,7 +69,7 @@ final class StreamingCopyServiceTests: XCTestCase {
     XCTAssertEqual(values.last, Int64(data.count))
   }
 
-  func testCancelLeavesPartialAndSourceUntouchedAndNoDestination() async throws {
+  func testCancelLeavesPartialManifestAndSourceUntouchedAndNoDestination() async throws {
     let (source, data) = try makeSource(bytes: 10_240)
     let destination = directory.appendingPathComponent("C001.MP4")
 
@@ -78,13 +88,25 @@ final class StreamingCopyServiceTests: XCTestCase {
 
     XCTAssertFalse(FileManager.default.fileExists(atPath: destination.path), "canceled copy must not produce a destination file")
     XCTAssertTrue(FileManager.default.fileExists(atPath: partialURL(for: destination).path), "canceled copy leaves its partial for resume")
+    XCTAssertTrue(FileManager.default.fileExists(atPath: manifestURL(for: destination).path), "canceled copy records the partial source identity")
     XCTAssertEqual(try Data(contentsOf: source), data, "source must never be modified")
   }
 
   func testResumeFromPartialCompletesFileCorrectly() async throws {
     let (source, data) = try makeSource(bytes: 10_240)
     let destination = directory.appendingPathComponent("D001.MP4")
-    try data.prefix(4096).write(to: partialURL(for: destination))
+
+    let cancelFlag = Flag()
+    let interrupted = StreamingCopyService(chunkSize: 1024)
+    interrupted.isCancelled = { cancelFlag.value }
+    do {
+      _ = try await interrupted.copy(
+        from: source, to: destination, alreadyCopiedBytes: 0, totalBytes: Int64(data.count)
+      ) { _ in cancelFlag.value = true }
+      XCTFail("expected CancellationError")
+    } catch is CancellationError {
+      // expected
+    }
 
     let service = StreamingCopyService(chunkSize: 1024)
     let copied = try await service.copy(
@@ -94,6 +116,39 @@ final class StreamingCopyServiceTests: XCTestCase {
     XCTAssertEqual(copied, Int64(data.count), "resumed copy reports the full file size")
     XCTAssertEqual(try Data(contentsOf: destination), data, "resumed file must be byte-identical to the source")
     XCTAssertFalse(FileManager.default.fileExists(atPath: partialURL(for: destination).path))
+    XCTAssertFalse(FileManager.default.fileExists(atPath: manifestURL(for: destination).path))
+  }
+
+  func testPartialFromDifferentSameNamedSameSizedSourceIsDiscarded() async throws {
+    let (sourceA, _) = try makeSource(relativePath: "CardA/C0001.MP4", bytes: 10_240, seed: 0)
+    let (sourceB, dataB) = try makeSource(relativePath: "CardB/C0001.MP4", bytes: 10_240, seed: 37)
+    let sharedDate = Date(timeIntervalSince1970: 1_700_000_000)
+    try FileManager.default.setAttributes([.modificationDate: sharedDate], ofItemAtPath: sourceA.path)
+    try FileManager.default.setAttributes([.modificationDate: sharedDate], ofItemAtPath: sourceB.path)
+    let destination = directory.appendingPathComponent("Project/C0001.MP4")
+    try FileManager.default.createDirectory(
+      at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
+
+    let cancelFlag = Flag()
+    let interrupted = StreamingCopyService(chunkSize: 1024)
+    interrupted.isCancelled = { cancelFlag.value }
+    do {
+      _ = try await interrupted.copy(
+        from: sourceA, to: destination, alreadyCopiedBytes: 0, totalBytes: Int64(dataB.count)
+      ) { _ in cancelFlag.value = true }
+      XCTFail("expected CancellationError")
+    } catch is CancellationError {
+      // expected
+    }
+
+    let service = StreamingCopyService(chunkSize: 1024)
+    _ = try await service.copy(
+      from: sourceB, to: destination, alreadyCopiedBytes: 0, totalBytes: Int64(dataB.count)
+    ) { _ in }
+
+    XCTAssertEqual(
+      try Data(contentsOf: destination), dataB,
+      "a partial created from another C0001.MP4 must be discarded rather than combined")
   }
 
   func testStalePartialAtOrAboveSourceSizeIsDiscardedAndRecopied() async throws {
@@ -109,7 +164,7 @@ final class StreamingCopyServiceTests: XCTestCase {
     XCTAssertEqual(try Data(contentsOf: destination), data, "a stale partial must be discarded, not trusted")
   }
 
-  func testExistingDestinationIsNeverOverwritten() async throws {
+  func testExistingDestinationIsRejectedBeforeTransferAndNeverOverwritten() async throws {
     let (source, data) = try makeSource(bytes: 2048)
     let destination = directory.appendingPathComponent("F001.MP4")
     let existing = Data("existing file".utf8)
@@ -126,6 +181,8 @@ final class StreamingCopyServiceTests: XCTestCase {
     }
 
     XCTAssertEqual(try Data(contentsOf: destination), existing, "destination must never be overwritten")
+    XCTAssertFalse(FileManager.default.fileExists(atPath: partialURL(for: destination).path), "destination conflicts must fail before transfer begins")
+    XCTAssertFalse(FileManager.default.fileExists(atPath: manifestURL(for: destination).path))
     XCTAssertEqual(try Data(contentsOf: source), data, "source must never be modified")
   }
 }

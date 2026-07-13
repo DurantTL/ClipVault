@@ -17,6 +17,7 @@ final class IngestService {
     settings: AppSettings, cameraCardMetadata: IngestCameraCardMetadata, progress: @escaping @MainActor (IngestProgress) -> Void
   ) async throws -> ClipVaultProject {
     self.cancelled = false
+    self.paused = false
     self.copyService.isCancelled = { [weak self] in self?.cancelled ?? false }
     self.copyService.isPaused = { [weak self] in self?.paused ?? false }
     return try await self.security.withAccessAsync(to: source) {
@@ -26,17 +27,23 @@ final class IngestService {
         try FileManager.default.createDirectory(
           at: projectFolder, withIntermediateDirectories: true)
         let bm = try? SecurityScopedBookmarkManager().bookmark(for: projectFolder)
-        let selectedClips = videos.enumerated().map { idx, v in
-          self.placeholderClip(
-            for: v,
-            source: source,
-            projectFolder: projectFolder,
-            projectName: name,
-            shootName: shootName,
-            sequence: idx + 1,
-            rename: settings.renameFilesDuringIngest,
-            preserveSourceStructure: settings.preserveSourceStructure,
-            cameraCardMetadata: cameraCardMetadata
+        var reservedDestinationPaths = Set<String>()
+        var selectedClips: [Clip] = []
+        selectedClips.reserveCapacity(videos.count)
+        for (idx, video) in videos.enumerated() {
+          selectedClips.append(
+            self.placeholderClip(
+              for: video,
+              source: source,
+              projectFolder: projectFolder,
+              projectName: name,
+              shootName: shootName,
+              sequence: idx + 1,
+              rename: settings.renameFilesDuringIngest,
+              preserveSourceStructure: settings.preserveSourceStructure,
+              cameraCardMetadata: cameraCardMetadata,
+              reservedDestinationPaths: &reservedDestinationPaths
+            )
           )
         }
         var project = ClipVaultProject(
@@ -85,6 +92,7 @@ final class IngestService {
           try FileManager.default.createDirectory(
             at: destURL.deletingLastPathComponent(), withIntermediateDirectories: true)
           do {
+            let resumedFromPartial = StreamingCopyService.hasPartial(for: destURL)
             _ = try await self.copyService.copy(
               from: v.url, to: destURL, alreadyCopiedBytes: done, totalBytes: total
             ) { copied in
@@ -97,8 +105,9 @@ final class IngestService {
             }
             clip.copyStatus = .copied
             clip.verificationStatus = .copied
+            let verificationMode: VerificationMode = resumedFromPartial ? .strong : settings.verificationMode
             try await self.verifier.verify(
-              source: v.url, destination: destURL, mode: settings.verificationMode)
+              source: v.url, destination: destURL, mode: verificationMode)
             clip.verificationStatus = .verified
             do {
               try await self.copyBackupsIfNeeded(
@@ -182,6 +191,11 @@ final class IngestService {
       )
     }
 
+    self.cancelled = false
+    self.paused = false
+    self.copyService.isCancelled = { [weak self] in self?.cancelled ?? false }
+    self.copyService.isPaused = { [weak self] in self?.paused ?? false }
+
     let sourceRoot = try security.resolve(sourceBookmark)
     let projectFolder = security.projectFolderURL(for: project)
     return try await security.withAccessAsync(to: sourceRoot) {
@@ -202,7 +216,12 @@ final class IngestService {
         for (position, index) in unfinished.enumerated() {
           if self.cancelled { break }
           var clip = resumed.clips[index]
-          let source = URL(fileURLWithPath: clip.sourcePath.isEmpty ? clip.originalSourcePath : clip.sourcePath)
+          let source: URL
+          if !clip.sourceRelativePath.isEmpty {
+            source = sourceRoot.appendingPathComponent(clip.sourceRelativePath)
+          } else {
+            source = URL(fileURLWithPath: clip.sourcePath.isEmpty ? clip.originalSourcePath : clip.sourcePath)
+          }
           let destination = URL(fileURLWithPath: clip.currentPath)
           guard FileManager.default.fileExists(atPath: source.path) else {
             clip.copyStatus = .failed
@@ -239,7 +258,7 @@ final class IngestService {
                 ))
               }
             }
-            try await self.verifier.verify(source: source, destination: destination, mode: settings.verificationMode)
+            try await self.verifier.verify(source: source, destination: destination, mode: .strong)
             clip.copyStatus = .copied
             clip.verificationStatus = .verified
             clip.errorMessage = nil
@@ -272,7 +291,6 @@ final class IngestService {
     }
   }
 
-
   private func placeholderClip(
     for video: SourceVideo,
     source: URL,
@@ -282,13 +300,17 @@ final class IngestService {
     sequence: Int,
     rename: Bool,
     preserveSourceStructure: Bool,
-    cameraCardMetadata: IngestCameraCardMetadata
+    cameraCardMetadata: IngestCameraCardMetadata,
+    reservedDestinationPaths: inout Set<String>
   ) -> Clip {
     let outputFilename = outputFilename(for: video, projectName: projectName, sequence: sequence, rename: rename)
     let cleanShootName = SafeFilename.safeFolderName(shootName)
     let flatRelativePath = cleanShootName.isEmpty ? outputFilename : "\(cleanShootName)/\(outputFilename)"
     let rel = preserveSourceStructure && !rename ? video.relativePath : flatRelativePath
-    let destURL = SafeFilename.uniqueURL(for: projectFolder.appendingPathComponent(rel))
+    let destURL = SafeFilename.uniqueURL(
+      for: projectFolder.appendingPathComponent(rel),
+      reserving: &reservedDestinationPaths
+    )
     var clip = Clip(
       originalSourcePath: video.url.path,
       originalFilename: video.url.lastPathComponent,
@@ -368,6 +390,7 @@ final class IngestService {
       )
       let size = Int64((try? primaryFile.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
       await progress(IngestProgress(currentFilename: primaryFile.lastPathComponent, copiedBytes: 0, totalBytes: size, message: "Copying Backup \(index + 1)"))
+      let resumedFromPartial = StreamingCopyService.hasPartial(for: destination)
       _ = try await self.copyService.copy(
         from: primaryFile,
         to: destination,
@@ -376,7 +399,8 @@ final class IngestService {
       ) { copied in
         progress(IngestProgress(currentFilename: primaryFile.lastPathComponent, copiedBytes: copied, totalBytes: size, message: "Verifying Backup \(index + 1)"))
       }
-      try await self.verifier.verify(source: primaryFile, destination: destination, mode: settings.verificationMode)
+      let verificationMode: VerificationMode = resumedFromPartial ? .strong : settings.verificationMode
+      try await self.verifier.verify(source: primaryFile, destination: destination, mode: verificationMode)
     }
   }
 }

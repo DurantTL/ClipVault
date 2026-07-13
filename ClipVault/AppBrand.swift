@@ -20,6 +20,7 @@ struct AppBrand {
   static let metadataFileName = ".clipvault-project.json"
   static let cacheFolderName = ".clipvault-cache"
   static let partialFileSuffix = ".clipvault-partial"
+  static let partialManifestSuffix = ".clipvault-partial.json"
   static let previewCacheFolderName = "ClipVault"
 }
 

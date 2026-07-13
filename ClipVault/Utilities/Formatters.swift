@@ -15,17 +15,37 @@ enum DurationFormatterUtil {
 enum SafeFilename {
   static func uniqueURL(for desired: URL) -> URL {
     let fm = FileManager.default
-    if !fm.fileExists(atPath: desired.path) { return desired }
+    var index = 0
+    while true {
+      let candidate = numberedURL(for: desired, index: index)
+      if !fm.fileExists(atPath: candidate.path) { return candidate }
+      index += 1
+    }
+  }
+
+  static func uniqueURL(for desired: URL, reserving reservedPaths: inout Set<String>) -> URL {
+    let fm = FileManager.default
+    var index = 0
+    while true {
+      let candidate = numberedURL(for: desired, index: index)
+      let normalizedPath = candidate.standardizedFileURL.path
+      if !fm.fileExists(atPath: candidate.path), !reservedPaths.contains(normalizedPath) {
+        reservedPaths.insert(normalizedPath)
+        return candidate
+      }
+      index += 1
+    }
+  }
+
+  private static func numberedURL(for desired: URL, index: Int) -> URL {
+    guard index > 0 else { return desired }
     let dir = desired.deletingLastPathComponent()
     let base = desired.deletingPathExtension().lastPathComponent
     let ext = desired.pathExtension
-    var i = 1
-    while true {
-      let u = dir.appendingPathComponent("\(base)_\(i)").appendingPathExtension(ext)
-      if !fm.fileExists(atPath: u.path) { return u }
-      i += 1
-    }
+    let numbered = dir.appendingPathComponent("\(base)_\(index)")
+    return ext.isEmpty ? numbered : numbered.appendingPathExtension(ext)
   }
+
   static func safeFolderName(_ name: String) -> String {
     name.replacingOccurrences(of: "/", with: "-").trimmingCharacters(in: .whitespacesAndNewlines)
   }
