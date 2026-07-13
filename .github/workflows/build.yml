@@ -31,20 +31,38 @@ jobs:
 
       - name: Build
         run: |
+          set +e
           xcodebuild \
             -project SlateBox.xcodeproj \
             -scheme SlateBox \
             -configuration Debug \
             -destination 'platform=macOS' \
             CODE_SIGNING_ALLOWED=NO \
-            build
+            build > build.log 2>&1
+          status=$?
+          if [ $status -ne 0 ]; then
+            echo "--- Xcode build errors ---"
+            grep -nE 'error:|fatal error:' build.log || true
+            echo "--- Build log tail ---"
+            tail -120 build.log
+            exit $status
+          fi
 
       - name: Test
         run: |
+          set +e
           xcodebuild \
             -project SlateBox.xcodeproj \
             -scheme SlateBox \
             -configuration Debug \
             -destination 'platform=macOS' \
             CODE_SIGNING_ALLOWED=NO \
-            test
+            test > test.log 2>&1
+          status=$?
+          if [ $status -ne 0 ]; then
+            echo "--- Xcode test errors ---"
+            grep -nE 'error:|fatal error:|failed' test.log || true
+            echo "--- Test log tail ---"
+            tail -120 test.log
+            exit $status
+          fi
