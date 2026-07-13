@@ -57,4 +57,13 @@ final class ProjectStore {
       UserDefaults.standard.set(b, forKey: "recentProjectBookmarks")
     }
   }
+
+  /// Loads the recent-project records that are currently readable. Disconnected
+  /// drives and unavailable NAS projects are skipped so Preflight remains useful.
+  func loadAll() throws -> [ClipVaultProject] {
+    let paths = UserDefaults.standard.stringArray(forKey: "recentProjects") ?? []
+    return paths.compactMap { path in
+      try? loadRecent(path: path)
+    }
+  }
 }
