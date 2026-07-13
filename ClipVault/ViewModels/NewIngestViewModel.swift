@@ -61,7 +61,7 @@ import Foundation
       option.bookmarkData = sourceBookmarkDataByID[option.id]
       return option
     }
-    ingestPreviewThumbnails.cleanCache()
+    ingestPreviewThumbnails.cleanCache(destinationRoot: nil)
     let formatter = DateFormatter()
     formatter.dateFormat = "yyyy-MM-dd"
     projectName = "\(formatter.string(from: Date())) Video Ingest"
@@ -244,16 +244,23 @@ import Foundation
   }
 
   func chooseDestination() {
-    destinationURL = pickFolder(canCreateDirectories: true)
+    guard let url = pickFolder(canCreateDirectories: true) else { return }
+    destinationURL = url
+    retainAccess(to: url)
     updateFreeSpace()
+    queueInitialPreviewThumbnails()
   }
 
   func chooseBackup1(settings: AppSettings) {
-    settings.backupDestination1Path = pickFolder(canCreateDirectories: true)?.path ?? ""
+    guard let url = pickFolder(canCreateDirectories: true) else { return }
+    settings.backupDestination1Path = url.path
+    settings.backupDestination1BookmarkBase64 = (try? bookmarks.bookmark(for: url))?.base64EncodedString() ?? ""
   }
 
   func chooseBackup2(settings: AppSettings) {
-    settings.backupDestination2Path = pickFolder(canCreateDirectories: true)?.path ?? ""
+    guard let url = pickFolder(canCreateDirectories: true) else { return }
+    settings.backupDestination2Path = url.path
+    settings.backupDestination2BookmarkBase64 = (try? bookmarks.bookmark(for: url))?.base64EncodedString() ?? ""
   }
 
   func pickFolder(canCreateDirectories: Bool) -> URL? {
@@ -277,7 +284,7 @@ import Foundation
     detectSonyCard()
     cancelPreviewThumbnailWork()
     maxConcurrentPreviewThumbnails = settings.performanceTuning().ingestPreviewThumbnailConcurrency
-    ingestPreviewThumbnails.cleanCache()
+    ingestPreviewThumbnails.cleanCache(destinationRoot: finalOutputURL)
     queuedPreviewThumbnailIDs.removeAll()
     pendingPreviewThumbnailClips.removeAll()
     activePreviewThumbnailCount = 0
@@ -335,6 +342,9 @@ import Foundation
         cameraCardMetadata: cameraCardMetadata
       ) { self.progress = $0 }
       Self.rememberCameraLabel(cameraCardMetadata.cameraLabel)
+      if settings.sourcePreviewCleanupPolicy == .afterSuccessfulIngest {
+        ingestPreviewThumbnails.cleanCache(destinationRoot: finalOutputURL)
+      }
       return project
     } catch is CancellationError {
       canceledSummary = "Ingest canceled. \(progress.currentIndex) of \(progress.totalCount) files copied."
@@ -415,6 +425,7 @@ import Foundation
 
   func queuePreviewThumbnail(for clip: ScannedVideo) {
     guard let sourceURL else { return }
+    guard StoragePreferences.sourcePreviewDirectory(destinationRoot: finalOutputURL) != nil else { return }
     guard clip.previewThumbnailStatus == .pending || clip.previewThumbnailStatus == .failed else { return }
     guard !queuedPreviewThumbnailIDs.contains(clip.id) else { return }
     queuedPreviewThumbnailIDs.insert(clip.id)
@@ -429,13 +440,18 @@ import Foundation
     guard !pendingPreviewThumbnailClips.isEmpty else { return }
 
     let clip = pendingPreviewThumbnailClips.removeFirst()
+    let destinationRoot = finalOutputURL
     activePreviewThumbnailCount += 1
 
     let task = Task(priority: .utility) {
       do {
         let workID = await BackgroundWorkCoordinator.shared.begin(kind: .ingestPreviewThumbnail, label: clip.filename)
         defer { Task { await BackgroundWorkCoordinator.shared.finish(workID) } }
-        let result = try await ingestPreviewThumbnails.generate(for: clip, sourceRoot: sourceURL)
+        let result = try await ingestPreviewThumbnails.generate(
+          for: clip,
+          sourceRoot: sourceURL,
+          destinationRoot: destinationRoot
+        )
         await MainActor.run {
           self.finishPreviewThumbnail(
             clipID: clip.id,
@@ -469,6 +485,9 @@ import Foundation
   }
 
   deinit {
+    if StoragePreferences.sourcePreviewCleanupPolicy == .whenIngestWindowCloses {
+      ingestPreviewThumbnails.cleanCache(destinationRoot: finalOutputURL)
+    }
     for url in activeAccessURLsByPath.values { url.stopAccessingSecurityScopedResource() }
   }
 
