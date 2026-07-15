@@ -32,7 +32,13 @@ final class SecurityScopedBookmarkManager {
     guard let resolved = try? resolveWithStaleness(data, mountIfNeeded: mountIfNeeded) else {
       return nil
     }
-    let refreshed = resolved.isStale ? try? bookmark(for: resolved.url) : nil
+    guard resolved.isStale else {
+      return HealedBookmark(url: resolved.url, refreshedData: nil)
+    }
+    // Creating a security-scoped bookmark requires the scope to be active in the
+    // sandbox; minting it before starting access fails and `try?` would silently
+    // drop the refreshed data, leaving the bookmark stale across launches.
+    let refreshed = withAccess(to: resolved.url) { try? bookmark(for: resolved.url) }
     return HealedBookmark(url: resolved.url, refreshedData: refreshed)
   }
   /// Resolves a security-scoped bookmark.
