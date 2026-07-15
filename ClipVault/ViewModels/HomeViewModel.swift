@@ -21,11 +21,29 @@ struct RecentProjectSummary: Identifiable {
 }
 
 @MainActor final class HomeViewModel: ObservableObject {
-  @Published var recentProjects: [String] = UserDefaults.standard.stringArray(forKey: "recentProjects") ?? []
+  @Published var recentProjects: [String]
+  @Published private(set) var summaries: [RecentProjectSummary]
   @Published var error: String?
 
-  var summaries: [RecentProjectSummary] {
-    recentProjects.map { RecentProjectSummary(path: $0, project: try? ProjectStore().loadRecent(path: $0)) }
+  init() {
+    let paths = UserDefaults.standard.stringArray(forKey: "recentProjects") ?? []
+    recentProjects = paths
+    summaries = Self.loadSummaries(for: paths)
+  }
+
+  /// Builds the recent-project summaries. Bookmarks are resolved without
+  /// mounting so a project on a disconnected network drive is shown as
+  /// unavailable instead of stalling the Home screen while macOS tries to
+  /// mount the volume.
+  private static func loadSummaries(for paths: [String]) -> [RecentProjectSummary] {
+    paths.map { path in
+      RecentProjectSummary(path: path, project: try? ProjectStore().loadRecent(path: path, mountIfNeeded: false))
+    }
+  }
+
+  /// Recomputes the cached summaries. Call after the recent-project list changes.
+  func refreshSummaries() {
+    summaries = Self.loadSummaries(for: recentProjects)
   }
 
   func pickProject() -> ClipVaultProject? {
@@ -43,6 +61,7 @@ struct RecentProjectSummary: Identifiable {
     do {
       let project = try ProjectStore().load(from: url)
       recentProjects = UserDefaults.standard.stringArray(forKey: "recentProjects") ?? []
+      refreshSummaries()
       return project
     } catch {
       self.error = "Could not open this project. Make sure the volume is connected. \(error.localizedDescription)"
@@ -54,6 +73,7 @@ struct RecentProjectSummary: Identifiable {
     do {
       let project = try ProjectStore().loadRecent(path: path)
       recentProjects = UserDefaults.standard.stringArray(forKey: "recentProjects") ?? []
+      refreshSummaries()
       return project
     } catch {
       self.error = "Could not open this recent project. Make sure the volume is connected. \(error.localizedDescription)"
@@ -68,5 +88,6 @@ struct RecentProjectSummary: Identifiable {
   func removeRecent(path: String) {
     recentProjects.removeAll { $0 == path }
     UserDefaults.standard.set(recentProjects, forKey: "recentProjects")
+    refreshSummaries()
   }
 }

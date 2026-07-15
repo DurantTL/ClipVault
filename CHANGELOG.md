@@ -27,6 +27,11 @@ All notable changes to this project are documented here. The format follows
   exist.
 
 ### Fixed
+- App no longer hangs on launch when a configured folder or recent project
+  lives on a disconnected network drive or external volume. Security-scoped
+  bookmarks now resolve without mounting (and off the main thread at launch),
+  so unavailable volumes are skipped and re-resolved on demand instead of
+  stalling startup.
 - Documentation now matches the real on-disk file names
   (`.clipvault-project.json`, `.clipvault-cache`, `.clipvault-partial`).
 

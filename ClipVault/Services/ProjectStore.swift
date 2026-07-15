@@ -14,15 +14,21 @@ final class ProjectStore {
       addRecent(url)
     }
   }
-  func loadRecent(path: String) throws -> ClipVaultProject {
+  /// Loads a recent project by its stored path.
+  ///
+  /// Pass `mountIfNeeded: false` for display/scan paths (e.g. building the
+  /// Home screen list) so a project on a disconnected network drive is skipped
+  /// quickly instead of blocking while macOS tries to mount the volume. The
+  /// default (`true`) is used when the user explicitly opens a project.
+  func loadRecent(path: String, mountIfNeeded: Bool = true) throws -> ClipVaultProject {
     let bookmarks =
       UserDefaults.standard.dictionary(forKey: "recentProjectBookmarks") as? [String: Data] ?? [:]
-    if let data = bookmarks[path], let folder = try? security.resolve(data) {
-      return try load(from: folder)
+    if let data = bookmarks[path], let folder = try? security.resolve(data, mountIfNeeded: mountIfNeeded) {
+      return try load(from: folder, mountIfNeeded: mountIfNeeded)
     }
-    return try load(from: URL(fileURLWithPath: path))
+    return try load(from: URL(fileURLWithPath: path), mountIfNeeded: mountIfNeeded)
   }
-  func load(from folderOrFile: URL) throws -> ClipVaultProject {
+  func load(from folderOrFile: URL, mountIfNeeded: Bool = true) throws -> ClipVaultProject {
     try security.withAccess(to: folderOrFile) {
       let url =
         folderOrFile.lastPathComponent == Self.metadataName
@@ -38,7 +44,8 @@ final class ProjectStore {
       let dec = JSONDecoder()
       dec.dateDecodingStrategy = .iso8601
       var p = try dec.decode(ClipVaultProject.self, from: Data(contentsOf: url))
-      if let data = p.projectFolderBookmarkData, let resolved = try? security.resolve(data) {
+      if let data = p.projectFolderBookmarkData,
+        let resolved = try? security.resolve(data, mountIfNeeded: mountIfNeeded) {
         p.projectFolderPath = resolved.path
       }
       addRecent(url)
@@ -63,7 +70,7 @@ final class ProjectStore {
   func loadAll() throws -> [ClipVaultProject] {
     let paths = UserDefaults.standard.stringArray(forKey: "recentProjects") ?? []
     return paths.compactMap { path in
-      try? loadRecent(path: path)
+      try? loadRecent(path: path, mountIfNeeded: false)
     }
   }
 }
