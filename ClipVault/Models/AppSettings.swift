@@ -104,24 +104,37 @@ enum StoragePreferences {
     internalCacheRoot.appendingPathComponent("IngestPreviewThumbnails", isDirectory: true)
   }
 
+  /// Warms up the configured storage bookmarks (custom cache folders and backup
+  /// destinations) so their security-scoped access is retained for later use.
+  ///
+  /// Runs on a background queue and resolves without mounting, so a configured
+  /// folder on a disconnected network drive or external volume can never stall
+  /// app launch — it is simply skipped and re-resolved on demand once the
+  /// volume is available again.
   static func activateConfiguredBookmarks() {
-    _ = resolvedFolder(
-      pathKey: sourcePreviewCustomPathKey,
-      bookmarkKey: sourcePreviewCustomBookmarkKey
-    )
-    _ = resolvedFolder(
-      pathKey: projectThumbnailCustomPathKey,
-      bookmarkKey: projectThumbnailCustomBookmarkKey
-    )
-    let defaults = UserDefaults.standard
-    _ = backupURL(
-      path: defaults.string(forKey: backup1PathKey) ?? "",
-      bookmarkBase64: defaults.string(forKey: backup1BookmarkKey) ?? ""
-    )
-    _ = backupURL(
-      path: defaults.string(forKey: backup2PathKey) ?? "",
-      bookmarkBase64: defaults.string(forKey: backup2BookmarkKey) ?? ""
-    )
+    DispatchQueue.global(qos: .utility).async {
+      _ = resolvedFolder(
+        pathKey: sourcePreviewCustomPathKey,
+        bookmarkKey: sourcePreviewCustomBookmarkKey,
+        mountIfNeeded: false
+      )
+      _ = resolvedFolder(
+        pathKey: projectThumbnailCustomPathKey,
+        bookmarkKey: projectThumbnailCustomBookmarkKey,
+        mountIfNeeded: false
+      )
+      let defaults = UserDefaults.standard
+      _ = backupURL(
+        path: defaults.string(forKey: backup1PathKey) ?? "",
+        bookmarkBase64: defaults.string(forKey: backup1BookmarkKey) ?? "",
+        mountIfNeeded: false
+      )
+      _ = backupURL(
+        path: defaults.string(forKey: backup2PathKey) ?? "",
+        bookmarkBase64: defaults.string(forKey: backup2BookmarkKey) ?? "",
+        mountIfNeeded: false
+      )
+    }
   }
 
   static func sourcePreviewDirectory(destinationRoot: URL?) -> ResolvedStorageDirectory? {
@@ -239,9 +252,9 @@ enum StoragePreferences {
     bookmarkData(forKey: projectThumbnailCustomBookmarkKey)
   }
 
-  static func backupURL(path: String, bookmarkBase64: String) -> URL? {
+  static func backupURL(path: String, bookmarkBase64: String, mountIfNeeded: Bool = true) -> URL? {
     if let data = Data(base64Encoded: bookmarkBase64),
-      let resolved = try? SecurityScopedBookmarkManager().resolve(data) {
+      let resolved = try? SecurityScopedBookmarkManager().resolve(data, mountIfNeeded: mountIfNeeded) {
       accessRegistry.retain(resolved)
       return resolved
     }
@@ -282,9 +295,11 @@ enum StoragePreferences {
     return (files, bytes)
   }
 
-  private static func resolvedFolder(pathKey: String, bookmarkKey: String) -> URL? {
+  private static func resolvedFolder(
+    pathKey: String, bookmarkKey: String, mountIfNeeded: Bool = true
+  ) -> URL? {
     if let data = bookmarkData(forKey: bookmarkKey),
-      let resolved = try? SecurityScopedBookmarkManager().resolve(data) {
+      let resolved = try? SecurityScopedBookmarkManager().resolve(data, mountIfNeeded: mountIfNeeded) {
       accessRegistry.retain(resolved)
       return resolved
     }

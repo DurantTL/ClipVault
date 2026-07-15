@@ -10,13 +10,20 @@ final class SecurityScopedBookmarkManager {
     try url.bookmarkData(
       options: [.withSecurityScope], includingResourceValuesForKeys: nil, relativeTo: nil)
   }
-  func resolve(_ data: Data) throws -> URL {
-    try resolveWithStaleness(data).url
+  /// Resolves a security-scoped bookmark.
+  ///
+  /// Pass `mountIfNeeded: false` on launch/display paths so a bookmark that
+  /// points at a disconnected network drive or external volume fails fast
+  /// instead of blocking the calling thread while macOS tries to mount it.
+  func resolve(_ data: Data, mountIfNeeded: Bool = true) throws -> URL {
+    try resolveWithStaleness(data, mountIfNeeded: mountIfNeeded).url
   }
-  func resolveWithStaleness(_ data: Data) throws -> ResolvedBookmark {
+  func resolveWithStaleness(_ data: Data, mountIfNeeded: Bool = true) throws -> ResolvedBookmark {
     var stale = false
+    var options: URL.BookmarkResolutionOptions = [.withSecurityScope, .withoutUI]
+    if !mountIfNeeded { options.insert(.withoutMounting) }
     let url = try URL(
-      resolvingBookmarkData: data, options: [.withSecurityScope], relativeTo: nil,
+      resolvingBookmarkData: data, options: options, relativeTo: nil,
       bookmarkDataIsStale: &stale)
     return ResolvedBookmark(url: url, isStale: stale)
   }
