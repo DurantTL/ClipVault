@@ -32,6 +32,10 @@ All notable changes to this project are documented here. The format follows
   bookmarks now resolve without mounting (and off the main thread at launch),
   so unavailable volumes are skipped and re-resolved on demand instead of
   stalling startup.
+- Stale security-scoped bookmarks now self-heal. When a file server or volume
+  is renamed, resolving its bookmark reports it stale; project-folder and
+  storage/backup bookmarks are now re-created from the resolved location and
+  persisted, so a renamed server keeps opening instead of failing every launch.
 - Documentation now matches the real on-disk file names
   (`.clipvault-project.json`, `.clipvault-cache`, `.clipvault-partial`).
 

@@ -127,12 +127,14 @@ enum StoragePreferences {
       _ = backupURL(
         path: defaults.string(forKey: backup1PathKey) ?? "",
         bookmarkBase64: defaults.string(forKey: backup1BookmarkKey) ?? "",
-        mountIfNeeded: false
+        mountIfNeeded: false,
+        persistKey: backup1BookmarkKey
       )
       _ = backupURL(
         path: defaults.string(forKey: backup2PathKey) ?? "",
         bookmarkBase64: defaults.string(forKey: backup2BookmarkKey) ?? "",
-        mountIfNeeded: false
+        mountIfNeeded: false,
+        persistKey: backup2BookmarkKey
       )
     }
   }
@@ -252,11 +254,16 @@ enum StoragePreferences {
     bookmarkData(forKey: projectThumbnailCustomBookmarkKey)
   }
 
-  static func backupURL(path: String, bookmarkBase64: String, mountIfNeeded: Bool = true) -> URL? {
+  static func backupURL(
+    path: String, bookmarkBase64: String, mountIfNeeded: Bool = true, persistKey: String? = nil
+  ) -> URL? {
     if let data = Data(base64Encoded: bookmarkBase64),
-      let resolved = try? SecurityScopedBookmarkManager().resolve(data, mountIfNeeded: mountIfNeeded) {
-      accessRegistry.retain(resolved)
-      return resolved
+      let healed = SecurityScopedBookmarkManager().resolveHealing(data, mountIfNeeded: mountIfNeeded) {
+      if let key = persistKey, let refreshed = healed.refreshedData {
+        UserDefaults.standard.set(refreshed.base64EncodedString(), forKey: key)
+      }
+      accessRegistry.retain(healed.url)
+      return healed.url
     }
     guard !path.isEmpty else { return nil }
     return URL(fileURLWithPath: path, isDirectory: true)
@@ -299,9 +306,14 @@ enum StoragePreferences {
     pathKey: String, bookmarkKey: String, mountIfNeeded: Bool = true
   ) -> URL? {
     if let data = bookmarkData(forKey: bookmarkKey),
-      let resolved = try? SecurityScopedBookmarkManager().resolve(data, mountIfNeeded: mountIfNeeded) {
-      accessRegistry.retain(resolved)
-      return resolved
+      let healed = SecurityScopedBookmarkManager().resolveHealing(data, mountIfNeeded: mountIfNeeded) {
+      // Re-persist a stale bookmark (e.g. after a renamed server) so the folder
+      // keeps resolving on later launches instead of falling back to the path.
+      if let refreshed = healed.refreshedData {
+        UserDefaults.standard.set(refreshed.base64EncodedString(), forKey: bookmarkKey)
+      }
+      accessRegistry.retain(healed.url)
+      return healed.url
     }
     let path = UserDefaults.standard.string(forKey: pathKey) ?? ""
     return path.isEmpty ? nil : URL(fileURLWithPath: path, isDirectory: true)

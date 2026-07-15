@@ -7,12 +7,15 @@ final class ProjectStore {
     let folder = security.projectFolderURL(for: project)
     try security.withAccess(to: folder) {
       let url = folder.appendingPathComponent(Self.metadataName)
-      let enc = JSONEncoder()
-      enc.outputFormatting = [.prettyPrinted, .sortedKeys]
-      enc.dateEncodingStrategy = .iso8601
-      try enc.encode(project).write(to: url, options: .atomic)
+      try write(project, to: url)
       addRecent(url)
     }
+  }
+  private func write(_ project: ClipVaultProject, to url: URL) throws {
+    let enc = JSONEncoder()
+    enc.outputFormatting = [.prettyPrinted, .sortedKeys]
+    enc.dateEncodingStrategy = .iso8601
+    try enc.encode(project).write(to: url, options: .atomic)
   }
   /// Loads a recent project by its stored path.
   ///
@@ -45,8 +48,15 @@ final class ProjectStore {
       dec.dateDecodingStrategy = .iso8601
       var p = try dec.decode(ClipVaultProject.self, from: Data(contentsOf: url))
       if let data = p.projectFolderBookmarkData,
-        let resolved = try? security.resolve(data, mountIfNeeded: mountIfNeeded) {
-        p.projectFolderPath = resolved.path
+        let healed = security.resolveHealing(data, mountIfNeeded: mountIfNeeded) {
+        p.projectFolderPath = healed.url.path
+        // When the bookmark was stale (e.g. the server was renamed) macOS mints
+        // fresh data. Persist it on an explicit open so the project keeps
+        // resolving next launch instead of relying on repeated stale fix-ups.
+        if mountIfNeeded, let refreshed = healed.refreshedData {
+          p.projectFolderBookmarkData = refreshed
+          try? write(p, to: url)
+        }
       }
       addRecent(url)
       return p
