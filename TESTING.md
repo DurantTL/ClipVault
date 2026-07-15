@@ -11,6 +11,10 @@ The following mechanics are covered by unit tests in `ClipVaultTests/` and run i
 - Source scanning: Sony `PRIVATE/M4ROOT/CLIP` prioritization, proxy exclusion/opt-in, Canon `DCIM` detection, sidecar filtering, recursive generic scans (`SourceScannerTests`).
 - Export: copy-only exports, safe `_1`/`_2` duplicate naming, missing-source skips (`ClipExportServiceTests`, `RatingAndSuggestionTests`).
 - Project/clip JSON compatibility and rating/status mapping (`ProjectCodableTests`, `ClipCodableTests`, `RatingAndSuggestionTests`).
+- Preflight media check: already-imported, same-name-different-size, backup/recent-project, and possible-duplicate classification (`PreflightMediaCheckTests`).
+- Physical sorting: folder moves with safe `_1` naming, undo restoring path and folder assignment, and failure leaving clip metadata untouched (`FileMoveServiceTests`).
+- Ingest orchestration: end-to-end copy + verify on temp folders, per-clip failure isolation, safe names for colliding flat filenames, and cancel leaving a reopenable project with sources untouched (`IngestServiceTests`).
+- Diagnostics report content (`DiagnosticsReportServiceTests`).
 
 Still manual only (needs real media, hardware, or relaunch): thumbnail generation from real video, mid-copy pause/resume timing, security-scoped bookmark persistence across relaunch, removable-volume detection, and backup destinations end-to-end.
 
