@@ -49,7 +49,7 @@ final class PlayerViewModel: ObservableObject {
       errorMessage = error.localizedDescription
     }
     print("""
-    ClipVault preview load: filename=\(clip.currentFilename), resolvedURL=\(url.path), fileExists=\(exists), copyStatus=\(clip.copyStatus.rawValue), verificationStatus=\(clip.verificationStatus.rawValue), thumbnailStatus=\(clip.thumbnailStatus.rawValue), avPlayerError=\(item.error?.localizedDescription ?? "none")
+    Preview load: filename=\(clip.currentFilename), resolvedURL=\(url.path), fileExists=\(exists), copyStatus=\(clip.copyStatus.rawValue), verificationStatus=\(clip.verificationStatus.rawValue), thumbnailStatus=\(clip.thumbnailStatus.rawValue), avPlayerError=\(item.error?.localizedDescription ?? "none")
     """)
   }
 

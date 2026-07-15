@@ -61,6 +61,7 @@ These must stay true for every future feature:
 - Camera/card metadata on ingest; local rule-based + Vision analysis with suggested ratings (never auto-applied).
 - Apple Silicon performance profiles and background work coordination; bounded thumbnail memory cache and preview prewarming.
 - Brand-agnostic string handling via `AppBrand.swift`; automated safety-pipeline tests (copy, verify, scan, export naming) in CI.
+- Preflight Media Check / already-imported detection: source clips are compared by file identity (filename, size, modified date, duration) against the destination, configured backups, and recent projects, with clip-level statuses (New, Already at Destination, Already in Project, Already on Backup, Possible Duplicate, Same Name Different Size) and skip-already-copied selection.
 
 ## Phase 1 — Trustworthiness (in progress)
 
@@ -89,12 +90,11 @@ Make the existing core loop provably reliable before adding surface area.
 
 ## Phase 3 — Workflow-completing features (priority order)
 
-1. **Preflight Media Check / Already-Imported detection** — the biggest real-workflow gap. Before ingest, compare source files against the project destination, backups, NAS folders, recent projects, and optional comparison folders. **Matching is by file identity, never by location:** a clip is compared using its own attributes — filename, size, duration, modified date, and optional checksum — so a file counts as already imported no matter which folder it lives in (renamed project folders, custom-folder moves, or a different destination layout must not defeat detection). Folder paths are only reported as *where* the match was found, never used as the match criteria. Clip-level statuses (New, Already in Project, Already on Backup, Already on NAS, Possible Duplicate, Same Name Different Size, Missing From Backup, Previously Verified) and ingest choices (copy new only, skip already imported, retry missing backups only, copy all with safe names). Results stored in project JSON and reports. Never overwrite, never delete. The existing library-side `findDuplicateCandidates()` (filename + byte size, path-independent) is the precedent to follow and extend.
-2. **MHL (Media Hash List) checksum reports** — industry-standard proof-of-transfer (Hedge/Silverstack parity). Builds on the existing SHA256 code; big credibility win for paid production work.
-3. **Contact sheets / filmstrip hover-scrub** — settings key and background-work plumbing already exist; implement generation from copied media only, then re-enable the hidden toggle.
-4. **Finder tags + XMP sidecar export** — implement the writers behind the reserved `finderTagsExport` / `xmpSidecarExport` keys, then re-enable the hidden toggles. Sidecars only; never write into MP4/MOV media.
-5. **FCPXML / Resolve-friendly handoff** — carry ratings, tags, and notes into the NLE (FCPXML keywords/ratings; Resolve CSV/EDL-style metadata) instead of folder-open only.
-6. **Project templates** and ingest rename/folder-pattern tokens (project, source, session, original filename, counter, date/shot-time components, camera type). Defaults stay safe: preserve original filenames, flat copy, never overwrite.
+1. **MHL (Media Hash List) checksum reports** — industry-standard proof-of-transfer (Hedge/Silverstack parity). Builds on the existing SHA256 code; big credibility win for paid production work.
+2. **Contact sheets / filmstrip hover-scrub** — settings key and background-work plumbing already exist; implement generation from copied media only, then re-enable the hidden toggle.
+3. **Finder tags + XMP sidecar export** — implement the writers behind the reserved `finderTagsExport` / `xmpSidecarExport` keys, then re-enable the hidden toggles. Sidecars only; never write into MP4/MOV media.
+4. **FCPXML / Resolve-friendly handoff** — carry ratings, tags, and notes into the NLE (FCPXML keywords/ratings; Resolve CSV/EDL-style metadata) instead of folder-open only.
+5. **Project templates** and ingest rename/folder-pattern tokens (project, source, session, original filename, counter, date/shot-time components, camera type). Defaults stay safe: preserve original filenames, flat copy, never overwrite.
 
 ## Performance and Apple Silicon
 

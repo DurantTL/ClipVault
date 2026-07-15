@@ -50,4 +50,4 @@ enum SafeFilename {
     name.replacingOccurrences(of: "/", with: "-").trimmingCharacters(in: .whitespacesAndNewlines)
   }
 }
-enum Log { static func info(_ msg: String) { print("[ClipVault] \(msg)") } }
+enum Log { static func info(_ msg: String) { print("[\(AppBrand.appName)] \(msg)") } }

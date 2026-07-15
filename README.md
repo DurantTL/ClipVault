@@ -98,7 +98,7 @@ The MVP is focused on Sony a7R V/XAVC-style workflows: `PRIVATE/M4ROOT/CLIP` pri
 
 ## Known limitations
 
-- No cloud sync, AI analysis, duplicate detection, editing timeline, NLE export, SD formatting, permanent deletion, or multi-user collaboration.
+- No cloud sync, AI analysis, editing timeline, NLE export, SD formatting, permanent deletion, or multi-user collaboration. (Duplicate detection against previously imported media is covered by the Preflight Media Check below.)
 - Preview, metadata, and thumbnail support depends on AVFoundation codecs available on the user's Mac.
 - The first version generates one cached thumbnail per clip, not filmstrips/contact sheets.
 - Recent projects can only reopen automatically while the project folder, external SSD, or NAS mount is available at the expected location or resolvable by its bookmark.
@@ -255,6 +255,10 @@ The ingest panel keeps rename off by default. When enabled, files are copied as 
 
 A parallel option enables thumbnail generation during ingest. Analysis remains local-only and runs only after files are safely copied into the destination project. Post-ingest analysis and contact-sheet toggles are hidden until those pipelines are implemented.
 
+## Preflight Media Check
+
+Before copying, New Ingest can run a **Preflight Media Check** that compares the scanned source clips against the chosen destination, configured Backup 1/2 folders, and recent projects. Matching is by file identity (filename, size, modified date, and duration when available), never by folder location, so renamed project folders do not defeat detection. Each clip is classified as New, Already at Destination, Already in Project, Already on Backup, Possible Duplicate, or Same Name Different Size, and the ingest selection can automatically keep only new media when "skip already copied" handling is selected. Preflight never modifies media; ingest still uses safe `_1`/`_2` naming regardless of the result.
+
 ## Local analysis details and disclaimers
 
 Local analysis uses Apple APIs only: AVFoundation samples a small number of frames, Core Graphics/Core Image-style pixel metrics estimate focus, exposure, contrast, white balance, and motion, and Vision detects face rectangles. Fast mode samples 3 frames, Balanced samples 5 frames or roughly every 10 seconds, and Detailed samples every 2–5 seconds with a cap; SlateBox never analyzes every frame.
@@ -275,7 +279,7 @@ python3 Scripts/generate_app_icon.py
 make icons
 ```
 
-The script writes `ClipVault/Assets.xcassets/AppIcon.appiconset/icon_16.png` through `icon_1024.png` plus `Contents.json`. Run `make icons`, then use **Product → Clean Build Folder** in Xcode and rebuild SlateBox. Generated PNGs are ignored by git.
+The script writes `ClipVault/Assets.xcassets/AppIcon.appiconset/icon_16x16_1x.png` through `icon_512x512_2x.png` plus `Contents.json`. Run `make icons`, then use **Product → Clean Build Folder** in Xcode and rebuild SlateBox. Generated PNGs are ignored by git.
 
 ## Recent SlateBox Improvements
 

@@ -269,7 +269,7 @@ private enum EditFolderHandoff {
   static func chooseFolderAndHandOff(to applicationIdentifier: String?) {
     let panel = NSOpenPanel()
     panel.title = "Choose Edit Folder"
-    panel.message = "Choose the folder SlateBox should reveal for your editing application."
+    panel.message = "Choose the folder \(AppBrand.appName) should reveal for your editing application."
     panel.prompt = applicationIdentifier == nil ? "Reveal" : "Reveal and Open App"
     panel.canChooseDirectories = true
     panel.canChooseFiles = false
