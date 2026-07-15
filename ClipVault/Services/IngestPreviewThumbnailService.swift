@@ -69,7 +69,7 @@ final class IngestPreviewThumbnailService {
         generator.requestedTimeToleranceAfter = CMTime(seconds: 0.25, preferredTimescale: 600)
 
         let duration = try? await asset.load(.duration)
-        let seconds = self.thumbnailSeconds(for: duration)
+        let seconds = ThumbnailTiming.seconds(for: duration)
         let time = CMTime(seconds: seconds, preferredTimescale: 600)
 
         do {
@@ -122,13 +122,4 @@ final class IngestPreviewThumbnailService {
     }
   }
 
-  private func thumbnailSeconds(for duration: CMTime?) -> Double {
-    guard let duration, duration.isValid, !duration.isIndefinite, duration.seconds.isFinite, duration.seconds > 0 else {
-      return 1.0
-    }
-    if duration.seconds < 1.0 {
-      return min(0.1, max(0.0, duration.seconds * 0.5))
-    }
-    return min(max(duration.seconds * 0.10, 0.1), max(0.0, duration.seconds - 0.05))
-  }
 }

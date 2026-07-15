@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 final class IngestService {
   let verifier = VerificationService()
@@ -6,20 +7,23 @@ final class IngestService {
   let thumbnails = ThumbnailService()
   let store = ProjectStore()
   let security = SecurityScopedBookmarkManager()
-  var cancelled = false
-  var paused = false
+  // Written from the main actor (UI) and read from the detached copy task,
+  // so both flags must live behind a lock.
+  private let controlState = OSAllocatedUnfairLock(initialState: (cancelled: false, paused: false))
   private let copyService = StreamingCopyService()
-  func cancel() { cancelled = true }
-  func pause() { paused = true }
-  func resume() { paused = false }
+  var isCancelledNow: Bool { controlState.withLock { $0.cancelled } }
+  var isPausedNow: Bool { controlState.withLock { $0.paused } }
+  func cancel() { controlState.withLock { $0.cancelled = true } }
+  func pause() { controlState.withLock { $0.paused = true } }
+  func resume() { controlState.withLock { $0.paused = false } }
+  private func resetControlState() { controlState.withLock { $0 = (cancelled: false, paused: false) } }
   func ingest(
     name: String, shootName: String, source: URL, destination: URL, videos: [SourceVideo], bookmarks: (Data?, Data?),
     settings: AppSettings, cameraCardMetadata: IngestCameraCardMetadata, progress: @escaping @MainActor (IngestProgress) -> Void
   ) async throws -> ClipVaultProject {
-    self.cancelled = false
-    self.paused = false
-    self.copyService.isCancelled = { [weak self] in self?.cancelled ?? false }
-    self.copyService.isPaused = { [weak self] in self?.paused ?? false }
+    self.resetControlState()
+    self.copyService.isCancelled = { [weak self] in self?.isCancelledNow ?? false }
+    self.copyService.isPaused = { [weak self] in self?.isPausedNow ?? false }
     return try await self.security.withAccessAsync(to: source) {
       try await self.security.withAccessAsync(to: destination) {
         let projectFolder = SafeFilename.uniqueURL(
@@ -69,7 +73,7 @@ final class IngestService {
         var done: Int64 = 0
         let started = Date()
         for (idx, v) in videos.enumerated() {
-          if self.cancelled {
+          if self.isCancelledNow {
             project.ingestIncomplete = true
             project.ingestStatus = .canceled
             project.canResumeIngest = true
@@ -82,7 +86,7 @@ final class IngestService {
               currentFilename: v.url.lastPathComponent, currentIndex: idx + 1,
               totalCount: videos.count, copiedBytes: done, totalBytes: total,
               bytesPerSecond: Double(done) / max(1, Date().timeIntervalSince(started)),
-              message: self.paused ? "Paused" : "Copying"))
+              message: self.isPausedNow ? "Paused" : "Copying"))
           var clip = project.clips[idx]
           let destURL = URL(fileURLWithPath: clip.currentPath)
           clip.copyStatus = .copying
@@ -101,7 +105,7 @@ final class IngestService {
                   currentFilename: v.url.lastPathComponent, currentIndex: idx + 1,
                   totalCount: videos.count, copiedBytes: copied, totalBytes: total,
                   bytesPerSecond: Double(copied) / max(1, Date().timeIntervalSince(started)),
-                  message: self.paused ? "Paused" : "Copying"))
+                  message: self.isPausedNow ? "Paused" : "Copying"))
             }
             clip.copyStatus = .copied
             clip.verificationStatus = .copied
@@ -191,10 +195,9 @@ final class IngestService {
       )
     }
 
-    self.cancelled = false
-    self.paused = false
-    self.copyService.isCancelled = { [weak self] in self?.cancelled ?? false }
-    self.copyService.isPaused = { [weak self] in self?.paused ?? false }
+    self.resetControlState()
+    self.copyService.isCancelled = { [weak self] in self?.isCancelledNow ?? false }
+    self.copyService.isPaused = { [weak self] in self?.isPausedNow ?? false }
 
     let sourceRoot = try security.resolve(sourceBookmark)
     let projectFolder = security.projectFolderURL(for: project)
@@ -214,7 +217,7 @@ final class IngestService {
         var completedBytes: Int64 = 0
 
         for (position, index) in unfinished.enumerated() {
-          if self.cancelled { break }
+          if self.isCancelledNow { break }
           var clip = resumed.clips[index]
           let source: URL
           if !clip.sourceRelativePath.isEmpty {
@@ -339,11 +342,19 @@ final class IngestService {
   }
 
   private func refreshCounts(_ project: inout ClipVaultProject) {
+    // Buckets are mutually exclusive and exhaustive so copied + failed + pending
+    // always equals the clip count shown in progress UI.
+    func isFailed(_ clip: Clip) -> Bool {
+      clip.copyStatus == .failed || clip.verificationStatus == .failed
+    }
+    func isCopied(_ clip: Clip) -> Bool {
+      !isFailed(clip) && (clip.copyStatus == .copied || clip.verificationStatus == .verified)
+    }
     project.totalSelectedClips = max(project.totalSelectedClips, project.clips.count)
-    project.copiedClipCount = project.clips.filter { $0.copyStatus == .copied || $0.verificationStatus == .verified }.count
+    project.copiedClipCount = project.clips.filter(isCopied).count
     project.verifiedClipCount = project.clips.filter { $0.verificationStatus == .verified }.count
-    project.failedClipCount = project.clips.filter { $0.copyStatus == .failed || $0.verificationStatus == .failed }.count
-    project.pendingClipCount = project.clips.filter { $0.copyStatus == .pending || $0.copyStatus == .copying }.count
+    project.failedClipCount = project.clips.filter(isFailed).count
+    project.pendingClipCount = project.clips.filter { !isFailed($0) && !isCopied($0) }.count
     project.lastIngestDate = Date()
   }
 

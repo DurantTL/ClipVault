@@ -262,17 +262,18 @@ extension Clip {
 struct LocalAnalysisService {
   private let sampler = FrameSamplerService()
   private let pixels = PixelAnalyzer()
+  private let security = SecurityScopedBookmarkManager()
 
   func tags(for clip: Clip) -> [String] {
     var tags = Set(clip.automaticTags)
-    if let width = clip.width, width >= 3840 { tags.insert("4K") }
-    if let frameRate = clip.frameRate, frameRate >= 59.0 { tags.insert("60p") }
+    if ClipTagRules.is4K(clip) { tags.insert("4K") }
+    if ClipTagRules.is60p(clip) { tags.insert("60p") }
     if clip.hasAudio == true { tags.insert("Has Audio") }
     if clip.hasAudio == false { tags.insert("No Audio") }
-    if let duration = clip.duration, duration < 30 { tags.insert("Short Clip") }
-    if let duration = clip.duration, duration >= 300 { tags.insert("Long Clip") }
-    if clip.fileSize >= 5_000_000_000 { tags.insert("Large File") }
-    if clip.originalSourcePath.localizedCaseInsensitiveContains("PRIVATE/M4ROOT") || clip.sonyCardFolderPath != nil { tags.insert("Sony") }
+    if ClipTagRules.isShortClip(clip) { tags.insert("Short Clip") }
+    if ClipTagRules.isLongClip(clip) { tags.insert("Long Clip") }
+    if ClipTagRules.isLargeFile(clip) { tags.insert("Large File") }
+    if ClipTagRules.isSony(clip) { tags.insert("Sony") }
     if clip.originalSourcePath.localizedCaseInsensitiveContains("/DCIM/") { tags.insert("Canon/DCF") }
     if clip.analysisStatus == .failed { tags.insert("Failed Analysis") }
     if clip.focusWarning { tags.insert("Possibly Out of Focus") }
@@ -315,19 +316,24 @@ struct LocalAnalysisService {
     guard mode != .off else { return clip }
     guard FileManager.default.fileExists(atPath: clip.currentPath) else { return clip }
     clip.analysisStatus = .analyzing
+    // Frame reads run inside a security scope like MetadataService.enrich, so
+    // analysis keeps working for projects on sandboxed external/NAS volumes.
+    let mediaURL = URL(fileURLWithPath: clip.currentPath)
     do {
-      let samples = try await sampler.samples(for: URL(fileURLWithPath: clip.currentPath), mode: mode, duration: clip.duration)
-      let metrics = samples.compactMap { pixels.metrics(for: $0.image) }
-      clip.sampledFrameCount = samples.count
-      FocusAnalysisService().apply(to: &clip, metrics: metrics)
-      ExposureAnalysisService().apply(to: &clip, metrics: metrics)
-      WhiteBalanceAnalysisService().apply(to: &clip, metrics: metrics)
-      StabilityAnalysisService().apply(to: &clip, metrics: metrics)
-      // A failure to decode a larger Vision frame should not throw away the
-      // inexpensive analysis result; it simply falls back to the small frame.
-      let faceSamples = (try? await sampler.faceSamples(for: URL(fileURLWithPath: clip.currentPath), mode: mode, duration: clip.duration)) ?? samples
-      await FaceAnalysisService().apply(to: &clip, samples: faceSamples)
-      clip.analysisStatus = .complete
+      try await security.withAccessAsync(to: mediaURL) {
+        let samples = try await sampler.samples(for: mediaURL, mode: mode, duration: clip.duration)
+        let metrics = samples.compactMap { pixels.metrics(for: $0.image) }
+        clip.sampledFrameCount = samples.count
+        FocusAnalysisService().apply(to: &clip, metrics: metrics)
+        ExposureAnalysisService().apply(to: &clip, metrics: metrics)
+        WhiteBalanceAnalysisService().apply(to: &clip, metrics: metrics)
+        StabilityAnalysisService().apply(to: &clip, metrics: metrics)
+        // A failure to decode a larger Vision frame should not throw away the
+        // inexpensive analysis result; it simply falls back to the small frame.
+        let faceSamples = (try? await sampler.faceSamples(for: mediaURL, mode: mode, duration: clip.duration)) ?? samples
+        await FaceAnalysisService().apply(to: &clip, samples: faceSamples)
+        clip.analysisStatus = .complete
+      }
     } catch is CancellationError {
       clip.analysisStatus = .canceled
     } catch {

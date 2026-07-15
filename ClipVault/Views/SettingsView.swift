@@ -858,27 +858,29 @@ struct SettingsView: View {
     panel.canCreateDirectories = true
     guard panel.runModal() == .OK, let url = panel.url else { return }
 
+    // Never overwrite a stored bookmark with a failed creation; nil leaves the
+    // previously persisted bookmark untouched.
     let bookmark =
-      (try? SecurityScopedBookmarkManager().bookmark(for: url))?.base64EncodedString() ?? ""
+      (try? SecurityScopedBookmarkManager().bookmark(for: url))?.base64EncodedString()
 
     switch kind {
     case .sourcePreview:
       settings.sourcePreviewCustomFolderPath = url.path
-      settings.sourcePreviewCustomFolderBookmarkBase64 = bookmark
+      if let bookmark { settings.sourcePreviewCustomFolderBookmarkBase64 = bookmark }
       settings.sourcePreviewStorageLocationRaw = SourcePreviewStorageLocation.customFolder.rawValue
       settings.storagePresetRaw = StoragePreset.custom.rawValue
     case .projectThumbnails:
       settings.projectThumbnailCustomFolderPath = url.path
-      settings.projectThumbnailCustomFolderBookmarkBase64 = bookmark
+      if let bookmark { settings.projectThumbnailCustomFolderBookmarkBase64 = bookmark }
       settings.projectThumbnailStorageLocationRaw =
         ProjectThumbnailStorageLocation.customFolder.rawValue
       settings.storagePresetRaw = StoragePreset.custom.rawValue
     case .backup1:
       settings.backupDestination1Path = url.path
-      settings.backupDestination1BookmarkBase64 = bookmark
+      if let bookmark { settings.backupDestination1BookmarkBase64 = bookmark }
     case .backup2:
       settings.backupDestination2Path = url.path
-      settings.backupDestination2BookmarkBase64 = bookmark
+      if let bookmark { settings.backupDestination2BookmarkBase64 = bookmark }
     }
 
     StoragePreferences.activateConfiguredBookmarks()

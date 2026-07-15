@@ -4,6 +4,7 @@ struct SidebarView: View {
   @ObservedObject var vm: LibraryViewModel
   @Binding var newFolder: String
   @State private var renameFolderName = ""
+  @State private var renameTargetFolder: String?
 
   var body: some View {
     List(selection: $vm.filter) {
@@ -50,7 +51,7 @@ struct SidebarView: View {
           .contextMenu {
             Button("Rename Folder") {
               renameFolderName = folder
-              vm.renameFolder(folder, to: renameFolderName)
+              renameTargetFolder = folder
             }
             Button("Delete Folder Assignment", role: .destructive) {
               vm.deleteFolder(folder)
@@ -76,6 +77,28 @@ struct SidebarView: View {
     }
     .navigationTitle(vm.project.name)
     .listStyle(.sidebar)
+    .alert(
+      "Rename Folder",
+      isPresented: Binding(
+        get: { renameTargetFolder != nil },
+        set: { if !$0 { renameTargetFolder = nil } }
+      )
+    ) {
+      TextField("Folder name", text: $renameFolderName)
+      Button("Rename") {
+        if let target = renameTargetFolder {
+          vm.renameFolder(target, to: renameFolderName)
+        }
+        renameTargetFolder = nil
+        renameFolderName = ""
+      }
+      Button("Cancel", role: .cancel) {
+        renameTargetFolder = nil
+        renameFolderName = ""
+      }
+    } message: {
+      Text("Renaming updates the folder assignment on every clip in the folder.")
+    }
   }
 
   private func count(for folder: String) -> Int {

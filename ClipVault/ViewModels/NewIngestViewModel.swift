@@ -298,13 +298,18 @@ private final class IngestWindowPreviewCleanup: @unchecked Sendable {
   func chooseBackup1(settings: AppSettings) {
     guard let url = pickFolder(canCreateDirectories: true) else { return }
     settings.backupDestination1Path = url.path
-    settings.backupDestination1BookmarkBase64 = (try? bookmarks.bookmark(for: url))?.base64EncodedString() ?? ""
+    // Never overwrite a stored bookmark with a failed creation.
+    if let bookmark = (try? bookmarks.bookmark(for: url))?.base64EncodedString() {
+      settings.backupDestination1BookmarkBase64 = bookmark
+    }
   }
 
   func chooseBackup2(settings: AppSettings) {
     guard let url = pickFolder(canCreateDirectories: true) else { return }
     settings.backupDestination2Path = url.path
-    settings.backupDestination2BookmarkBase64 = (try? bookmarks.bookmark(for: url))?.base64EncodedString() ?? ""
+    if let bookmark = (try? bookmarks.bookmark(for: url))?.base64EncodedString() {
+      settings.backupDestination2BookmarkBase64 = bookmark
+    }
   }
 
   func pickFolder(canCreateDirectories: Bool) -> URL? {
@@ -487,17 +492,19 @@ private final class IngestWindowPreviewCleanup: @unchecked Sendable {
     let destinationRoot = finalOutputURL
     activePreviewThumbnailCount += 1
 
-    let task = Task(priority: .utility) {
+    // Weak self so an in-flight thumbnail task never keeps the view model (and
+    // its retained security-scoped access) alive after the ingest window closes.
+    let task = Task(priority: .utility) { [weak self, service = ingestPreviewThumbnails] in
       do {
         let workID = await BackgroundWorkCoordinator.shared.begin(kind: .ingestPreviewThumbnail, label: clip.filename)
         defer { Task { await BackgroundWorkCoordinator.shared.finish(workID) } }
-        let result = try await ingestPreviewThumbnails.generate(
+        let result = try await service.generate(
           for: clip,
           sourceRoot: sourceURL,
           destinationRoot: destinationRoot
         )
-        await MainActor.run {
-          self.finishPreviewThumbnail(
+        await MainActor.run { [weak self] in
+          self?.finishPreviewThumbnail(
             clipID: clip.id,
             status: .generated,
             path: result.path,
@@ -506,8 +513,8 @@ private final class IngestWindowPreviewCleanup: @unchecked Sendable {
           )
         }
       } catch {
-        await MainActor.run {
-          self.finishPreviewThumbnail(
+        await MainActor.run { [weak self] in
+          self?.finishPreviewThumbnail(
             clipID: clip.id,
             status: .failed,
             path: nil,
@@ -529,6 +536,7 @@ private final class IngestWindowPreviewCleanup: @unchecked Sendable {
   }
 
   deinit {
+    for task in previewThumbnailTasks.values { task.cancel() }
     windowPreviewCleanup.cleanIfNeeded()
     for url in activeAccessURLsByPath.values { url.stopAccessingSecurityScopedResource() }
   }
