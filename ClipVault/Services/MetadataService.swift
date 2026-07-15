@@ -59,14 +59,42 @@ final class MetadataService {
 
   private func automaticTags(for clip: Clip) -> [String] {
     var tags: [String] = []
-    if clip.sonyCardFolderPath != nil || clip.originalSourcePath.contains("PRIVATE/M4ROOT") { tags.append("Sony") }
-    if (clip.width ?? 0) >= 3840 || (clip.height ?? 0) >= 2160 { tags.append("4K") }
-    if let frameRate = clip.frameRate, frameRate >= 59, frameRate <= 61 { tags.append("60p") }
+    if ClipTagRules.isSony(clip) { tags.append("Sony") }
+    if ClipTagRules.is4K(clip) { tags.append("4K") }
+    if ClipTagRules.is60p(clip) { tags.append("60p") }
     if clip.hasAudio == false { tags.append("No Audio") }
-    if clip.fileSize > 4 * 1024 * 1024 * 1024 { tags.append("Large File") }
-    if let duration = clip.duration, duration < 15 { tags.append("Short Clip") }
-    if let duration = clip.duration, duration > 10 * 60 { tags.append("Long Clip") }
+    if ClipTagRules.isLargeFile(clip) { tags.append("Large File") }
+    if ClipTagRules.isShortClip(clip) { tags.append("Short Clip") }
+    if ClipTagRules.isLongClip(clip) { tags.append("Long Clip") }
     return Array(Set(tags)).sorted()
+  }
+}
+
+/// Single source of truth for the size/duration/format tag thresholds so the
+/// same tag name never means different things on the metadata and analysis
+/// code paths.
+enum ClipTagRules {
+  static func is4K(_ clip: Clip) -> Bool {
+    (clip.width ?? 0) >= 3840 || (clip.height ?? 0) >= 2160
+  }
+  static func is60p(_ clip: Clip) -> Bool {
+    guard let frameRate = clip.frameRate else { return false }
+    return frameRate >= 59 && frameRate <= 61
+  }
+  static func isLargeFile(_ clip: Clip) -> Bool {
+    clip.fileSize > 4 * 1024 * 1024 * 1024
+  }
+  static func isShortClip(_ clip: Clip) -> Bool {
+    guard let duration = clip.duration else { return false }
+    return duration < 15
+  }
+  static func isLongClip(_ clip: Clip) -> Bool {
+    guard let duration = clip.duration else { return false }
+    return duration > 10 * 60
+  }
+  static func isSony(_ clip: Clip) -> Bool {
+    clip.sonyCardFolderPath != nil
+      || clip.originalSourcePath.localizedCaseInsensitiveContains("PRIVATE/M4ROOT")
   }
 }
 

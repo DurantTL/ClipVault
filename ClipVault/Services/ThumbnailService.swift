@@ -59,7 +59,7 @@ actor ThumbnailService {
           generator.requestedTimeToleranceAfter = CMTime(seconds: 0.25, preferredTimescale: 600)
 
           let duration = try? await asset.load(.duration)
-          let seconds = self.thumbnailSeconds(for: duration)
+          let seconds = ThumbnailTiming.seconds(for: duration)
           let time = CMTime(seconds: seconds, preferredTimescale: 600)
 
           do {
@@ -101,7 +101,12 @@ actor ThumbnailService {
     return url.path
   }
 
-  private func thumbnailSeconds(for duration: CMTime?) -> Double {
+}
+
+/// Shared capture-time heuristic for both the library and ingest-preview
+/// thumbnail generators.
+enum ThumbnailTiming {
+  static func seconds(for duration: CMTime?) -> Double {
     guard let duration, duration.isValid, !duration.isIndefinite, duration.seconds.isFinite, duration.seconds > 0 else {
       return 1.0
     }
