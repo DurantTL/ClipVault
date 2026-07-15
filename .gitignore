@@ -1,3 +1,12 @@
 
 # Generated local placeholder app icons (binary files are intentionally not committed)
 ClipVault/Assets.xcassets/AppIcon.appiconset/*.png
+
+# macOS
+.DS_Store
+
+# Xcode
+build/
+DerivedData/
+xcuserdata/
+*.xcuserstate

@@ -8,6 +8,9 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- Preflight Media Check before ingest: source clips are compared by file
+  identity against the destination, configured backups, and recent projects,
+  with per-clip statuses and skip-already-copied selection.
 - First-launch onboarding walkthrough (drives → protected copy → project
   library → cull → export), re-openable from Help → Welcome.
 - Keyboard shortcut cheat sheet under Help → Keyboard Shortcuts.

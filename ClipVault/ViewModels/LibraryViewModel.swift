@@ -336,7 +336,7 @@ struct BatchMetadataEdit {
     let url = resolvedMediaURL(for: clip)
     let exists = url.map { FileManager.default.fileExists(atPath: $0.path) } ?? false
     print("""
-    ClipVault preview failure: filename=\(clip.currentFilename), reason=\(reason), resolvedURL=\(url?.path ?? "nil"), fileExists=\(exists), copyStatus=\(clip.copyStatus.rawValue), verificationStatus=\(clip.verificationStatus.rawValue), thumbnailStatus=\(clip.thumbnailStatus.rawValue), avPlayerError=\(avPlayerError?.localizedDescription ?? "none")
+    Preview failure: filename=\(clip.currentFilename), reason=\(reason), resolvedURL=\(url?.path ?? "nil"), fileExists=\(exists), copyStatus=\(clip.copyStatus.rawValue), verificationStatus=\(clip.verificationStatus.rawValue), thumbnailStatus=\(clip.thumbnailStatus.rawValue), avPlayerError=\(avPlayerError?.localizedDescription ?? "none")
     """)
   }
 
