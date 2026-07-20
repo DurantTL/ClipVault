@@ -1,6 +1,6 @@
 # SlateBox Roadmap — Path to a Final Product
 
-Updated: July 10, 2026
+Updated: July 20, 2026
 
 ## Project Summary
 
@@ -70,7 +70,8 @@ Make the existing core loop provably reliable before adding surface area.
 - ✅ Brand-agnosticism pass: user-visible strings flow through `AppBrand.appName`; on-disk names frozen and documented.
 - ✅ No dead controls: settings toggles without an implementation (contact sheets, Finder tags export, XMP sidecar export, post-ingest analysis, technical details) are hidden until their features exist. Keys remain reserved.
 - ✅ Automated tests for the safety-critical pipeline: `StreamingCopyServiceTests`, `VerificationServiceTests`, `SourceScannerTests`, `ClipExportServiceTests` run in CI alongside the Codable/rating/alias tests.
-- Error-recovery audit: disk-full during copy, volume disconnect mid-ingest, NAS drop and retry, permission loss mid-session. Each failure needs a clear user-facing message and a safe, resumable state.
+- ✅ Recovery implementation pass: known insufficient destination space blocks ingest; low/unknown capacity is explained; disk-full, disconnect, permission, and read-only failures have actionable messages; canceled/failed projects retain correct resumable state; project-save/export failures are visible instead of discarded.
+- Hardware recovery validation remains: physically disconnect an SSD and NAS mid-copy, revoke folder access, restore each resource, and complete the resume checklist in `TESTING.md` before calling the recovery audit finished.
 - Decompose `LibraryViewModel` (~1,000 lines) into focused pieces (selection, filtering/sorting, thumbnails, export, analysis) before the next feature pass.
 - Continue the regression loop in TESTING.md for every PR:
 

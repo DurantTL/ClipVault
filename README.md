@@ -46,7 +46,7 @@ The `Release SlateBox` GitHub Actions workflow builds a Release app, runs the te
 4. Name the project. The default is date-based.
 5. SlateBox scans Sony cards by using `PRIVATE/M4ROOT/CLIP` when present.
 6. Proxy files in Sony `PRIVATE/M4ROOT/SUB` are skipped by default unless **Include Proxy Files** is enabled. Non-Sony folders continue to scan recursively.
-7. Click **Start Copy**. SlateBox streams each file in chunks, updates progress during large copies, verifies the result, then generates metadata and a thumbnail only for successfully copied and verified clips.
+7. Click **Start Ingest**. SlateBox confirms that the destination has enough reported free space, streams each file in chunks, verifies the result, then generates metadata and a thumbnail only for successfully copied and verified clips.
 8. The library opens so clips can be previewed, marked Keep/Maybe/Reject, revealed in Finder, and moved into custom folders.
 
 ### Camera and card metadata
@@ -70,6 +70,15 @@ New Ingest includes a **Camera / Card Info** section for a camera label, camera 
 - Thumbnail failures do not invalidate a copied and verified clip; the UI falls back to a generic video icon.
 - Culling only changes project metadata.
 - Physical sorting only moves copied files inside the destination project folder, and undo restores clip path metadata.
+
+## Recovery behavior
+
+- A known destination capacity smaller than the selected media blocks **Start Ingest**. When a NAS cannot report capacity, SlateBox shows an advisory instead of incorrectly blocking the job.
+- Low remaining space is called out before copying starts.
+- Disk-full, disconnected-volume, lost-permission, and read-only errors produce recovery instructions instead of raw file-system messages.
+- Failed and canceled ingests stay marked incomplete and reopenable. Any valid partial file is retained for a verified resume, and source media remains untouched.
+- Project-save and report-export failures appear in the library. A failed project save can be retried after reconnecting the project volume or freeing space.
+- Configured backup folders are reopened through their security-scoped bookmarks; a backup problem is recorded as a warning while the verified primary copy remains usable.
 
 ## Source permission behavior
 
@@ -98,7 +107,7 @@ The MVP is focused on Sony a7R V/XAVC-style workflows: `PRIVATE/M4ROOT/CLIP` pri
 
 ## Known limitations
 
-- No cloud sync, AI analysis, editing timeline, NLE export, SD formatting, permanent deletion, or multi-user collaboration. (Duplicate detection against previously imported media is covered by the Preflight Media Check below.)
+- No cloud sync, cloud AI, editing timeline, FCPXML/EDL project export, SD formatting, permanent deletion, or multi-user collaboration. (Duplicate detection against previously imported media is covered by the Preflight Media Check below.)
 - Preview, metadata, and thumbnail support depends on AVFoundation codecs available on the user's Mac.
 - The first version generates one cached thumbnail per clip, not filmstrips/contact sheets.
 - Recent projects can only reopen automatically while the project folder, external SSD, or NAS mount is available at the expected location or resolvable by its bookmark.
@@ -181,7 +190,7 @@ SlateBox includes menu actions for Clip Report CSV, Keep List CSV, and Project M
 ### Known limitations
 
 - The logo is a polished SwiftUI placeholder and not a final brand asset.
-- Copy Keeps to Edit Folder is planned but not fully implemented in this pass.
+- Editor-ready folder copies are implemented; metadata-rich FCPXML/Resolve project interchange is still planned.
 - Local analysis is rule-based only; no cloud AI and no heavy Core ML model are included.
 - Folder delete removes the folder assignment from the project metadata only; it does not delete media files.
 
@@ -297,7 +306,7 @@ The script writes `ClipVault/Assets.xcassets/AppIcon.appiconset/icon_16x16_1x.pn
 ### Library layout and partial libraries
 - The library uses a fixed compact sidebar, a flexible primary clip grid, and a bounded/collapsible inspector so the grid remains the main workspace after ingest.
 - A toolbar control shows or hides the inspector, and the preference is saved in user defaults.
-- Partial ingest libraries show a compact top banner with Resume Ingest, Retry Failed, and Reveal Project Folder actions.
+- Partial ingest libraries show a compact top banner with Resume Ingest and Reveal Project Folder actions. Resume retries every unfinished or failed clip.
 - Pending clips remain in the project metadata as non-destructive records and are not previewed unless a destination file exists.
 
 ### Shot-time sorting and manual production time

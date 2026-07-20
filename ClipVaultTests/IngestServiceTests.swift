@@ -110,6 +110,8 @@ final class IngestServiceTests: XCTestCase {
     let (project, _) = try await ingest(videos, settings: makeSettings())
 
     XCTAssertEqual(project.ingestStatus, .incomplete)
+    XCTAssertTrue(project.ingestIncomplete)
+    XCTAssertTrue(project.canResumeIngest)
     XCTAssertEqual(project.failedClipCount, 1)
     XCTAssertEqual(project.copiedClipCount, 2)
     XCTAssertEqual(project.pendingClipCount, 0)
@@ -179,5 +181,59 @@ final class IngestServiceTests: XCTestCase {
     for video in videos {
       XCTAssertTrue(FileManager.default.fileExists(atPath: video.url.path))
     }
+  }
+
+  func testDestinationCapacityPreflightBlocksOnlyKnownInsufficientSpace() {
+    XCTAssertEqual(
+      VolumeCapacity.preflightStatus(requiredBytes: 2_000, availableBytes: nil),
+      .unknown
+    )
+    XCTAssertEqual(
+      VolumeCapacity.preflightStatus(
+        requiredBytes: 2_000,
+        availableBytes: 1_999,
+        reserveBytes: 500
+      ),
+      .insufficient
+    )
+    XCTAssertEqual(
+      VolumeCapacity.preflightStatus(
+        requiredBytes: 2_000,
+        availableBytes: 2_200,
+        reserveBytes: 500
+      ),
+      .lowAfterIngest
+    )
+    XCTAssertEqual(
+      VolumeCapacity.preflightStatus(
+        requiredBytes: 2_000,
+        availableBytes: 2_500,
+        reserveBytes: 500
+      ),
+      .sufficient
+    )
+  }
+
+  func testStorageRecoveryProducesActionableMessages() {
+    let outOfSpace = CocoaError(.fileWriteOutOfSpace)
+    XCTAssertEqual(StorageRecovery.classify(outOfSpace), .outOfSpace)
+    XCTAssertTrue(
+      StorageRecovery.message(for: outOfSpace, operation: .ingest)
+        .localizedCaseInsensitiveContains("resume")
+    )
+
+    let permission = CocoaError(.fileWriteNoPermission)
+    XCTAssertEqual(StorageRecovery.classify(permission), .permissionLost)
+    XCTAssertTrue(
+      StorageRecovery.message(for: permission, operation: .projectSave)
+        .localizedCaseInsensitiveContains("retry")
+    )
+
+    let unavailable = CocoaError(.fileReadNoSuchFile)
+    XCTAssertEqual(StorageRecovery.classify(unavailable), .unavailable)
+    XCTAssertTrue(
+      StorageRecovery.message(for: unavailable, operation: .resumeIngest)
+        .localizedCaseInsensitiveContains("reconnect")
+    )
   }
 }

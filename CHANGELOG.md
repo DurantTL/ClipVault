@@ -8,6 +8,11 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- Destination-capacity preflight with blocking for known insufficient space,
+  low-space warnings, and a non-blocking advisory when a NAS cannot report capacity.
+- Actionable recovery messages for disk-full, disconnected-volume,
+  permission-loss, and read-only failures during ingest, resume, backup,
+  project save, and report export.
 - Preflight Media Check before ingest: source clips are compared by file
   identity against the destination, configured backups, and recent projects,
   with per-clip statuses and skip-already-copied selection.
@@ -27,6 +32,15 @@ All notable changes to this project are documented here. The format follows
   exist.
 
 ### Fixed
+- Failed ingests now keep `ingestIncomplete` set, and canceling a resumed
+  ingest preserves the Canceled/resumable project state instead of overwriting
+  it as a generic incomplete result.
+- Project-save, report-export, and undo failures are no longer silently
+  discarded; the library presents an error banner and allows failed project
+  saves to be retried.
+- Backup destinations now resolve through their persisted security-scoped
+  bookmarks, backup failures no longer cancel later backup attempts, and a
+  cancel during backup correctly cancels the ingest.
 - App no longer hangs on launch when a configured folder or recent project
   lives on a disconnected network drive or external volume. Security-scoped
   bookmarks now resolve without mounting (and off the main thread at launch),

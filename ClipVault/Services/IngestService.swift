@@ -121,13 +121,15 @@ final class IngestService {
                 settings: settings,
                 progress: progress
               )
+            } catch is CancellationError {
+              throw CancellationError()
             } catch {
               clip.errorMessage = "Primary verified. Backup warning: \(error.localizedDescription)"
             }
           } catch is CancellationError {
-            clip.verificationStatus = .failed
-            clip.errorMessage = "Ingest canceled during copy."
-            clip.copyStatus = .failed
+            clip.verificationStatus = .pending
+            clip.errorMessage = "Ingest canceled safely. Resume to continue this copy."
+            clip.copyStatus = .pending
             project.clips[idx] = clip
             project.ingestIncomplete = true
             project.ingestStatus = .canceled
@@ -138,7 +140,7 @@ final class IngestService {
           } catch {
             clip.copyStatus = .failed
             clip.verificationStatus = .failed
-            clip.errorMessage = error.localizedDescription
+            clip.errorMessage = StorageRecovery.message(for: error, operation: .ingest)
           }
           if clip.verificationStatus == .verified {
             await self.metadata.enrich(&clip)
@@ -165,15 +167,16 @@ final class IngestService {
           self.refreshCounts(&project)
           try self.store.save(project)
         }
+        self.refreshCounts(&project)
+        project.ingestStatus = project.failedClipCount > 0 ? .incomplete : .complete
+        project.ingestIncomplete = project.ingestStatus != .complete
+        project.canResumeIngest = project.ingestStatus.canResume
+        try self.store.save(project)
         await progress(
           IngestProgress(
             currentFilename: "", currentIndex: videos.count, totalCount: videos.count,
-            copiedBytes: total, totalBytes: total, message: "Complete"))
-        project.ingestIncomplete = false
-        project.ingestStatus = project.failedClipCount > 0 ? .incomplete : .complete
-        project.canResumeIngest = project.ingestStatus.canResume
-        self.refreshCounts(&project)
-        try self.store.save(project)
+            copiedBytes: total, totalBytes: total,
+            message: project.ingestStatus == .complete ? "Complete" : "Completed with issues"))
         return project
       }
     }
@@ -231,6 +234,8 @@ final class IngestService {
             clip.verificationStatus = .failed
             clip.errorMessage = "Source is not connected. Reconnect the source card and try again."
             resumed.clips[index] = clip
+            self.refreshCounts(&resumed)
+            try self.store.save(resumed)
             continue
           }
 
@@ -268,14 +273,14 @@ final class IngestService {
           } catch is CancellationError {
             clip.copyStatus = .pending
             clip.verificationStatus = .pending
-            clip.errorMessage = "Ingest paused before verification."
+            clip.errorMessage = "Ingest canceled safely. Resume to continue this copy."
             resumed.ingestStatus = .canceled
             resumed.ingestIncomplete = true
             resumed.canResumeIngest = true
           } catch {
             clip.copyStatus = .failed
             clip.verificationStatus = .failed
-            clip.errorMessage = error.localizedDescription
+            clip.errorMessage = StorageRecovery.message(for: error, operation: .resumeIngest)
           }
           resumed.clips[index] = clip
           completedBytes += clip.expectedFileSize
@@ -284,10 +289,19 @@ final class IngestService {
           if resumed.ingestStatus == .canceled { break }
         }
 
+        let wasCanceled = resumed.ingestStatus == .canceled || self.isCancelledNow
         self.refreshCounts(&resumed)
-        resumed.ingestStatus = resumed.pendingClipCount == 0 && resumed.failedClipCount == 0 ? .complete : .incomplete
-        resumed.ingestIncomplete = resumed.ingestStatus != .complete
-        resumed.canResumeIngest = resumed.ingestStatus.canResume
+        if wasCanceled {
+          resumed.ingestStatus = .canceled
+          resumed.ingestIncomplete = true
+          resumed.canResumeIngest = true
+        } else {
+          resumed.ingestStatus = resumed.pendingClipCount == 0 && resumed.failedClipCount == 0
+            ? .complete
+            : .incomplete
+          resumed.ingestIncomplete = resumed.ingestStatus != .complete
+          resumed.canResumeIngest = resumed.ingestStatus.canResume
+        }
         try self.store.save(resumed)
         return resumed
       }
@@ -374,44 +388,105 @@ final class IngestService {
     settings: AppSettings,
     progress: @escaping @MainActor (IngestProgress) -> Void
   ) async throws {
-    let backupPaths: [String]
+    typealias BackupConfiguration = (path: String, bookmark: String, persistKey: String)
+    let backups: [BackupConfiguration]
     switch settings.backupTransferMode {
     case "Primary + Backup 1":
-      backupPaths = [settings.backupDestination1Path]
+      backups = [(
+        settings.backupDestination1Path,
+        settings.backupDestination1BookmarkBase64,
+        StoragePreferences.backup1BookmarkKey
+      )]
     case "Primary + Backup 1 + Backup 2":
-      backupPaths = [settings.backupDestination1Path, settings.backupDestination2Path]
+      backups = [
+        (
+          settings.backupDestination1Path,
+          settings.backupDestination1BookmarkBase64,
+          StoragePreferences.backup1BookmarkKey
+        ),
+        (
+          settings.backupDestination2Path,
+          settings.backupDestination2BookmarkBase64,
+          StoragePreferences.backup2BookmarkKey
+        ),
+      ]
     default:
-      backupPaths = []
+      backups = []
     }
 
-    for (index, path) in backupPaths.enumerated() where !path.isEmpty {
-      let root = URL(fileURLWithPath: path, isDirectory: true)
-      guard FileManager.default.fileExists(atPath: root.path) else {
-        await progress(IngestProgress(message: "Backup \(index + 1) unavailable; primary remains verified"))
+    var warnings: [String] = []
+    for (index, backup) in backups.enumerated() {
+      let label = "Backup \(index + 1)"
+      guard !backup.path.isEmpty else {
+        warnings.append("\(label) is not configured.")
         continue
       }
-      let destination = SafeFilename.uniqueURL(
-        for: root
-          .appendingPathComponent(projectFolder.lastPathComponent, isDirectory: true)
-          .appendingPathComponent(relativePath)
-      )
-      try FileManager.default.createDirectory(
-        at: destination.deletingLastPathComponent(),
-        withIntermediateDirectories: true
-      )
-      let size = Int64((try? primaryFile.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
-      await progress(IngestProgress(currentFilename: primaryFile.lastPathComponent, copiedBytes: 0, totalBytes: size, message: "Copying Backup \(index + 1)"))
-      let resumedFromPartial = StreamingCopyService.hasPartial(for: destination)
-      _ = try await self.copyService.copy(
-        from: primaryFile,
-        to: destination,
-        alreadyCopiedBytes: 0,
-        totalBytes: size
-      ) { copied in
-        progress(IngestProgress(currentFilename: primaryFile.lastPathComponent, copiedBytes: copied, totalBytes: size, message: "Verifying Backup \(index + 1)"))
+      guard let root = StoragePreferences.backupURL(
+        path: backup.path,
+        bookmarkBase64: backup.bookmark,
+        persistKey: backup.persistKey
+      ), FileManager.default.fileExists(atPath: root.path) else {
+        warnings.append("\(label) is unavailable. The primary copy remains verified.")
+        continue
       }
-      let verificationMode: VerificationMode = resumedFromPartial ? .strong : settings.verificationMode
-      try await self.verifier.verify(source: primaryFile, destination: destination, mode: verificationMode)
+
+      do {
+        let destination = SafeFilename.uniqueURL(
+          for: root
+            .appendingPathComponent(projectFolder.lastPathComponent, isDirectory: true)
+            .appendingPathComponent(relativePath)
+        )
+        try FileManager.default.createDirectory(
+          at: destination.deletingLastPathComponent(),
+          withIntermediateDirectories: true
+        )
+        let size = Int64((try? primaryFile.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
+        await progress(IngestProgress(
+          currentFilename: primaryFile.lastPathComponent,
+          copiedBytes: 0,
+          totalBytes: size,
+          message: "Copying \(label)"
+        ))
+        let resumedFromPartial = StreamingCopyService.hasPartial(for: destination)
+        _ = try await self.copyService.copy(
+          from: primaryFile,
+          to: destination,
+          alreadyCopiedBytes: 0,
+          totalBytes: size
+        ) { copied in
+          progress(IngestProgress(
+            currentFilename: primaryFile.lastPathComponent,
+            copiedBytes: copied,
+            totalBytes: size,
+            message: "Copying \(label)"
+          ))
+        }
+        await progress(IngestProgress(
+          currentFilename: primaryFile.lastPathComponent,
+          copiedBytes: size,
+          totalBytes: size,
+          message: "Verifying \(label)"
+        ))
+        let verificationMode: VerificationMode = resumedFromPartial ? .strong : settings.verificationMode
+        try await self.verifier.verify(
+          source: primaryFile,
+          destination: destination,
+          mode: verificationMode
+        )
+      } catch is CancellationError {
+        throw CancellationError()
+      } catch {
+        warnings.append(StorageRecovery.message(for: error, operation: .backup))
+      }
+    }
+
+    if !warnings.isEmpty {
+      throw BackupTransferWarnings(messages: warnings)
     }
   }
+}
+
+private struct BackupTransferWarnings: LocalizedError {
+  let messages: [String]
+  var errorDescription: String? { messages.joined(separator: " ") }
 }

@@ -18,6 +18,9 @@ struct LibraryView: View {
       SidebarView(vm: viewModel, newFolder: $newFolder)
         .frame(minWidth: 200, idealWidth: 220, maxWidth: 260)
       VStack(spacing: 0) {
+        if let operationError = viewModel.operationError {
+          operationErrorBanner(operationError)
+        }
         if viewModel.project.ingestStatus != .complete {
           partialBanner
         }
@@ -246,6 +249,25 @@ struct LibraryView: View {
     .background(Color.accentColor.opacity(0.10))
   }
 
+  private func operationErrorBanner(_ message: String) -> some View {
+    HStack(spacing: 12) {
+      Label(message, systemImage: "exclamationmark.triangle.fill")
+        .font(.caption)
+        .foregroundStyle(.red)
+        .lineLimit(3)
+      Spacer()
+      if viewModel.canRetryProjectSave {
+        Button("Retry Project Save") { viewModel.retryProjectSave() }
+      }
+      if !viewModel.canRetryProjectSave {
+        Button("Dismiss") { viewModel.dismissOperationError() }
+      }
+    }
+    .padding(.horizontal, 16)
+    .padding(.vertical, 10)
+    .background(Color.red.opacity(0.10))
+  }
+
   private var partialBanner: some View {
     HStack(spacing: 12) {
       Label(
@@ -254,8 +276,12 @@ struct LibraryView: View {
       )
       .foregroundStyle(.orange)
       Spacer()
+      if viewModel.isResumingIngest {
+        ProgressView()
+          .controlSize(.small)
+      }
       Button("Resume Ingest") { viewModel.resumeIngest() }
-      Button("Retry Failed") { viewModel.resumeIngest() }
+        .disabled(viewModel.isResumingIngest)
       Button("Reveal Project Folder") { viewModel.revealProject() }
     }
     .padding(.horizontal, 16)
