@@ -291,6 +291,7 @@ private final class IngestWindowPreviewCleanup: @unchecked Sendable {
     guard let url = pickFolder(canCreateDirectories: true) else { return }
     destinationURL = url
     retainAccess(to: url)
+    error = nil
     updateFreeSpace()
     queueInitialPreviewThumbnails()
   }
@@ -376,6 +377,12 @@ private final class IngestWindowPreviewCleanup: @unchecked Sendable {
 
   func start(settings: AppSettings) async -> ClipVaultProject? {
     guard let source = sourceURL, let destination = destinationURL else { return nil }
+    error = nil
+    guard hasSufficientDestinationCapacity else {
+      error = destinationCapacityMessage
+        ?? "The destination does not have enough free space for the selected clips."
+      return nil
+    }
     isIngesting = true
     canceledSummary = nil
     defer { isIngesting = false }
@@ -391,15 +398,19 @@ private final class IngestWindowPreviewCleanup: @unchecked Sendable {
         cameraCardMetadata: cameraCardMetadata
       ) { self.progress = $0 }
       Self.rememberCameraLabel(cameraCardMetadata.cameraLabel)
-      if settings.sourcePreviewCleanupPolicy == .afterSuccessfulIngest {
+      if project.ingestStatus == .complete,
+        settings.sourcePreviewCleanupPolicy == .afterSuccessfulIngest {
         ingestPreviewThumbnails.cleanCache(destinationRoot: finalOutputURL)
+      }
+      if project.ingestStatus == .canceled {
+        canceledSummary = "Ingest canceled safely. Open the partial project to resume it."
       }
       return project
     } catch is CancellationError {
       canceledSummary = "Ingest canceled. \(progress.currentIndex) of \(progress.totalCount) files copied."
       return nil
     } catch {
-      self.error = error.localizedDescription
+      self.error = StorageRecovery.message(for: error, operation: .ingest)
       return nil
     }
   }
@@ -426,6 +437,35 @@ private final class IngestWindowPreviewCleanup: @unchecked Sendable {
 
   var selectedTotalSize: Int64 { sessions.reduce(0) { $0 + $1.selectedSize } }
   var selectedClipCount: Int { sessions.reduce(0) { $0 + $1.selectedClipCount } }
+
+  var destinationCapacityStatus: VolumeCapacity.PreflightStatus {
+    VolumeCapacity.preflightStatus(
+      requiredBytes: selectedTotalSize,
+      availableBytes: destinationFreeSpace
+    )
+  }
+
+  var hasSufficientDestinationCapacity: Bool {
+    destinationCapacityStatus != .insufficient
+  }
+
+  var destinationCapacityMessage: String? {
+    guard destinationURL != nil, selectedTotalSize > 0 else { return nil }
+    switch destinationCapacityStatus {
+    case .unknown:
+      return "Free space could not be confirmed for this destination. Keep the drive or network share connected during ingest."
+    case .sufficient:
+      return nil
+    case .lowAfterIngest:
+      guard let destinationFreeSpace else { return nil }
+      let remaining = max(0, destinationFreeSpace - selectedTotalSize)
+      return "Low space warning: about \(FileSizeFormatterUtil.string(remaining)) will remain after this ingest."
+    case .insufficient:
+      guard let destinationFreeSpace else { return nil }
+      let additional = max(0, selectedTotalSize - destinationFreeSpace)
+      return "Not enough destination space. Free at least \(FileSizeFormatterUtil.string(additional)) more, choose another destination, or select fewer clips."
+    }
+  }
 
   var statusMessage: String {
     if let error { return error }

@@ -287,6 +287,24 @@ struct NewIngestView: View {
         InfoRow("Sessions", "\(vm.selectedSessions.count) of \(vm.sessions.count)")
         InfoRow("Total Selected Videos", "\(vm.selectedClipCount)")
         InfoRow("Total Selected Size", FileSizeFormatterUtil.string(vm.selectedTotalSize))
+        if vm.destinationURL != nil {
+          InfoRow(
+            "Destination Free Space",
+            vm.destinationFreeSpace.map { FileSizeFormatterUtil.string($0) } ?? "Could not confirm"
+          )
+        }
+        if let capacityMessage = vm.destinationCapacityMessage {
+          Label(
+            capacityMessage,
+            systemImage: vm.destinationCapacityStatus == .insufficient
+              ? "exclamationmark.octagon.fill"
+              : "exclamationmark.triangle.fill"
+          )
+          .font(.caption)
+          .foregroundStyle(
+            vm.destinationCapacityStatus == .insufficient ? Color.red : Color.orange
+          )
+        }
         statusArea
         Spacer(minLength: 8)
         Button("Start Ingest") {
@@ -304,6 +322,7 @@ struct NewIngestView: View {
             || vm.selectedVideos.isEmpty
             || vm.projectName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             || vm.destinationURL == nil
+            || !vm.hasSufficientDestinationCapacity
         )
         Button("Cancel") {
           vm.cancelPreviewThumbnailWork()

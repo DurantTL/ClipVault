@@ -41,6 +41,15 @@ struct PerformanceLogger {
 }
 
 enum VolumeCapacity {
+  enum PreflightStatus: Equatable {
+    case unknown
+    case sufficient
+    case lowAfterIngest
+    case insufficient
+  }
+
+  static let lowSpaceReserve: Int64 = 1_073_741_824
+
   static func availableCapacity(for url: URL, fileManager: FileManager = .default) -> Int64? {
     let standardized = url.standardizedFileURL
     let basic = try? standardized.resourceValues(forKeys: [.volumeIsLocalKey, .volumeAvailableCapacityKey])
@@ -73,5 +82,17 @@ enum VolumeCapacity {
   ) -> Int64? {
     if isLocal, let important { return important }
     return regular ?? fileSystem ?? important
+  }
+
+  /// Unknown capacity (common on some NAS mounts) is advisory and does not
+  /// block ingest. A known capacity smaller than the selected payload does.
+  static func preflightStatus(
+    requiredBytes: Int64,
+    availableBytes: Int64?,
+    reserveBytes: Int64 = lowSpaceReserve
+  ) -> PreflightStatus {
+    guard requiredBytes > 0, let availableBytes else { return .unknown }
+    guard availableBytes >= requiredBytes else { return .insufficient }
+    return availableBytes - requiredBytes < reserveBytes ? .lowAfterIngest : .sufficient
   }
 }

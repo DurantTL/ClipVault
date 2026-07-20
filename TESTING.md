@@ -13,7 +13,8 @@ The following mechanics are covered by unit tests in `ClipVaultTests/` and run i
 - Project/clip JSON compatibility and rating/status mapping (`ProjectCodableTests`, `ClipCodableTests`, `RatingAndSuggestionTests`).
 - Preflight media check: already-imported, same-name-different-size, backup/recent-project, and possible-duplicate classification (`PreflightMediaCheckTests`).
 - Physical sorting: folder moves with safe `_1` naming, undo restoring path and folder assignment, and failure leaving clip metadata untouched (`FileMoveServiceTests`).
-- Ingest orchestration: end-to-end copy + verify on temp folders, per-clip failure isolation, safe names for colliding flat filenames, and cancel leaving a reopenable project with sources untouched (`IngestServiceTests`).
+- Ingest orchestration: end-to-end copy + verify on temp folders, per-clip failure isolation, correct incomplete state, safe names for colliding flat filenames, and cancel leaving a reopenable project with sources untouched (`IngestServiceTests`).
+- Recovery helpers: destination-capacity decisions plus actionable disk-full, permission-loss, and unavailable-volume messages (`IngestServiceTests`).
 - Diagnostics report content (`DiagnosticsReportServiceTests`).
 
 Still manual only (needs real media, hardware, or relaunch): thumbnail generation from real video, mid-copy pause/resume timing, security-scoped bookmark persistence across relaunch, removable-volume detection, and backup destinations end-to-end.
@@ -39,6 +40,9 @@ Still manual only (needs real media, hardware, or relaunch): thumbnail generatio
 - [ ] Session selection works
 - [ ] Individual clip selection works, if available
 - [ ] Destination can be selected
+- [ ] Reported destination free space is shown
+- [ ] Start Ingest is blocked when known free space is smaller than the selected media
+- [ ] A destination whose capacity cannot be read shows an advisory but remains usable
 - [ ] Project folder name works
 - [ ] Start Ingest enables only when ready
 
@@ -50,7 +54,11 @@ Still manual only (needs real media, hardware, or relaunch): thumbnail generatio
 - [ ] Copied clips appear
 - [ ] Pending clips do not crash
 - [ ] Resume Ingest works
-- [ ] Retry Failed works
+- [ ] Failed clips are retried by Resume Ingest
+- [ ] Canceling a resumed ingest leaves the project labeled Canceled and resumable
+- [ ] Disconnecting the destination mid-copy shows a reconnect/resume message and preserves the partial project
+- [ ] Filling the destination mid-copy shows an out-of-space/resume message
+- [ ] Revoking source or destination access shows a grant-access/resume message
 
 ## Library
 
@@ -88,6 +96,8 @@ Still manual only (needs real media, hardware, or relaunch): thumbnail generatio
 - [ ] Clip statuses are preserved
 - [ ] Metadata is preserved
 - [ ] Analysis is preserved
+- [ ] Disconnecting the project drive before a metadata edit shows a project-save error banner
+- [ ] Reconnect the project drive and use Retry Project Save; the banner clears only after the save succeeds
 - [ ] Partial ingest state is preserved
 
 ## Export

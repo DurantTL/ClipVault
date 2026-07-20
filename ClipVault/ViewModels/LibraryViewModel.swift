@@ -103,6 +103,9 @@ struct BatchMetadataEdit {
   @Published var exportProgress: ClipExportProgress?
   @Published var exportSummary: ClipExportSummary?
   @Published var aliasSummary: AliasCreationSummary?
+  @Published var operationError: String?
+  @Published private(set) var canRetryProjectSave = false
+  @Published private(set) var isResumingIngest = false
   private var selectionAnchorID: UUID?
   private let exporter = ClipExportService()
   private let aliases = AliasService()
@@ -128,6 +131,13 @@ struct BatchMetadataEdit {
     applyAutomaticTags()
     normalizeExistingThumbnailPaths()
     save()
+    let backupWarningCount = self.project.clips.filter {
+      $0.errorMessage?.hasPrefix("Primary verified. Backup warning:") == true
+    }.count
+    if backupWarningCount > 0 {
+      operationError = "The primary ingest completed, but \(backupWarningCount) clip\(backupWarningCount == 1 ? "" : "s") has a backup warning. Use Needs Review to inspect the affected clips."
+      canRetryProjectSave = false
+    }
   }
 
   var selectedClip: Clip? { project.clips.first { $0.id == selectedClipID } }
@@ -385,7 +395,10 @@ struct BatchMetadataEdit {
     do {
       try mover.undo(project: &project)
       save()
-    } catch {}
+    } catch {
+      operationError = "The last move could not be undone: \(error.localizedDescription)"
+      canRetryProjectSave = false
+    }
   }
 
   func reveal() {
@@ -397,19 +410,33 @@ struct BatchMetadataEdit {
   }
 
   func resumeIngest() {
+    guard !isResumingIngest else { return }
     Task {
+      isResumingIngest = true
+      operationError = nil
+      canRetryProjectSave = false
+      defer { isResumingIngest = false }
       do {
         project = try await ingestService.resume(
           project: project,
           settings: AppSettings()
         ) { _ in }
+        if project.failedClipCount > 0 {
+          operationError = "Resume finished with \(project.failedClipCount) clip\(project.failedClipCount == 1 ? "" : "s") still needing attention. Reconnect missing storage, then retry the ingest."
+        }
       } catch {
+        let message = StorageRecovery.message(for: error, operation: .resumeIngest)
         for index in project.clips.indices where project.clips[index].verificationStatus != .verified {
-          project.clips[index].errorMessage = error.localizedDescription
+          project.clips[index].errorMessage = message
         }
         project.ingestStatus = .incomplete
+        project.ingestIncomplete = true
         project.canResumeIngest = true
         save()
+        if !canRetryProjectSave {
+          operationError = message
+          canRetryProjectSave = false
+        }
       }
     }
   }
@@ -670,17 +697,45 @@ struct BatchMetadataEdit {
     case .rejects: clips = project.clips.filter { $0.cullStatus == .reject }
     case .allClips, .verification, .analysis: clips = project.clips
     }
-    try? csv(for: clips, kind: kind).write(to: url, atomically: true, encoding: .utf8)
+    do {
+      try csv(for: clips, kind: kind).write(to: url, atomically: true, encoding: .utf8)
+    } catch {
+      operationError = StorageRecovery.message(for: error, operation: .export)
+      canRetryProjectSave = false
+    }
   }
 
   func exportProjectMetadata() {
     let panel = NSSavePanel()
     panel.nameFieldStringValue = "\(AppBrand.appName)-Project-Metadata.json"
     guard panel.runModal() == .OK, let url = panel.url else { return }
-    if let data = try? JSONEncoder().encode(project) { try? data.write(to: url) }
+    do {
+      try JSONEncoder().encode(project).write(to: url, options: .atomic)
+    } catch {
+      operationError = StorageRecovery.message(for: error, operation: .export)
+      canRetryProjectSave = false
+    }
   }
 
-  func save() { try? store.save(project) }
+  func save() {
+    do {
+      try store.save(project)
+      if canRetryProjectSave {
+        operationError = nil
+        canRetryProjectSave = false
+      }
+    } catch {
+      operationError = StorageRecovery.message(for: error, operation: .projectSave)
+      canRetryProjectSave = true
+    }
+  }
+
+  func retryProjectSave() { save() }
+
+  func dismissOperationError() {
+    guard !canRetryProjectSave else { return }
+    operationError = nil
+  }
 
 
   private func queueThumbnailGeneration(for ids: [UUID], force: Bool) {
@@ -803,7 +858,11 @@ struct BatchMetadataEdit {
     case "Keep": return clip.cullStatus == .keep
     case "Maybe": return clip.cullStatus == .maybe
     case "Reject": return clip.cullStatus == .reject
-    case "Needs Review": return clip.cullStatus == .unrated || clip.analysisStatus == .failed || clip.verificationStatus == .failed
+    case "Needs Review":
+      return clip.cullStatus == .unrated
+        || clip.analysisStatus == .failed
+        || clip.verificationStatus == .failed
+        || clip.errorMessage != nil
     case "Favorites (5-Star)": return clip.rating == 5
     case "4+ Stars": return clip.rating >= 4
     case "Top Pick Suggestions": return clip.automaticTags.contains("Top Pick Suggestion")
