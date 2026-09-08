@@ -1,1 +1,1 @@
-PLACEHOLDER
+@file:///tmp/MCP_LVM_CONTENT.swift
