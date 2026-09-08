@@ -4,6 +4,13 @@
 
 SlateBox is a native macOS SwiftUI app for safe video ingest, preview, culling, and folder sorting. It copies video files from an SD card or source folder to a destination project folder, verifies the copies, generates thumbnails, and lets users review and sort the copied media without touching the original source.
 
+## Privacy & Support
+
+- [Privacy Policy](docs/privacy.md) — local-first processing, no cloud AI, face-data limits (App Store Privacy Policy URL will point at a hosted copy of this page).
+- [Support](docs/support.md) — contact, diagnostics, requirements (App Store Support URL will point at a hosted copy of this page).
+
+Public brand name is still TBD (candidates include Cullect, TakeHarbor, SlateBox, ClipVault). On-disk project identifiers keep the stable `clipvault` spelling; see `NAMING.md` and `AppBrand.swift`.
+
 
 ## System requirements and performance
 
@@ -31,6 +38,8 @@ git tag v1.0.0 && git push origin v1.0.0
 ```
 
 The `Release SlateBox` GitHub Actions workflow builds a Release app, runs the test suite, packages a DMG, and publishes a GitHub Release with the DMG attached. Signing and notarization run automatically when the repository secrets `MACOS_CERTIFICATE_BASE64`, `MACOS_CERTIFICATE_PASSWORD`, `APPLE_ID`, `APPLE_TEAM_ID`, and `APPLE_APP_SPECIFIC_PASSWORD` are configured; without them the workflow still publishes an unsigned DMG for testing (right-click → Open on first launch). Changes are tracked in `CHANGELOG.md`.
+
+DMG builds can use **Help → Check for Updates…**, which queries GitHub Releases for a newer version (manual check only; no Sparkle auto-update).
 
 ## Help menu
 

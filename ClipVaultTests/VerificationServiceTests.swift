@@ -27,7 +27,10 @@ final class VerificationServiceTests: XCTestCase {
     // pass. That trade-off is the documented default for large 4K files.
     let source = try write(Data(repeating: 0xAA, count: 2048), to: "src.mp4")
     let destination = try write(Data(repeating: 0xBB, count: 2048), to: "dst.mp4")
-    try await service.verify(source: source, destination: destination, mode: .fast)
+    let outcome = try await service.verify(source: source, destination: destination, mode: .fast)
+    XCTAssertEqual(outcome.mode, .fast)
+    XCTAssertEqual(outcome.bytes, 2048)
+    XCTAssertNil(outcome.checksum, "fast mode must not invent a checksum")
   }
 
   func testFastFailsOnSizeMismatch() async throws {
@@ -47,7 +50,23 @@ final class VerificationServiceTests: XCTestCase {
     let data = Data((0..<3_000_000).map { UInt8($0 % 253) })
     let source = try write(data, to: "src.mp4")
     let destination = try write(data, to: "dst.mp4")
-    try await service.verify(source: source, destination: destination, mode: .strong)
+    let outcome = try await service.verify(source: source, destination: destination, mode: .strong)
+    XCTAssertEqual(outcome.mode, .strong)
+    XCTAssertEqual(outcome.bytes, 3_000_000)
+    let checksum = try XCTUnwrap(outcome.checksum)
+    XCTAssertEqual(checksum.count, 64)
+    XCTAssertEqual(checksum, checksum.lowercased())
+    XCTAssertTrue(checksum.allSatisfy { $0.isHexDigit })
+  }
+
+  func testStrongReturnsStableChecksumAcrossCalls() async throws {
+    let data = Data("clipvault-mhl-fixture".utf8)
+    let source = try write(data, to: "src.bin")
+    let destination = try write(data, to: "dst.bin")
+    let first = try await service.verify(source: source, destination: destination, mode: .strong)
+    let second = try await service.verify(source: source, destination: destination, mode: .strong)
+    XCTAssertEqual(first.checksum, second.checksum)
+    XCTAssertEqual(first.checksum?.count, 64)
   }
 
   func testStrongFailsOnSameSizeDifferentContent() async throws {
