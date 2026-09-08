@@ -99,6 +99,12 @@ struct ClipVaultApp: App {
         Button("Keyboard Shortcuts") { NotificationCenter.default.post(name: .showKeyboardShortcuts, object: nil) }
         Divider()
         Button("Save Diagnostics Report…") { DiagnosticsReportService().saveViaPanel() }
+        Divider()
+        Button("Check for Updates…") {
+          Task { @MainActor in
+            await GitHubUpdateCheckService().presentCheck()
+          }
+        }
       }
     }
 
