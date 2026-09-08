@@ -35,10 +35,20 @@ jobs:
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
           echo "Releasing version $VERSION"
 
-      - name: Generate icons
+      # Final App Icon PNGs are committed in AppIcon.appiconset (#61).
+      # Only generate placeholders when the catalog has no PNGs yet — never
+      # overwrite the committed aperture + cyan-check assets.
+      - name: Generate placeholder icons if missing
         run: |
-          if [ -f Scripts/generate_app_icon.py ]; then
+          ICON_DIR="ClipVault/Assets.xcassets/AppIcon.appiconset"
+          if compgen -G "$ICON_DIR"/*.png > /dev/null; then
+            echo "Using committed App Icon PNGs in $ICON_DIR"
+          elif [ -f Scripts/generate_app_icon.py ]; then
+            echo "No committed PNGs; generating placeholders"
             python3 Scripts/generate_app_icon.py
+          else
+            echo "No App Icon PNGs and no generator script" >&2
+            exit 1
           fi
 
       - name: Build Release app
