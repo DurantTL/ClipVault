@@ -6,9 +6,13 @@ import Foundation
 @MainActor
 final class LibraryAnalysisCoordinator {
   let analysis = LocalAnalysisService()
-  private var analysisTask: Task<Void, Never>?
+  nonisolated(unsafe) private var analysisTask: Task<Void, Never>?
 
-  func cancel() {
+  /// `nonisolated` so `LibraryViewModel.deinit` (always nonisolated, even for
+  /// a @MainActor-owning class) can cancel in-flight work synchronously.
+  /// Safe because by the time deinit runs, no other reference to this
+  /// coordinator remains to race with the task-handle mutation.
+  nonisolated func cancel() {
     analysisTask?.cancel()
     analysisTask = nil
   }

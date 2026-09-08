@@ -6,7 +6,7 @@ import Foundation
 final class LibraryThumbnailCoordinator {
   private let thumbnails = ThumbnailService()
   private let security: SecurityScopedBookmarkManager
-  private var thumbnailGenerationTask: Task<Void, Never>?
+  nonisolated(unsafe) private var thumbnailGenerationTask: Task<Void, Never>?
   private var queuedThumbnailIDs: Set<UUID> = []
   private var forcedThumbnailIDs: Set<UUID> = []
 
@@ -14,7 +14,11 @@ final class LibraryThumbnailCoordinator {
     self.security = security
   }
 
-  func cancel() {
+  /// `nonisolated` so `LibraryViewModel.deinit` (always nonisolated, even for
+  /// a @MainActor-owning class) can cancel in-flight work synchronously.
+  /// Safe because by the time deinit runs, no other reference to this
+  /// coordinator remains to race with the task-handle mutation.
+  nonisolated func cancel() {
     thumbnailGenerationTask?.cancel()
     thumbnailGenerationTask = nil
   }
