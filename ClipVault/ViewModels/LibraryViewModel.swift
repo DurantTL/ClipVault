@@ -106,8 +106,8 @@ struct BatchMetadataEdit {
   @Published var exportSummary: ClipExportSummary?
   @Published var aliasSummary: AliasCreationSummary?
   @Published var operationError: String?
-  @Published private(set) var canRetryProjectSave = false
-  @Published private(set) var isResumingIngest = false
+  @Published internal(set) var canRetryProjectSave = false
+  @Published internal(set) var isResumingIngest = false
 
   let store = ProjectStore()
   let mover = FileMoveService()
