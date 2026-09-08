@@ -22,6 +22,11 @@ enum PreflightClipStatus: String, CaseIterable, Codable, Sendable {
   }
 
   var isNew: Bool { self == .newMedia }
+
+  /// Select New Only / skip-already-copied default selection.
+  /// Only `.newMedia` returns true. Review statuses (Possible Duplicate,
+  /// Same Name Different Size) and already-imported statuses return false so
+  /// they stay visible without being silently treated as New.
   var shouldSelectByDefault: Bool { self == .newMedia }
 
   var needsReview: Bool {
