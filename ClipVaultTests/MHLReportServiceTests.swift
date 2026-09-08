@@ -61,7 +61,7 @@ final class MHLReportServiceTests: XCTestCase {
     return clip
   }
 
-  private func try makeProject(clips: [Clip]) throws -> ClipVaultProject {
+  private func makeProject(clips: [Clip]) throws -> ClipVaultProject {
     let projectFolder = try XCTUnwrap(self.projectFolder)
     return ClipVaultProject(
       name: "MHL Demo",
