@@ -244,6 +244,6 @@ final class LibraryExportCoordinator {
   }
 
   private func escapeCSV(_ value: String) -> String {
-    "\"\(value.replacingOccurrences(of: "\"", with: "\"\"\"))\""
+    "\"\(value.replacingOccurrences(of: "\"", with: "\"\""))\""
   }
 }
