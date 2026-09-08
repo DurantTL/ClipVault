@@ -1,41 +1,9 @@
 import AppKit
 import Foundation
 
-private final class IngestWindowPreviewCleanup: @unchecked Sendable {
-  private let lock = NSLock()
-  private var destinationRoot: URL?
-  private var cleaned = false
-
-  func update(destinationRoot: URL?) {
-    lock.lock()
-    self.destinationRoot = destinationRoot
-    cleaned = false
-    lock.unlock()
-  }
-
-  func cleanIfNeeded() {
-    lock.lock()
-    guard !cleaned else {
-      lock.unlock()
-      return
-    }
-    cleaned = true
-    let destinationRoot = self.destinationRoot
-    lock.unlock()
-
-    if StoragePreferences.sourcePreviewCleanupPolicy == .whenIngestWindowCloses {
-      IngestPreviewThumbnailService().cleanCache(destinationRoot: destinationRoot)
-    }
-  }
-
-  deinit {
-    cleanIfNeeded()
-  }
-}
-
 @MainActor final class NewIngestViewModel: ObservableObject {
-  private static let rememberedSourceBookmarksKey = "rememberedSourceBookmarks"
-  private static let rememberedManualSourcePathsKey = "rememberedManualSourcePaths"
+  static let rememberedSourceBookmarksKey = "rememberedSourceBookmarks"
+  static let rememberedManualSourcePathsKey = "rememberedManualSourcePaths"
   @Published var sourceURL: URL?
   @Published var destinationURL: URL? {
     didSet { updateWindowCleanupDestination() }
@@ -63,22 +31,24 @@ private final class IngestWindowPreviewCleanup: @unchecked Sendable {
   @Published var recentManualSources: [SourceVolumeOption] = []
   @Published var selectedSourceID: String?
   @Published var cameraCardMetadata = IngestCameraCardMetadata()
-
+  /// When true, Selection stays locked to preflight `.newMedia` clips and is
+  /// re-applied whenever Preflight results refresh (Select New Only mode).
+  @Published var prefersNewOnlySelection = false
 
   let scanner = SourceScanner()
   let volumeSourceService = VolumeSourceService()
   let bookmarks = SecurityScopedBookmarkManager()
   let ingestService = IngestService()
-  private let ingestPreviewThumbnails = IngestPreviewThumbnailService()
-  private let windowPreviewCleanup = IngestWindowPreviewCleanup()
-  private var queuedPreviewThumbnailIDs = Set<UUID>()
-  private var pendingPreviewThumbnailClips: [ScannedVideo] = []
-  private var activePreviewThumbnailCount = 0
-  private var maxConcurrentPreviewThumbnails = SystemPerformanceProfile.current().recommendedThumbnailConcurrency
-  private var previewThumbnailTasks: [UUID: Task<Void, Never>] = [:]
-  private var sourceBookmarkDataByID: [String: Data] = [:]
-  private var grantedSourceURLsByID: [String: URL] = [:]
-  private var activeAccessURLsByPath: [String: URL] = [:]
+  let ingestPreviewThumbnails = IngestPreviewThumbnailService()
+  let windowPreviewCleanup = IngestWindowPreviewCleanup()
+  var queuedPreviewThumbnailIDs = Set<UUID>()
+  var pendingPreviewThumbnailClips: [ScannedVideo] = []
+  var activePreviewThumbnailCount = 0
+  var maxConcurrentPreviewThumbnails = SystemPerformanceProfile.current().recommendedThumbnailConcurrency
+  var previewThumbnailTasks: [UUID: Task<Void, Never>] = [:]
+  var sourceBookmarkDataByID: [String: Data] = [:]
+  var grantedSourceURLsByID: [String: URL] = [:]
+  var activeAccessURLsByPath: [String: URL] = [:]
   private var scanGeneration = 0
 
   var cameraLabelSuggestions: [String] {
@@ -87,7 +57,7 @@ private final class IngestWindowPreviewCleanup: @unchecked Sendable {
       .sorted()
   }
 
-  private struct SourceAccessGrant {
+  struct SourceAccessGrant {
     var url: URL
     var needsBookmarkRefresh: Bool
   }
@@ -119,172 +89,6 @@ private final class IngestWindowPreviewCleanup: @unchecked Sendable {
 
   private func updateWindowCleanupDestination() {
     windowPreviewCleanup.update(destinationRoot: finalOutputURL)
-  }
-
-  func chooseSource(settings: AppSettings) {
-    if let url = pickFolder(canCreateDirectories: false) {
-      var manual = volumeSourceService.manualSource(for: url)
-      manual.bookmarkData = try? bookmarks.bookmark(for: url)
-      if let bookmarkData = manual.bookmarkData { remember(bookmarkData, for: manual.id) }
-      rememberManualSource(manual.url)
-      if !recentManualSources.contains(where: { $0.id == manual.id }) {
-        recentManualSources.insert(manual, at: 0)
-      }
-      let grant = SourceAccessGrant(url: url, needsBookmarkRefresh: manual.bookmarkData == nil)
-      selectGrantedSource(manual, grant: grant, settings: settings)
-    }
-  }
-
-  func refreshSources() {
-    let selectedPath = sourceURL?.standardizedFileURL.path
-    sourceOptions = volumeSourceService.scanMountedSources().map { option in
-      var refreshed = option
-      refreshed.bookmarkData = sourceBookmarkDataByID[option.id]
-      return refreshed
-    }
-    recentManualSources = recentManualSources.map { manual in
-      var refreshed = volumeSourceService.manualSource(for: manual.url)
-      refreshed.isAvailable = FileManager.default.fileExists(atPath: manual.url.path)
-      refreshed.bookmarkData = manual.bookmarkData ?? sourceBookmarkDataByID[manual.id]
-      return refreshed
-    }
-    if let selectedPath, !sourceOptions.contains(where: { $0.id == selectedPath }) && !recentManualSources.contains(where: { $0.id == selectedPath }) {
-      var disconnected = volumeSourceService.manualSource(for: URL(fileURLWithPath: selectedPath))
-      disconnected.isAvailable = false
-      recentManualSources.insert(disconnected, at: 0)
-      selectedSourceID = selectedPath
-    }
-  }
-
-  func selectDetectedSource(_ source: SourceVolumeOption, settings: AppSettings) {
-    guard source.isAvailable else {
-      error = "That source is disconnected. Reconnect it or use Add Source to choose a folder manually."
-      return
-    }
-    guard let grant = ensureAccessForDetectedSource(source) else {
-      error = "Access not granted. Choose the card or folder before \(AppBrand.appName) scans it."
-      return
-    }
-    var grantedSource = volumeSourceService.manualSource(for: grant.url)
-    grantedSource.id = source.id
-    grantedSource.name = source.name
-    grantedSource.volumeKind = source.volumeKind
-    grantedSource.iconName = source.iconName
-    grantedSource.bookmarkData = sourceBookmarkDataByID[source.id]
-    selectGrantedSource(grantedSource, grant: grant, settings: settings)
-  }
-
-  private func selectGrantedSource(_ source: SourceVolumeOption, grant: SourceAccessGrant, settings: AppSettings) {
-    retainAccess(to: grant.url)
-    grantedSourceURLsByID[source.id] = grant.url
-    // Refresh the persisted bookmark only while its security scope is active;
-    // creating a security-scoped bookmark from a resolved URL fails before
-    // access starts, which used to silently drop the refreshed bookmark.
-    if grant.needsBookmarkRefresh || sourceBookmarkDataByID[source.id] == nil {
-      if let refreshed = try? bookmarks.bookmark(for: grant.url) {
-        remember(refreshed, for: source.id)
-      }
-    }
-    sourceURL = grant.url
-    selectedSourceID = source.id
-    error = nil
-    detectSonyCard()
-    scan(settings: settings)
-  }
-
-  private func ensureAccessForDetectedSource(_ option: SourceVolumeOption) -> SourceAccessGrant? {
-    // A source granted earlier in this app session stays granted. Swapping
-    // between cards or drives in the ingest window must never prompt again
-    // for a source the user already allowed.
-    if let granted = grantedSourceURLsByID[option.id],
-      FileManager.default.fileExists(atPath: granted.path) {
-      return SourceAccessGrant(url: granted, needsBookmarkRefresh: false)
-    }
-
-    // Only volumes that macOS itself identifies as removable can use the
-    // removable-media sandbox entitlement. Some card readers report an SD card
-    // as a fixed external USB volume even when ClipVault recognizes its camera
-    // layout; those need the normal one-time source picker below.
-    if option.isRemovable {
-      // Still remember a bookmark when possible so the same card keeps working
-      // if a reader later mounts it as a fixed volume.
-      return SourceAccessGrant(
-        url: option.url, needsBookmarkRefresh: sourceBookmarkDataByID[option.id] == nil)
-    }
-
-    if let bookmarkData = option.bookmarkData ?? sourceBookmarkDataByID[option.id],
-      let resolved = try? bookmarks.resolveWithStaleness(bookmarkData) {
-      let resolvedPath = resolved.url.standardizedFileURL.path
-      let optionPath = option.url.standardizedFileURL.path
-      let coversOption = resolvedPath == optionPath || resolvedPath.hasPrefix(optionPath + "/")
-      if coversOption && FileManager.default.fileExists(atPath: resolved.url.path) {
-        return SourceAccessGrant(url: resolved.url, needsBookmarkRefresh: resolved.isStale)
-      }
-      // The bookmark points somewhere that no longer matches this mounted
-      // volume (for example the card remounted under a new path), so fall
-      // through and let the user grant the new location once.
-    }
-
-    let panel = NSOpenPanel()
-    panel.title = "Allow \(AppBrand.appName) to Access This Source"
-    panel.message = "Choose this card or folder so \(AppBrand.appName) can scan it."
-    panel.prompt = "Allow Access"
-    panel.canChooseDirectories = true
-    panel.canChooseFiles = false
-    panel.allowsMultipleSelection = false
-    panel.canCreateDirectories = false
-    if FileManager.default.fileExists(atPath: option.url.path) {
-      panel.directoryURL = option.url
-    }
-
-    guard panel.runModal() == .OK, let selectedURL = panel.url else { return nil }
-    let selectedPath = selectedURL.standardizedFileURL.path
-    let detectedPath = option.url.standardizedFileURL.path
-    guard selectedPath == detectedPath || selectedPath.hasPrefix(detectedPath + "/") else {
-      error = "Choose the detected card or one of its folders to allow access."
-      return nil
-    }
-    return SourceAccessGrant(url: selectedURL, needsBookmarkRefresh: true)
-  }
-
-  private func remember(_ bookmarkData: Data, for sourceID: String) {
-    sourceBookmarkDataByID[sourceID] = bookmarkData
-    if let data = try? PropertyListEncoder().encode(sourceBookmarkDataByID) {
-      UserDefaults.standard.set(data, forKey: Self.rememberedSourceBookmarksKey)
-    }
-  }
-
-  private static func loadRememberedSourceBookmarks() -> [String: Data] {
-    if let data = UserDefaults.standard.data(forKey: rememberedSourceBookmarksKey),
-      let bookmarks = try? PropertyListDecoder().decode([String: Data].self, from: data) {
-      return bookmarks
-    }
-    // Preserve permissions granted by the previous implementation when possible.
-    return UserDefaults.standard.dictionary(forKey: rememberedSourceBookmarksKey) as? [String: Data] ?? [:]
-  }
-
-  private func rememberManualSource(_ url: URL) {
-    let path = url.standardizedFileURL.path
-    var paths = Self.loadRememberedManualSourcePaths()
-    paths.removeAll { $0 == path }
-    paths.insert(path, at: 0)
-    UserDefaults.standard.set(Array(paths.prefix(20)), forKey: Self.rememberedManualSourcePathsKey)
-  }
-
-  private static func loadRememberedManualSourcePaths() -> [String] {
-    UserDefaults.standard.stringArray(forKey: rememberedManualSourcePathsKey) ?? []
-  }
-
-  private func retainAccess(to url: URL) {
-    let path = url.standardizedFileURL.path
-    guard activeAccessURLsByPath[path] == nil else { return }
-    // Keep security scope active for every source granted in this session so
-    // swapping between cards never drops an earlier grant. Panel-granted URLs
-    // and entitlement-covered removable volumes return false here; they are
-    // accessible without explicit scope activation.
-    if url.startAccessingSecurityScopedResource() {
-      activeAccessURLsByPath[path] = url
-    }
   }
 
   func chooseDestination() {
@@ -342,6 +146,8 @@ private final class IngestWindowPreviewCleanup: @unchecked Sendable {
     error = nil
     videos = []
     sessions = []
+    // Rescan rebuilds sessions; drop stale new-only selection until Preflight refreshes.
+    // Keep prefersNewOnlySelection so a subsequent Preflight run re-applies New-only.
 
     let includeProxyFiles = settings.includeProxyFiles
     Task { [weak self] in
@@ -478,222 +284,9 @@ private final class IngestWindowPreviewCleanup: @unchecked Sendable {
     return "Ready to ingest"
   }
 
-  func selectAllSessions() {
-    for index in sessions.indices { setSession(at: index, selected: true) }
-  }
-
-  func clearSessionSelection() {
-    for index in sessions.indices { setSession(at: index, selected: false) }
-  }
-
-  func selectTodaySessions() {
-    for index in sessions.indices { setSession(at: index, selected: Calendar.current.isDateInToday(sessions[index].date)) }
-  }
-
-  func selectSessions(on date: Date) {
-    for index in sessions.indices { setSession(at: index, selected: Calendar.current.isDate(sessions[index].date, inSameDayAs: date)) }
-  }
-
-  func selectNewOnlySessions() { selectAllSessions() }
-
-  func setSession(_ session: IngestSession, selected: Bool) {
-    guard let index = sessions.firstIndex(where: { $0.id == session.id }) else { return }
-    setSession(at: index, selected: selected)
-  }
-
-  func toggleSession(_ session: IngestSession) {
-    guard let index = sessions.firstIndex(where: { $0.id == session.id }) else { return }
-    setSession(at: index, selected: !sessions[index].selected)
-  }
-
-  func queuePreviewThumbnails(for session: IngestSession, limit: Int = 8) {
-    for clip in session.clips.prefix(limit) {
-      queuePreviewThumbnail(for: clip)
-    }
-  }
-
-  func queuePreviewThumbnail(for clip: ScannedVideo) {
-    guard let sourceURL else { return }
-    guard StoragePreferences.sourcePreviewDirectory(destinationRoot: finalOutputURL) != nil else { return }
-    guard clip.previewThumbnailStatus == .pending || clip.previewThumbnailStatus == .failed else { return }
-    guard !queuedPreviewThumbnailIDs.contains(clip.id) else { return }
-    queuedPreviewThumbnailIDs.insert(clip.id)
-    pendingPreviewThumbnailClips.append(clip)
-    updatePreviewThumbnailState(clipID: clip.id, status: .generating, path: nil, errorMessage: nil, duration: nil)
-    startNextPreviewThumbnailIfNeeded()
-  }
-
-  private func startNextPreviewThumbnailIfNeeded() {
-    guard activePreviewThumbnailCount < maxConcurrentPreviewThumbnails else { return }
-    guard let sourceURL else { return }
-    guard !pendingPreviewThumbnailClips.isEmpty else { return }
-
-    let clip = pendingPreviewThumbnailClips.removeFirst()
-    let destinationRoot = finalOutputURL
-    activePreviewThumbnailCount += 1
-
-    // Weak self so an in-flight thumbnail task never keeps the view model (and
-    // its retained security-scoped access) alive after the ingest window closes.
-    let task = Task(priority: .utility) { [weak self, service = ingestPreviewThumbnails] in
-      do {
-        let workID = await BackgroundWorkCoordinator.shared.begin(kind: .ingestPreviewThumbnail, label: clip.filename)
-        defer { Task { await BackgroundWorkCoordinator.shared.finish(workID) } }
-        let result = try await service.generate(
-          for: clip,
-          sourceRoot: sourceURL,
-          destinationRoot: destinationRoot
-        )
-        await MainActor.run { [weak self] in
-          self?.finishPreviewThumbnail(
-            clipID: clip.id,
-            status: .generated,
-            path: result.path,
-            errorMessage: nil,
-            duration: result.duration
-          )
-        }
-      } catch {
-        await MainActor.run { [weak self] in
-          self?.finishPreviewThumbnail(
-            clipID: clip.id,
-            status: .failed,
-            path: nil,
-            errorMessage: error.localizedDescription,
-            duration: nil
-          )
-        }
-      }
-    }
-    previewThumbnailTasks[clip.id] = task
-  }
-
-  func cancelPreviewThumbnailWork() {
-    for task in previewThumbnailTasks.values { task.cancel() }
-    previewThumbnailTasks.removeAll()
-    pendingPreviewThumbnailClips.removeAll()
-    queuedPreviewThumbnailIDs.removeAll()
-    activePreviewThumbnailCount = 0
-  }
-
   deinit {
     for task in previewThumbnailTasks.values { task.cancel() }
     windowPreviewCleanup.cleanIfNeeded()
     for url in activeAccessURLsByPath.values { url.stopAccessingSecurityScopedResource() }
-  }
-
-  private func finishPreviewThumbnail(
-    clipID: UUID,
-    status: ThumbnailStatus,
-    path: String?,
-    errorMessage: String?,
-    duration: Double?
-  ) {
-    previewThumbnailTasks[clipID] = nil
-    activePreviewThumbnailCount = max(0, activePreviewThumbnailCount - 1)
-    updatePreviewThumbnailState(
-      clipID: clipID,
-      status: status,
-      path: path,
-      errorMessage: errorMessage,
-      duration: duration
-    )
-    startNextPreviewThumbnailIfNeeded()
-  }
-
-  func setClip(_ clip: ScannedVideo, in session: IngestSession, selected: Bool) {
-    guard let sessionIndex = sessions.firstIndex(where: { $0.id == session.id }),
-      let clipIndex = sessions[sessionIndex].clips.firstIndex(where: { $0.id == clip.id }) else { return }
-    sessions[sessionIndex].clips[clipIndex].selected = selected
-    sessions[sessionIndex].selected = sessions[sessionIndex].clips.contains { $0.selected }
-  }
-
-  private func queueInitialPreviewThumbnails() {
-    for session in sessions {
-      queuePreviewThumbnails(for: session, limit: 8)
-    }
-  }
-
-  private func updatePreviewThumbnailState(
-    clipID: UUID,
-    status: ThumbnailStatus,
-    path: String?,
-    errorMessage: String?,
-    duration: Double?
-  ) {
-    for sessionIndex in sessions.indices {
-      guard let clipIndex = sessions[sessionIndex].clips.firstIndex(where: { $0.id == clipID }) else { continue }
-      sessions[sessionIndex].clips[clipIndex].previewThumbnailStatus = status
-      if let path { sessions[sessionIndex].clips[clipIndex].previewThumbnailPath = path }
-      if status == .failed { sessions[sessionIndex].clips[clipIndex].previewThumbnailPath = nil }
-      sessions[sessionIndex].clips[clipIndex].previewThumbnailErrorMessage = errorMessage
-      if let duration { sessions[sessionIndex].clips[clipIndex].duration = duration }
-      return
-    }
-  }
-
-  private func setSession(at index: Int, selected: Bool) {
-    sessions[index].selected = selected
-    for clipIndex in sessions[index].clips.indices {
-      sessions[index].clips[clipIndex].selected = selected
-    }
-  }
-
-  private func buildSessions(from videos: [SourceVideo], source: URL) -> [IngestSession] {
-    let sorted = videos.sorted { bestShotTime(for: $0) < bestShotTime(for: $1) }
-    let groups: [[SourceVideo]]
-    switch groupingMode {
-    case .allFiles:
-      groups = sorted.isEmpty ? [] : [sorted]
-    case .sourceFolder:
-      groups = Dictionary(grouping: sorted) { URL(fileURLWithPath: $0.relativePath).deletingLastPathComponent().path }
-        .values.map { $0.sorted { bestShotTime(for: $0) < bestShotTime(for: $1) } }
-        .sorted { bestShotTime(for: $0.first!) < bestShotTime(for: $1.first!) }
-    case .date, .dateAndGap:
-      var built: [[SourceVideo]] = []
-      for video in sorted {
-        let date = bestShotTime(for: video)
-        if let lastGroup = built.last, let previous = lastGroup.last {
-          let previousDate = bestShotTime(for: previous)
-          let withinGap = groupingMode == .date || date.timeIntervalSince(previousDate) <= Double(timeGap.rawValue * 60)
-          if Calendar.current.isDate(date, inSameDayAs: previousDate) && withinGap {
-            built[built.count - 1].append(video)
-          } else {
-            built.append([video])
-          }
-        } else {
-          built.append([video])
-        }
-      }
-      groups = built
-    }
-    return groups.map { group in
-      let dates = group.map { bestShotTime(for: $0) }.sorted()
-      let scanned = group.map { video in
-        ScannedVideo(id: video.id, url: video.url, filename: video.url.lastPathComponent, fileSize: video.size, createdAt: video.createdAt, modifiedAt: video.modifiedAt, duration: nil, cameraType: video.cardType, sourceRelativePath: video.relativePath)
-      }
-      let start = dates.first ?? Date()
-      let formatter = DateFormatter()
-      formatter.dateStyle = .medium
-      formatter.timeStyle = .short
-      return IngestSession(title: formatter.string(from: start), date: start, startTime: start, endTime: dates.last ?? start, clips: scanned, totalSize: group.reduce(0) { $0 + $1.size }, cameraType: group.first?.cardType ?? detectedCardType.rawValue, sourceVolumeName: source.lastPathComponent)
-    }
-  }
-
-  private func bestShotTime(for video: SourceVideo) -> Date {
-    video.createdAt ?? video.modifiedAt ?? filenameDate(video.url.lastPathComponent) ?? .distantPast
-  }
-
-  private func filenameDate(_ filename: String) -> Date? {
-    let digits = filename.filter(\.isNumber)
-    guard digits.count >= 14 else { return nil }
-    let prefix = String(digits.prefix(14))
-    let formatter = DateFormatter()
-    formatter.dateFormat = "yyyyMMddHHmmss"
-    return formatter.date(from: prefix)
-  }
-
-  private func updateFreeSpace() {
-    guard let destinationURL else { return }
-    destinationFreeSpace = VolumeCapacity.availableCapacity(for: destinationURL)
   }
 }
