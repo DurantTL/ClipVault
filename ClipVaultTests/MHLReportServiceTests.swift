@@ -110,7 +110,12 @@ final class MHLReportServiceTests: XCTestCase {
     } catch {
       return XCTFail("setup failed: \(error)")
     }
-    let project = try makeProject(clips: [clip])
+    let project: ClipVaultProject
+    do {
+      project = try makeProject(clips: [clip])
+    } catch {
+      return XCTFail("setup failed: \(error)")
+    }
     let destinations = [MHLDestination(label: "Primary", rootURL: projectFolder)]
 
     do {
