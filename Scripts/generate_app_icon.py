@@ -1,6 +1,13 @@
 #!/usr/bin/env python3
+"""Generate placeholder macOS App Icon PNGs.
+
+Final aperture + cyan-check assets are committed in AppIcon.appiconset (#61).
+This script paints an older procedural placeholder and will REFUSE to overwrite
+existing PNGs unless FORCE_PLACEHOLDER_ICONS=1 or --force is passed.
+Release CI skips this script when PNGs are already present.
+"""
 from pathlib import Path
-import struct, zlib, math, json
+import os, sys, struct, zlib, json
 
 def png(path, size):
     rows=[]
@@ -45,6 +52,17 @@ catalog.mkdir(parents=True, exist_ok=True)
 (catalog / 'Contents.json').write_text(json.dumps({'info': {'author': 'xcode', 'version': 1}}, indent=2) + '\n')
 out = catalog / 'AppIcon.appiconset'
 out.mkdir(parents=True, exist_ok=True)
+
+force = os.environ.get('FORCE_PLACEHOLDER_ICONS') == '1' or '--force' in sys.argv
+existing = list(out.glob('*.png'))
+if existing and not force:
+    print(
+        f'{len(existing)} App Icon PNG(s) already in {out}; refusing to overwrite final assets.\n'
+        'Pass --force or set FORCE_PLACEHOLDER_ICONS=1 to regenerate placeholders.',
+        file=sys.stderr,
+    )
+    raise SystemExit(0)
+
 for old in out.glob('*.png'):
     old.unlink()
 items=[]
