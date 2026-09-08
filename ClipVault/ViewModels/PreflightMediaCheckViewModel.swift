@@ -69,7 +69,11 @@ import SwiftUI
     )
     lastCheckedAt = Date()
 
-    if ingest.alreadyImportedMode == .skipAlreadyCopied {
+    // Re-apply New-only when the operator asked for it, or when ingest is set to
+    // skip already-copied media (auto new-only after every Preflight refresh).
+    let shouldApplyNewOnly =
+      ingest.prefersNewOnlySelection || ingest.alreadyImportedMode == .skipAlreadyCopied
+    if shouldApplyNewOnly {
       applyNewOnlySelection(to: ingest)
     }
 
@@ -77,21 +81,16 @@ import SwiftUI
     message = "Preflight complete: \(currentSummary.newCount) new, \(currentSummary.alreadyImportedCount) already imported, \(currentSummary.reviewCount) need review."
   }
 
+  /// Select only clips whose preflight status is New (`.newMedia`).
+  ///
+  /// Intentional exceptions / non-selections (still visible in the UI):
+  /// - Already at Destination / Already in Project / Already on Backup → excluded
+  /// - Possible Duplicate → visible, not treated as New
+  /// - Same Name Different Size → visible, not treated as New
+  /// - Missing result after a check → not treated as New
+  /// - No results yet → clears selection (never silently Select All)
   func applyNewOnlySelection(to ingest: NewIngestViewModel) {
-    guard !results.isEmpty else {
-      ingest.selectAllSessions()
-      return
-    }
-
-    for sessionIndex in ingest.sessions.indices {
-      for clipIndex in ingest.sessions[sessionIndex].clips.indices {
-        let clipID = ingest.sessions[sessionIndex].clips[clipIndex].id
-        ingest.sessions[sessionIndex].clips[clipIndex].selected =
-          results[clipID]?.status.shouldSelectByDefault ?? true
-      }
-      ingest.sessions[sessionIndex].selected =
-        ingest.sessions[sessionIndex].clips.contains(where: { $0.selected })
-    }
+    ingest.applyNewOnlySelection(from: results)
   }
 
   private func preflightLocations(
