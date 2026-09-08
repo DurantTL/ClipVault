@@ -38,6 +38,8 @@ final class MHLReportServiceTests: XCTestCase {
     checksum: String?,
     underSource: Bool = false
   ) throws -> Clip {
+    let projectFolder = try XCTUnwrap(self.projectFolder)
+    let sourceCard = try XCTUnwrap(self.sourceCard)
     let mediaParent = underSource ? sourceCard : projectFolder
     let mediaURL = mediaParent.appendingPathComponent(name)
     let data = Data(content.utf8)
@@ -54,12 +56,14 @@ final class MHLReportServiceTests: XCTestCase {
     clip.destinationRelativePath = name
     clip.verificationStatus = status
     clip.checksum = checksum
-    clip.copyStatus = status == .verified || status == .copied ? .copied : .pending
+    let copied = (status == VerificationStatus.verified || status == VerificationStatus.copied)
+    clip.copyStatus = copied ? ClipCopyStatus.copied : ClipCopyStatus.pending
     return clip
   }
 
-  private func makeProject(clips: [Clip]) -> ClipVaultProject {
-    ClipVaultProject(
+  private func try makeProject(clips: [Clip]) throws -> ClipVaultProject {
+    let projectFolder = try XCTUnwrap(self.projectFolder)
+    return ClipVaultProject(
       name: "MHL Demo",
       projectFolderPath: projectFolder.path,
       clips: clips
@@ -106,7 +110,7 @@ final class MHLReportServiceTests: XCTestCase {
     } catch {
       return XCTFail("setup failed: \(error)")
     }
-    let project = makeProject(clips: [clip])
+    let project = try makeProject(clips: [clip])
     let destinations = [MHLDestination(label: "Primary", rootURL: projectFolder)]
 
     do {
@@ -131,7 +135,7 @@ final class MHLReportServiceTests: XCTestCase {
     let payload = "primary-copy"
     let digest = sha256Hex(Data(payload.utf8))
     let clip = try makeClip(name: "A001.MP4", content: payload, status: .verified, checksum: digest)
-    let project = makeProject(clips: [clip])
+    let project = try makeProject(clips: [clip])
     let destinations = [
       MHLDestination(label: "Primary", rootURL: projectFolder),
       MHLDestination(label: "Backup 1", rootURL: projectFolder),
@@ -173,7 +177,7 @@ final class MHLReportServiceTests: XCTestCase {
 
   func testZeroEligibleClipsFailsWithoutWriting() async throws {
     let pending = try makeClip(name: "P.MP4", content: "p", status: .pending, checksum: nil)
-    let project = makeProject(clips: [pending])
+    let project = try makeProject(clips: [pending])
     do {
       _ = try await service.generate(
         project: project,
