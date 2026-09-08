@@ -2,34 +2,51 @@
 
 **Ingest. Verify. Cull. Hand off.**
 
-SlateBox is a native macOS SwiftUI app for safe video ingest, preview, culling, and folder sorting. It copies video files from an SD card or source folder to a destination project folder, verifies the copies, generates thumbnails, and lets users review and sort the copied media without touching the original source.
+SlateBox is a native macOS SwiftUI app for safe video ingest, verification, preview, culling, and editor handoff. It copies video files from a camera card or source folder to a destination project folder, verifies the copies, generates thumbnails, and lets you review and organize the copied media without ever touching the original source.
 
-## Privacy & Support
+> **Brand name is not final.** The public name is still being decided (candidates: Cullect, TakeHarbor, SlateBox, ClipVault). User-visible strings flow through `AppBrand.swift`, so a rename is a one-file change plus a checklist. The hidden on-disk identifiers keep the stable `clipvault` spelling permanently — see [On-disk names](#on-disk-names) and [`NAMING.md`](NAMING.md).
 
-- [Privacy Policy](docs/privacy.md) — local-first processing, no cloud AI, face-data limits (App Store Privacy Policy URL will point at a hosted copy of this page).
-- [Support](docs/support.md) — contact, diagnostics, requirements (App Store Support URL will point at a hosted copy of this page).
+## Contents
 
-Public brand name is still TBD (candidates include Cullect, TakeHarbor, SlateBox, ClipVault). On-disk project identifiers keep the stable `clipvault` spelling; see `NAMING.md` and `AppBrand.swift`.
+- [Requirements](#requirements)
+- [Build and release](#build-and-release)
+- [Ingest workflow](#ingest-workflow)
+- [Verification](#verification)
+- [Library, culling, and review](#library-culling-and-review)
+- [Export and editor handoff](#export-and-editor-handoff)
+- [Local analysis](#local-analysis)
+- [Safety rules](#safety-rules)
+- [Recovery behavior](#recovery-behavior)
+- [Source permissions](#source-permissions)
+- [Project files](#project-files)
+- [Known limitations](#known-limitations)
+- [Documentation](#documentation)
 
+## Requirements
 
-## System requirements and performance
+SlateBox targets Apple Silicon Macs; the app target builds for `arm64` only.
 
-SlateBox is designed for Apple Silicon Macs and the app target builds for `arm64` only. Recommended hardware:
+| | |
+|---|---|
+| Minimum | Apple Silicon Mac, 16 GB RAM |
+| Recommended | M2 Pro / M3 Pro / M4 Pro or better, 32 GB+ for large event projects |
+| Storage | Fast SSD recommended |
+| macOS | macOS 15 or newer recommended for best performance |
+| Build | Xcode 15+ on macOS 14+ |
 
-- Apple Silicon M2 or newer.
-- M2 Pro / M3 Pro / M4 Pro or better for large 4K/10-bit workflows.
-- 16 GB RAM minimum recommended.
-- 32 GB+ recommended for large event projects.
-- Fast SSD recommended.
-- macOS 15+ or newer recommended; the deployment target may remain lower, but newer systems get the best performance.
+SlateBox picks a performance profile automatically from architecture, physical memory, and Metal device availability. Performance Mode (Automatic, Fast, Balanced, Quality) tunes thumbnail concurrency, analysis sampling, and background work priority.
 
-SlateBox uses an automatic performance profile based on safe Apple APIs: arm64 architecture, physical memory, and Metal device availability. Performance Mode can be set to Automatic, Fast, Balanced, or Quality to tune thumbnail concurrency, local-analysis sampling, and background work priority.
+The app uses Apple frameworks only — SwiftUI, AVFoundation, AVKit, Foundation, UniformTypeIdentifiers, CryptoKit, Vision, and AppKit. There is no FFmpeg and no third-party dependency.
 
-## Build
+## Build and release
 
-Open `SlateBox.xcodeproj` in Xcode 15 or newer on macOS 14+, select the `SlateBox` scheme, and run. The app uses only Apple frameworks: SwiftUI, AVFoundation, AVKit, Foundation/FileManager, UniformTypeIdentifiers, CryptoKit, and AppKit where macOS-specific APIs are needed.
+Open `SlateBox.xcodeproj` in Xcode, select the `SlateBox` scheme, and run. From the command line:
 
-## Releases
+```bash
+xcodebuild -project SlateBox.xcodeproj -scheme SlateBox \
+  -configuration Debug -destination 'platform=macOS' \
+  CODE_SIGNING_ALLOWED=NO build
+```
 
 Releases are cut by pushing a version tag:
 
@@ -37,305 +54,272 @@ Releases are cut by pushing a version tag:
 git tag v1.0.0 && git push origin v1.0.0
 ```
 
-The `Release SlateBox` GitHub Actions workflow builds a Release app, runs the test suite, packages a DMG, and publishes a GitHub Release with the DMG attached. Signing and notarization run automatically when the repository secrets `MACOS_CERTIFICATE_BASE64`, `MACOS_CERTIFICATE_PASSWORD`, `APPLE_ID`, `APPLE_TEAM_ID`, and `APPLE_APP_SPECIFIC_PASSWORD` are configured; without them the workflow still publishes an unsigned DMG for testing (right-click → Open on first launch). Changes are tracked in `CHANGELOG.md`.
+The `Release SlateBox` workflow builds a Release app, runs the test suite, packages a DMG, and publishes a GitHub Release with the DMG attached. Signing and notarization run automatically when the repository secrets `MACOS_CERTIFICATE_BASE64`, `MACOS_CERTIFICATE_PASSWORD`, `APPLE_ID`, `APPLE_TEAM_ID`, and `APPLE_APP_SPECIFIC_PASSWORD` are configured. Without them the workflow still publishes an unsigned DMG for testing (right-click → Open on first launch).
 
-DMG builds can use **Help → Check for Updates…**, which queries GitHub Releases for a newer version (manual check only; no Sparkle auto-update).
+DMG builds can use **Help → Check for Updates…**, which queries GitHub Releases for a newer version. This is a manual check only; there is no Sparkle auto-update.
 
-## Help menu
+### Help menu
 
 - **Welcome** reopens the first-launch onboarding walkthrough.
 - **Keyboard Shortcuts** shows the culling and navigation cheat sheet.
-- **Save Diagnostics Report…** writes a local plain-text report (app version, system profile, settings, recent project paths) for support. The report stays on your Mac; nothing is uploaded.
+- **Save Diagnostics Report…** writes a local plain-text report (app version, system profile, settings, recent project paths) for support. It stays on your Mac; nothing is uploaded.
+
+### App icon assets
+
+Binary PNG icons are intentionally git-ignored so text-only changes can build in source control. To generate local placeholder icons on a Mac:
+
+```bash
+make icons   # or: python3 Scripts/generate_app_icon.py
+```
+
+This writes `ClipVault/Assets.xcassets/AppIcon.appiconset/icon_16x16_1x.png` through `icon_512x512_2x.png` plus `Contents.json`. Run **Product → Clean Build Folder** afterward. The SwiftUI in-app logo works without generated assets.
 
 ## Ingest workflow
 
-1. Click **New Ingest**.
-2. Choose a source folder such as an SD card or camera-card copy.
-3. Choose a destination folder such as an SSD or mounted NAS folder.
-4. Name the project. The default is date-based.
-5. SlateBox scans Sony cards by using `PRIVATE/M4ROOT/CLIP` when present.
-6. Proxy files in Sony `PRIVATE/M4ROOT/SUB` are skipped by default unless **Include Proxy Files** is enabled. Non-Sony folders continue to scan recursively.
-7. Click **Start Ingest**. SlateBox confirms that the destination has enough reported free space, streams each file in chunks, verifies the result, then generates metadata and a thumbnail only for successfully copied and verified clips.
-8. The library opens so clips can be previewed, marked Keep/Maybe/Reject, revealed in Finder, and moved into custom folders.
+1. Click **New Ingest** and choose a source — an SD card, mounted drive, or folder.
+2. SlateBox scans the source and detects the card layout:
+   - **Sony:** prioritizes `PRIVATE/M4ROOT/CLIP`. Proxy files in `PRIVATE/M4ROOT/SUB` are skipped unless **Include Proxy Files** is enabled.
+   - **Canon/DCF:** detects a root `DCIM` folder and scans video formats (`.MP4`, `.MOV`, `.CRM`). Photo and sidecar formats (`.JPG`, `.CR3`, `.THM`) are ignored.
+   - **Generic:** recursive video scan.
+3. Review detected **sessions**. Clips are grouped by recording date with a 90-minute gap split, so a day with several shoots can be selected in chunks. Session cards show the time range, clip count, total size, and card type, and expand to individual files with checkboxes.
+4. Select what to copy using the session and clip checkboxes, or Select All, Clear Selection, Select Today, Select New Only, or Select by Date.
+5. Choose a destination, optional Backup 1 and Backup 2 destinations, a project name, and an optional shoot subfolder.
+6. Set folder structure (**Flat** or **Preserve Source Structure**), proxy inclusion, verification mode, and thumbnail quality.
+7. Optionally run a [Preflight Media Check](#preflight-media-check).
+8. Click **Start Ingest**. SlateBox confirms free space, streams each file in chunks through a `.clipvault-partial` temp file, verifies the result, then generates metadata and a thumbnail for successfully copied and verified clips only.
+9. The library opens for preview, culling, and organization.
+
+Start Ingest stays disabled until there is a destination, a project name, and at least one selected clip.
+
+Ingest can be paused and resumed between chunks. Keep the card and destination drive connected until copy and verification finish.
 
 ### Camera and card metadata
 
-New Ingest includes a **Camera / Card Info** section for a camera label, camera name/model, operator, card or reel name, and optional shoot day. SlateBox suggests common labels plus recently used labels, saves the source assignment in the project JSON, and applies it to every copied clip from that source. Clip metadata can still be edited later as an override.
+New Ingest includes a **Camera / Card Info** section for camera label, camera name/model, operator, card or reel name, and optional shoot day. SlateBox suggests common and recently used labels, saves the assignment in the project JSON, and applies it to every clip copied from that source. Clip metadata can be edited later as an override.
 
-## Safety behavior
+### Renaming
 
-- SlateBox never deletes source files.
-- SlateBox never formats or erases cards.
-- SlateBox never modifies original media.
-- SlateBox never writes thumbnails to source cards.
-- New Ingest may generate temporary read-only thumbnails from source media for identification only, stored in `~/Library/Caches/ClipVault/IngestPreviewThumbnails/`.
-- Full playback preview, culling, rating, metadata editing, analysis, aliases, export, and library thumbnails use copied project files only.
-- Library thumbnails are generated from copied files only and stored in `.clipvault-cache/thumbnails/`.
-- SlateBox never overwrites destination files; conflicts receive `_1`, `_2`, etc.
-- Ingest copy uses security-scoped access for selected source, destination, and project folders so SD cards, external SSDs, and mounted NAS locations continue working after the user grants access.
-- If ingest is canceled during a large file copy, copied files are left in place, source files are untouched, and the project is marked incomplete.
-- If copy or verification fails for one clip, SlateBox records the error on that clip and continues with the remaining clips.
-- Failed clips do not run metadata extraction or thumbnail generation.
-- Thumbnail failures do not invalidate a copied and verified clip; the UI falls back to a generic video icon.
-- Culling only changes project metadata.
-- Physical sorting only moves copied files inside the destination project folder, and undo restores clip path metadata.
+Rename is off by default. When enabled, files are copied as `[Project Name]-[YYYY][MM][DD]-[Sequence].EXT`, and the original filename is preserved in `.clipvault-project.json`.
 
-## Recovery behavior
+### Backups and network destinations
 
-- A known destination capacity smaller than the selected media blocks **Start Ingest**. When a NAS cannot report capacity, SlateBox shows an advisory instead of incorrectly blocking the job.
-- Low remaining space is called out before copying starts.
-- Disk-full, disconnected-volume, lost-permission, and read-only errors produce recovery instructions instead of raw file-system messages.
-- Failed and canceled ingests stay marked incomplete and reopenable. Any valid partial file is retained for a verified resume, and source media remains untouched.
-- Project-save and report-export failures appear in the library. A failed project save can be retried after reconnecting the project volume or freeing space.
-- Configured backup folders are reopened through their security-scoped bookmarks; a backup problem is recorded as a warning while the verified primary copy remains usable.
+Backups are copied from the verified primary destination so the card is read once. Mounted NAS folders are treated as normal folders; transfers may be slower and disconnects should be retried once the share is back. "Cloud-synced folder support" means local folders managed by iCloud Drive, Dropbox, Google Drive, or OneDrive — SlateBox does not upload to cloud providers directly.
 
-## Source permission behavior
+### Preflight Media Check
 
-SlateBox is sandboxed, so source access follows these rules:
+Before copying, New Ingest can compare the scanned source clips against the destination, configured backups, and recent projects. Matching is by file identity — filename, size, modified date, and duration where available — never by folder location, so renamed project folders do not defeat detection.
 
-- Volumes macOS reports as removable (most SD cards) are readable through the read-only removable-media entitlement and never show a SlateBox picker. macOS itself may show a one-time "removable volume" system prompt for the app.
-- External SSDs, fixed card readers, network volumes, and manual folders need a one-time grant through the source picker. SlateBox saves a security-scoped bookmark so the grant survives relaunches.
-- Once a source is granted in a session, its access stays active for the life of the New Ingest view model. Swapping between cards and drives in the sources list must never re-prompt for a source that was already granted.
-- Persisted bookmarks are refreshed while their security scope is active, and a grant is re-requested only when a volume remounts at a different path than the saved bookmark covers.
+Each clip is classified as New, Already at Destination, Already in Project, Already on Backup, Possible Duplicate, or Same Name Different Size. The selection can automatically keep only new media. Preflight never modifies media, and ingest still uses safe `_1`/`_2` naming regardless of the result.
 
 ## Verification
 
-The default verification mode is **Fast size check**, which confirms the copied file size without rereading the SD card more than necessary. **Strong SHA256** remains available in Settings for users who want a safer byte-level hash comparison, but it is slower for large Sony a7R V 4K60 4:2:2 10-bit files because it reads both the source media and copied destination media.
+| Mode | What it checks | Cost |
+|---|---|---|
+| **Fast size check** (default) | Copied file size matches the source | Does not reread the card |
+| **Strong SHA256** | Byte-level hash of source and destination | Reads both source and destination; slow for large 4K60 10-bit files |
 
-## Project files and recent projects
+> **Known gap:** the shipping default is a size check, which cannot detect corruption that preserves file length. Full-content verification by default — hashing the source once during the copy rather than in a second pass — is tracked in [#92](https://github.com/DurantTL/ClipVault/issues/92) and gates any paid trust claim. Reports and exports must never describe a size-checked copy as checksum-verified.
 
-Each project folder contains a hidden `.clipvault-project.json` metadata file. **Open Existing Project** accepts either the project folder or the hidden JSON file. Recent projects are stored as project metadata-file paths and display a friendly error if an external SSD or NAS volume is disconnected or unavailable.
+## Library, culling, and review
 
-### On-disk names
-
-The hidden on-disk identifiers — `.clipvault-project.json`, `.clipvault-cache/`, `.clipvault-partial`, and the `~/Library/Caches/ClipVault/` preview cache — intentionally keep the legacy `clipvault` spelling. They are permanent format identifiers, independent of the product name, so every existing project remains openable forever regardless of future renames. All of them are defined in one place, `AppBrand.swift`.
-
-## Sony a7R V focus
-
-The MVP is focused on Sony a7R V/XAVC-style workflows: `PRIVATE/M4ROOT/CLIP` prioritization, proxy exclusion by default, optional proxy inclusion from `PRIVATE/M4ROOT/SUB`, chunked copy with cancel support, fast verification by default, and AVFoundation-based metadata/thumbnail extraction without transcoding, LUTs, or color transforms.
-
-## Known limitations
-
-- No cloud sync, cloud AI, editing timeline, FCPXML/EDL project export, SD formatting, permanent deletion, or multi-user collaboration. (Duplicate detection against previously imported media is covered by the Preflight Media Check below.)
-- Preview, metadata, and thumbnail support depends on AVFoundation codecs available on the user's Mac.
-- The first version generates one cached thumbnail per clip, not filmstrips/contact sheets.
-- Recent projects can only reopen automatically while the project folder, external SSD, or NAS mount is available at the expected location or resolvable by its bookmark.
-
-## Current SlateBox polish pass
-
-SlateBox is a native macOS SwiftUI ingest and culling app focused on safe copy, verification, preview, and fast keyboard-based review.
-
-### Current features
-
-- Project dashboard with recent project cards, cover thumbnails, clip counts, total size, cull counts, and quick Open / Reveal / Remove actions.
-- Guided ingest flow for source selection, destination selection, project naming, scan summary, copy progress, cancel state, and Sony card detection.
-- Project library with smart filters, custom folders, production tags, thumbnail size controls, sort controls, batch rating actions, and CSV/JSON export entry points.
-- Metadata inspector with clip summary, culling status, technical metadata, production metadata, automatic tags, and source/destination paths.
-- Local rule-based analysis foundation for automatic tags such as 4K, 60p, Has Audio, No Audio, Short Clip, Long Clip, Large File, and Sony.
-
-### Ingest workflow
-
-1. Choose an SD card, mounted drive, or folder as the source.
-2. SlateBox scans common video formats and prioritizes Sony `PRIVATE/M4ROOT/CLIP` folders when found.
-3. Choose a destination parent folder and enter a project folder name plus an optional shoot/subfolder name.
-4. Pick flat or source-preserving folder structure, proxy inclusion, verification mode, and thumbnail quality.
-5. Start copy and keep the SD card and destination drive connected until ingest completes.
-
-### Keyboard shortcuts
-
-- Space: Preview selected clip.
-- 1–5: Set star rating (5 = Favorite/Best Keep, 4 = Keep, 3 = Maybe, 2 = Maybe-Low, 1 = Reject).
-- 0: Clear rating / Unrated.
-- Left / Right Arrow: Select previous or next clip.
-- Command-Click: Add or remove a clip from the multi-selection.
-- Shift-Click: Select a range of visible clips.
-- Command-A: Select all visible clips.
-- Command-R: Reveal selected clip(s) in Finder.
-- Escape: Close preview, or clear the multi-selection.
+The library uses a compact sidebar, a flexible clip grid as the main workspace, and a collapsible inspector (toggled from the toolbar; the preference persists).
 
 ### Ratings and culling
 
-Clips carry both a fast Keep/Maybe/Reject cull status and a 0–5 star rating. Setting a rating updates the status automatically (0 → Unrated, 1 → Reject, 2–3 → Maybe, 4–5 → Keep). Setting a status directly only adjusts the rating when the two disagree, so a 5-star clip marked Keep stays 5-star. Old project files without ratings open normally; ratings are derived from the saved cull status.
+Clips carry both a Keep/Maybe/Reject cull status and a 0–5 star rating, kept in sync:
 
-### Multi-select, batch actions, and bulk metadata
+| Rating | Status |
+|---|---|
+| 0 | Unrated |
+| 1 | Reject |
+| 2–3 | Maybe |
+| 4–5 | Keep |
 
-The library grid supports Command-click, Shift-click range select, Command-A, and Escape. Batch actions apply to the whole selection: status/rating, add/remove tags, move to folder, thumbnails, and Batch Edit Metadata (tags append/replace/remove, people, location, scene, shot type, notes, and flag set/clear).
-
-The sidebar intentionally keeps workflow filters small: Unrated, Keep, Maybe, Reject, and Needs Review. Use project folders for the editing structure you want to see in Finder and tags for descriptive facets such as Sermon, B-Roll, 4K, or Faces. This avoids turning every automatically detected property into a permanent sidebar folder.
-
-### Local responsiveness
-
-Library thumbnails are decoded once into a bounded in-memory cache rather than repeatedly from disk during SwiftUI redraws. Preview navigation prewarms the adjacent copied clips’ AVFoundation metadata, so Next/Previous can start sooner without generating proxies or reading a source card.
-
-### Export and editor handoff
-
-The Export menu copies clips into an editor-ready folder: Keeps, Keep + Maybe, 4–5 star clips, or the current selection. Exports copy — never move — from copied project media only, never overwrite (safe `_1`, `_2` duplicate names), show progress and a summary, and reveal the folder when done. CSV reports cover the full clip list, keep list, reject list, verification, and analysis; project metadata exports as JSON.
-
-The Batch menu can also create symbolic-link aliases in `Aliases/<name>/` for the selected copied clips. The links are organization only: they never point to source-card media, and removing an alias never alters the copied original. The Export menu includes folder handoff choices for Finder, DaVinci Resolve, and Final Cut Pro; SlateBox tells you when a requested editor is not installed.
-
-### Analysis-assisted culling
-
-Local analysis rolls focus, stability, and exposure into a 0–100 quality score shown on clip cards and sortable via "Analysis Quality". Each analyzed clip gets a suggested 0–5 rating and, where warranted, "Top Pick Suggestion" / "Social Pick Suggestion" tags with matching smart folders. Suggestions are never applied automatically — apply them per clip from the inspector or in bulk via "Apply Suggested Ratings to Unrated Clips", which never overwrites a rating a person set.
-
-### Sony a7R V workflow
-
-SlateBox detects Sony-style media layouts and surfaces `PRIVATE/M4ROOT/CLIP` as the primary video folder. Proxy inclusion can be enabled for workflows that need Sony proxy files from adjacent proxy folders. Strong SHA256 verification is available, but fast size verification is the default for large 4K60 10-bit footage because hashing source and destination can be slow.
-
-### Safety rules
-
-- SlateBox copies by default; it does not delete camera originals.
-- Export-to-edit actions should copy files and avoid overwriting existing filenames.
-- Production metadata is saved to the SlateBox project JSON, not written into MP4 or MOV media files.
-- Keep cards and drives connected until ingest completion and verification are finished.
-
-### Metadata behavior
-
-Project and clip metadata are stored in `.clipvault-project.json`. Clip metadata includes cull status, production tags, people, location, scene, shot type, notes, favorites, B-roll, sermon, interview, and social candidate flags. Automatic tags are rule-based and local only.
-
-### Export behavior
-
-SlateBox includes menu actions for Clip Report CSV, Keep List CSV, and Project Metadata JSON. CSV reports include filenames, cull status, duration, file size, resolution, frame rate, codec, tags, notes, source path, and destination path.
-
-### Known limitations
-
-- The logo is a polished SwiftUI placeholder and not a final brand asset.
-- Editor-ready folder copies are implemented; metadata-rich FCPXML/Resolve project interchange is still planned.
-- Local analysis is rule-based only; no cloud AI and no heavy Core ML model are included.
-- Folder delete removes the folder assignment from the project metadata only; it does not delete media files.
-
-## 2026 SlateBox workflow update
-
-### Camera card workflows
-
-- **Sony cards:** SlateBox detects `PRIVATE/M4ROOT/CLIP` and scans full-resolution clips there. Sony proxy files in `PRIVATE/M4ROOT/SUB` remain skipped by default unless proxy ingest is enabled.
-- **Canon/DCF cards:** SlateBox detects a root `DCIM` folder, recursively scans Canon/DCF video folders, and imports video-oriented formats such as `.MP4`, `.MOV`, and `.CRM`. Photo and sidecar formats such as `.JPG`, `.CR3`, and `.THM` are ignored for this pass.
-- **Generic folders:** If no known camera structure is detected, SlateBox performs a recursive video scan.
-
-### Folder structure options
-
-- **Flat:** Copies detected videos directly into the project or shoot folder. This is the default for camera-card style ingest.
-- **Preserve Source Structure:** Keeps the source-relative folder layout inside the SlateBox project.
-
-### Transfer controls and destinations
-
-- Streaming copies now use `.clipvault-partial` temporary files and only move into place after the file is fully copied.
-- Ingest can be paused and resumed between copy chunks without destructive SD card operations.
-- The ingest sheet includes a primary destination plus optional Backup 1 and Backup 2 destination fields.
-- Backups are intended to be copied from the verified primary destination so the SD card is read once.
-- Mounted NAS folders are treated like normal folders. NAS transfers may be slower, and disconnects should be retried after the share is available again.
-- **Cloud-synced folder support** means local folders managed by iCloud Drive, Dropbox, Google Drive, or OneDrive. SlateBox does not upload directly to cloud providers in this pass.
+Setting a rating updates the status. Setting a status directly only adjusts the rating when the two disagree, so a 5-star clip marked Keep stays 5-star. Project files without ratings open normally, deriving ratings from the saved cull status.
 
 ### Keyboard shortcuts
 
-- Space: open preview for the selected clip, or play/pause while preview is focused.
-- Escape: close preview.
-- Right Arrow / Left Arrow: select next or previous visible clip.
-- 5: Keep.
-- 3: Maybe.
-- 1: Reject.
-- 0: Unrated.
+| Key | Action |
+|---|---|
+| `Space` | Preview selected clip, or play/pause in preview |
+| `5` | Favorite / Best Keep (5★) |
+| `4` | Keep (4★) |
+| `3` | Maybe (3★) |
+| `2` | Maybe – Low (2★) |
+| `1` | Reject (1★) |
+| `0` | Clear rating / Unrated |
+| `←` / `→` | Select previous or next clip |
+| `⌘ Click` | Add or remove a clip from the selection |
+| `⇧ Click` | Select a range of visible clips |
+| `⌘ A` | Select all visible clips |
+| `⌘ R` | Reveal selected clip(s) in Finder |
+| `Esc` | Close preview, or clear the multi-selection |
 
-### Local offline analysis
+### Filters, folders, and tags
 
-SlateBox includes a local analysis foundation with Off, Fast, Balanced, and Detailed modes. Analysis runs only on copied destination files, stores results in project JSON, and can populate smart folders and inspector fields for:
+The sidebar keeps workflow filters deliberately small: Unrated, Keep, Maybe, Reject, and Needs Review. Use project folders for the editing structure you want in Finder, and tags for descriptive facets such as Sermon, B-Roll, 4K, or Faces. This avoids turning every detected property into a permanent sidebar folder.
 
-- Possibly Out of Focus
-- Faces, Group Shots, Close Faces, Low Face Visibility
-- Possibly Shaky, Stable Clips, High Motion
-- Dark Clips, Bright Clips, Low Contrast
-- Failed Analysis
+Sorting covers Ingest Order, Shot Time, Filename, Created Date, Modified Date, Duration, File Size, Cull Status, Rating/Keep Status, and Camera Type, ascending or descending.
+
+**Shot Time** resolves in order: manual override, camera/media metadata, file creation date, file modified date, then remaining fallbacks. Clips store `capturedAt`, `shotStartTime`, `manualShotTime`, and `shotTimeSource`; the inspector can set, use current time for, or clear a manual override.
+
+### Batch actions
+
+The grid supports ⌘-click, ⇧-click range select, ⌘A, and Escape. Batch actions apply to the whole selection: status and rating, add/remove tags, move to folder, regenerate thumbnails, and Batch Edit Metadata (tags append/replace/remove, people, location, scene, shot type, notes, flags).
+
+### Partial libraries
+
+Partial ingest libraries show a banner with **Resume Ingest** and **Reveal Project Folder**. Resume retries every unfinished or failed clip. Pending clips stay in project metadata as non-destructive records and are not previewed unless a destination file exists.
+
+### Responsiveness
+
+Library thumbnails are decoded once into a bounded in-memory cache rather than repeatedly from disk during SwiftUI redraws. Preview navigation prewarms adjacent copied clips' AVFoundation metadata so Next/Previous starts sooner, without generating proxies or reading a source card.
+
+## Export and editor handoff
+
+The Export menu copies clips into an editor-ready folder: Keeps, Keep + Maybe, 4–5 star clips, or the current selection. Exports **copy** — never move — from copied project media only, never overwrite (safe `_1`, `_2` names), show progress and a summary, and reveal the folder when done. Folder handoff targets Finder, DaVinci Resolve, and Final Cut Pro; SlateBox says so when a requested editor is not installed.
+
+Reports: Clip Report CSV, Keep List CSV, Reject List CSV, verification and analysis CSVs, and project metadata JSON. CSV reports include filename, cull status, duration, file size, resolution, frame rate, codec, tags, notes, source path, and destination path.
+
+The Batch menu can create symbolic-link aliases in `Aliases/<name>/` for selected copied clips. Aliases are organization only: they never point at source-card media, and removing one never alters the copied original.
+
+## Local analysis
+
+Analysis runs offline with Apple APIs on **copied destination files only**, storing results in the project JSON. Modes are Off, Fast, Balanced, and Detailed. AVFoundation samples a small number of frames — Fast samples 3, Balanced samples 5 or roughly every 10 seconds, Detailed samples every 2–5 seconds with a cap. SlateBox never analyzes every frame.
+
+Detected properties populate inspector fields and smart folders:
+
+- **Focus** — Possibly Out of Focus
+- **Faces** — Faces, Group Shots, Close Faces, Low Face Visibility
+- **Stability** — Possibly Shaky, Stable Clips, High Motion
+- **Exposure** — Dark Clips, Bright Clips, Low Contrast, Balanced Exposure
+- **Rule-based tags** — 4K, 60p, Has Audio, No Audio, Short Clip, Long Clip, Large File, Sony
+- **Failed Analysis**
+
+Focus, stability, and exposure roll into a 0–100 quality score shown on clip cards and sortable via "Analysis Quality". Each analyzed clip gets a suggested 0–5 rating and, where warranted, Top Pick or Social Pick suggestion tags with matching smart folders.
+
+**Suggestions are never applied automatically.** Apply them per clip from the inspector, or in bulk via "Apply Suggested Ratings to Unrated Clips", which never overwrites a rating a person set.
+
+### Accuracy disclaimers
+
+These scores are advisory and can be wrong:
+
+- **Focus** is estimated from luminance edge energy, and can misread intentional soft focus, background shots, haze, or low-detail scenes.
+- **Exposure and contrast** are estimated from sampled frames; the tags are organizational hints, not judgements.
+- **Stability** is estimated from sampled frame differences and may flag intentional handheld movement or fast pans.
+- **White balance** is stored as an approximate Kelvin-style value when camera metadata is unavailable, shown as "Approx." with a confidence, because true white balance is often absent from MP4/MOV metadata.
+
+Session-relative comparison, which would reduce these false positives by flagging clips unlike the rest of their session rather than against fixed thresholds, is tracked in [#98](https://github.com/DurantTL/ClipVault/issues/98).
 
 ### Privacy
 
-All analysis is designed to run offline with Apple APIs. SlateBox does not upload frames, face data, or clip metadata to cloud AI services. Face features are for organization only; SlateBox does not automatically identify people by real name.
+All analysis runs offline. SlateBox does not upload frames, face data, clip metadata, or transcripts to any service. Vision detects face presence, approximate counts, close faces, group shots, low visibility, and an anonymous unique-face appearance estimate. **SlateBox does not identify people and does not assign real names.** Face features are for organization only.
 
-### Known limitations
+A local-only `LocalSuggestionService` architecture exists with a rule-based implementation and a guarded `FoundationModelSuggestionService` placeholder. SlateBox does not use cloud AI and does not require Foundation Models to build.
 
-- `.CRM` files may copy and verify even when AVFoundation preview is unavailable on the current Mac.
-- Local analysis scores are advisory and may flag intentionally soft, dark, or moving footage.
-- Direct Dropbox, Google Drive, and OneDrive upload APIs are not implemented; use their local synced folders instead.
+See [`docs/privacy.md`](docs/privacy.md).
 
-### Local placeholder app icons
+## Safety rules
 
-Codex does not commit generated icon PNGs because binary files are not supported by the patch system. To generate local placeholder app icons on a development Mac, run:
+These hold for every feature. They are enforced in code and covered by the CI test suite.
 
-```bash
-python3 Scripts/generate_app_icon.py
-```
+**Sources are read-only, always:**
 
-The generated PNG files are ignored by git at `ClipVault/Assets.xcassets/AppIcon.appiconset/*.png`. The SwiftUI in-app logo remains available without generated binary assets.
+- Never delete source files.
+- Never modify original media.
+- Never format or erase cards.
+- Never write thumbnails or metadata to source cards.
 
-## Session-based ingest review
+**Destinations are append-only:**
 
-SlateBox now reviews source media as detected sessions before copying. Sessions are grouped by recording/creation date with a 90-minute gap split so a day with multiple shoots can be selected in chunks. Session cards show the date/time range, clip count, total size, camera/card type (Sony, Canon/DCF, or Generic), and a lightweight thumbnail strip placeholder before ingest starts.
+- Never overwrite destination files; conflicts receive `_1`, `_2`, and so on.
+- Copy first, verify second.
+- Streaming copies write to `.clipvault-partial` and only move into place once fully copied.
 
-The ingest panel keeps rename off by default. When enabled, files are copied as `[Project Name]-[YYYY][MM][DD]-[Sequence].EXT`, and the original filename remains stored in `.clipvault-project.json`. Start Ingest stays disabled until there is a destination, project name, and at least one selected clip/session.
+**Copies are the working set:**
 
-A parallel option enables thumbnail generation during ingest. Analysis remains local-only and runs only after files are safely copied into the destination project. Post-ingest analysis and contact-sheet toggles are hidden until those pipelines are implemented.
+- New Ingest may generate temporary read-only thumbnails from source media for identification only, stored in `~/Library/Caches/ClipVault/IngestPreviewThumbnails/`.
+- Full playback, culling, rating, metadata editing, analysis, aliases, and export use copied project files only.
+- Library thumbnails are generated from copied files only, stored in `.clipvault-cache/thumbnails/`.
+- Production metadata is saved to the project JSON, not written into MP4 or MOV files.
+- Culling changes project metadata only. Physical sorting moves copied files inside the destination project folder, and undo restores clip path metadata.
+- Folder delete removes the folder assignment from project metadata; it does not delete media.
 
-## Preflight Media Check
+**Failures are contained:**
 
-Before copying, New Ingest can run a **Preflight Media Check** that compares the scanned source clips against the chosen destination, configured Backup 1/2 folders, and recent projects. Matching is by file identity (filename, size, modified date, and duration when available), never by folder location, so renamed project folders do not defeat detection. Each clip is classified as New, Already at Destination, Already in Project, Already on Backup, Possible Duplicate, or Same Name Different Size, and the ingest selection can automatically keep only new media when "skip already copied" handling is selected. Preflight never modifies media; ingest still uses safe `_1`/`_2` naming regardless of the result.
+- If copy or verification fails for one clip, the error is recorded on that clip and the remaining clips continue.
+- Failed clips do not run metadata extraction or thumbnail generation.
+- Thumbnail failure never invalidates a copied and verified clip; the UI falls back to a generic video icon.
+- Canceling during a large copy leaves copied files in place, leaves sources untouched, and marks the project incomplete.
 
-## Local analysis details and disclaimers
+## Recovery behavior
 
-Local analysis uses Apple APIs only: AVFoundation samples a small number of frames, Core Graphics/Core Image-style pixel metrics estimate focus, exposure, contrast, white balance, and motion, and Vision detects face rectangles. Fast mode samples 3 frames, Balanced samples 5 frames or roughly every 10 seconds, and Detailed samples every 2–5 seconds with a cap; SlateBox never analyzes every frame.
+- A known destination capacity smaller than the selected media blocks Start Ingest. When a NAS cannot report capacity, SlateBox shows an advisory rather than incorrectly blocking the job.
+- Low remaining space is called out before copying starts.
+- Disk-full, disconnected-volume, lost-permission, and read-only errors produce recovery instructions instead of raw filesystem messages.
+- Failed and canceled ingests stay marked incomplete and reopenable. Valid partial files are retained for a verified resume, and source media remains untouched.
+- Project-save and report-export failures appear in the library. A failed project save can be retried after reconnecting the volume or freeing space.
+- Backup folders are reopened through their security-scoped bookmarks. A backup problem is recorded as a warning while the verified primary copy remains usable.
 
-- **Focus:** sharpness is estimated from luminance edge energy. “Possibly Out of Focus” is advisory and can be wrong for intentional soft focus, background shots, haze, or low-detail scenes.
-- **Exposure/contrast:** brightness, dark pixels, bright pixels, and contrast spread are estimated from sampled frames. Tags such as Dark Clip, Bright Clip, Low Contrast, and Balanced Exposure are organizational hints only.
-- **White balance:** SlateBox stores an approximate Kelvin-style value when camera metadata is unavailable. Estimated values are shown as “Approx.” with confidence because true camera white balance is often not present in MP4/MOV metadata.
-- **Faces and privacy:** Vision detects face presence, approximate counts, close faces, group shots, low visibility, and an anonymous unique-face appearance estimate. SlateBox does not identify people, does not assign names, and does not upload face data.
-- **Stability:** motion and shake are estimated from sampled frame differences. “Possibly Shaky” is advisory and may flag intentional handheld movement or fast pans.
+> Per-destination copy and verification state — so a backup failure can never obscure which destinations actually hold a verified copy — is tracked in [#91](https://github.com/DurantTL/ClipVault/issues/91).
 
-## App icon generation
+Hardware recovery validation against real disconnects is tracked in [#55](https://github.com/DurantTL/ClipVault/issues/55); see [`TESTING.md`](TESTING.md).
 
-Binary PNG icon files are intentionally ignored so text-only changes can build in source control. To generate local Xcode app icons on a Mac, run:
+## Source permissions
 
-```bash
-python3 Scripts/generate_app_icon.py
-# or
-make icons
-```
+SlateBox is sandboxed:
 
-The script writes `ClipVault/Assets.xcassets/AppIcon.appiconset/icon_16x16_1x.png` through `icon_512x512_2x.png` plus `Contents.json`. Run `make icons`, then use **Product → Clean Build Folder** in Xcode and rebuild SlateBox. Generated PNGs are ignored by git.
+- Volumes macOS reports as removable (most SD cards) are read through the read-only removable-media entitlement and never show a SlateBox picker. macOS itself may show a one-time removable-volume prompt.
+- External SSDs, fixed card readers, network volumes, and manual folders need a one-time grant through the source picker. SlateBox saves a security-scoped bookmark so the grant survives relaunches.
+- Once granted in a session, a source stays granted for the life of the New Ingest view model. Swapping between cards and drives never re-prompts for an already-granted source.
+- Persisted bookmarks are refreshed while their security scope is active. A grant is re-requested only when a volume remounts at a path the saved bookmark does not cover.
+- Stale bookmarks self-heal: when a file server or volume is renamed, the bookmark is re-created from the resolved location and persisted.
 
-## Recent SlateBox Improvements
+## Project files
 
-### Ingest session and folder selection
-- The New Ingest screen now treats each `IngestSession.selected` value as the selection source of truth. The copy pipeline receives only the clips selected through session or individual file checkboxes.
-- Session cards include clear checkboxes, whole-card click toggling, selected/partial badges, accent borders, selected backgrounds, and selected count/size review totals.
-- Selection controls include Select All, Clear Selection, Select Today, Select New Only, Select by Date, and Reload.
-- The ingest setup panel exposes handling choices for already imported media: skip already copied, retry failed only, or include all with safe rename.
+Each project folder contains a hidden `.clipvault-project.json` metadata file. **Open Existing Project** accepts either the project folder or the hidden JSON file. Recent projects are stored as metadata-file paths and show a friendly error when an external SSD or NAS volume is unavailable.
 
-### Individual clip selection
-- Session cards can expand to show individual source files with checkboxes.
-- Selecting or clearing individual clips updates the session card state, selected clip count, and total selected size.
-- Partial selections are called out explicitly so ingesting one session no longer accidentally copies every scanned clip.
+Clip metadata includes cull status, rating, production tags, people, location, scene, shot type, notes, favorite/B-roll/sermon/interview/social flags, shot-time fields, and analysis results.
 
-### Library layout and partial libraries
-- The library uses a fixed compact sidebar, a flexible primary clip grid, and a bounded/collapsible inspector so the grid remains the main workspace after ingest.
-- A toolbar control shows or hides the inspector, and the preference is saved in user defaults.
-- Partial ingest libraries show a compact top banner with Resume Ingest and Reveal Project Folder actions. Resume retries every unfinished or failed clip.
-- Pending clips remain in the project metadata as non-destructive records and are not previewed unless a destination file exists.
+The project JSON carries a `schemaVersion` field so future migrations can be detected and handled safely. Older project files without `schemaVersion` remain openable with backward-compatible defaults. Codable unit tests protect project and clip JSON from breaking changes, including partial and canceled ingests that must stay reopenable.
 
-### Shot-time sorting and manual production time
-- Clips now store `capturedAt`, `shotStartTime`, `manualShotTime`, and `shotTimeSource` in `.clipvault-project.json` metadata.
-- Library sorting includes Ingest Order, Shot Time, Filename, Created Date, Modified Date, Duration, File Size, Cull Status, Rating/Keep Status, and Camera Type, plus Ascending/Descending order.
-- Shot Time uses a manual override first when present, then camera/media metadata, file creation, file modified date, and available fallback metadata.
-- The inspector shows Shot Time and source and allows setting, using current time for, or clearing a Manual Shot Time override.
+A written, versioned specification for this format is tracked in [#102](https://github.com/DurantTL/ClipVault/issues/102).
 
-### macOS 26 design and Apple Intelligence preparation
-- Design changes continue to use native SwiftUI/AppKit materials, accent-aware highlights, compact banners, and readable inspector cards with fallbacks that do not raise the deployment target.
-- macOS 26-only future hooks are guarded with `#available(macOS 26.0, *)`.
-- A local-only `LocalSuggestionService` architecture has been added with a rule-based implementation and a guarded `FoundationModelSuggestionService` placeholder. SlateBox does not use cloud AI, does not upload media, and does not require Foundation Models to build.
+### On-disk names
 
-### Compatibility and safety
-- SlateBox continues to use Apple APIs only and does not require FFmpeg.
-- Source media and SD-card contents are never modified or deleted.
-- App metadata remains in `.clipvault-project.json`; SlateBox does not write metadata into MP4/MOV files by default.
+The hidden identifiers — `.clipvault-project.json`, `.clipvault-cache/`, `.clipvault-partial`, and the `~/Library/Caches/ClipVault/` preview cache — intentionally keep the legacy `clipvault` spelling. They are **permanent format identifiers**, independent of the product name, so every existing project stays openable regardless of future renames. All are defined in one place, `AppBrand.swift`.
 
-## Project JSON Compatibility
+## Known limitations
 
-SlateBox stores project metadata in `.clipvault-project.json` files inside project folders. The project JSON now includes a `schemaVersion` field so future migrations can be detected and handled safely while preserving existing media and metadata.
+**Not implemented:**
 
-Older project files that do not include `schemaVersion` should remain openable with backward-compatible defaults for newer ingest, session, and metadata fields. Codable unit tests protect project and clip JSON from breaking changes, including partial or canceled ingests that must remain reopenable.
+- No menu-bar card status or safe-eject indicator ([#93](https://github.com/DurantTL/ClipVault/issues/93)) and no card lifecycle tracking ([#94](https://github.com/DurantTL/ClipVault/issues/94)).
+- No transcription or transcript search ([#100](https://github.com/DurantTL/ClipVault/issues/100)).
+- No audio analysis — current analysis covers video only ([#96](https://github.com/DurantTL/ClipVault/issues/96)).
+- No FCPXML or EDL project export; editor handoff is folder-based ([#74](https://github.com/DurantTL/ClipVault/issues/74), [#75](https://github.com/DurantTL/ClipVault/issues/75)).
+- No MHL export reachable from the UI. `MHLReportService` exists and is tested, but is not yet wired to a menu action ([#67](https://github.com/DurantTL/ClipVault/issues/67)).
+- No PDF reports ([#95](https://github.com/DurantTL/ClipVault/issues/95)); CSV and JSON only.
+- No contact sheets or filmstrips ([#68](https://github.com/DurantTL/ClipVault/issues/68)); one cached thumbnail per clip.
+- No proxy generation ([#106](https://github.com/DurantTL/ClipVault/issues/106)).
+- No cloud sync, cloud AI, editing timeline, SD formatting, permanent deletion, or multi-user collaboration. Direct Dropbox, Google Drive, and OneDrive upload APIs are not implemented — use their local synced folders.
+
+**Constraints:**
+
+- Preview, metadata, and thumbnail support depend on AVFoundation codecs available on the user's Mac. `.CRM` files may copy and verify even when preview is unavailable.
+- Recent projects reopen automatically only while the project folder, SSD, or NAS mount is available at the expected location or resolvable by bookmark.
+- The app icon and in-app logo are polished placeholders, not final brand assets ([#61](https://github.com/DurantTL/ClipVault/issues/61)).
+- Analysis is rule-based and Vision-based only; no cloud AI and no heavy Core ML model is included.
+
+## Documentation
+
+| Document | Purpose |
+|---|---|
+| [`ROADMAP.md`](ROADMAP.md) | Phases, priorities, and product direction |
+| [`TESTING.md`](TESTING.md) | Manual regression checklist and hardware validation |
+| [`NAMING.md`](NAMING.md) | Brand candidates, limits, and the rename process |
+| [`AGENTS.md`](AGENTS.md) | Contributor and agent rules |
+| [`CHANGELOG.md`](CHANGELOG.md) | Release history |
+| [`docs/privacy.md`](docs/privacy.md) | Privacy policy — local-first processing, face-data limits |
+| [`docs/support.md`](docs/support.md) | Contact, diagnostics, requirements |
+
+Issue [#83](https://github.com/DurantTL/ClipVault/issues/83) is the master tracker for Mac v1.

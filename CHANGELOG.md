@@ -30,6 +30,27 @@ All notable changes to this project are documented here. The format follows
   format identifiers are frozen regardless of future product renames.
 - Settings toggles without an implementation are hidden until their features
   exist.
+- `README.md` restructured from accreted release notes into a reference
+  document: duplicated sections merged, dated "polish pass" / "workflow
+  update" / "recent improvements" headings removed, the five separate
+  "Known limitations" lists consolidated into one, and unimplemented
+  capabilities linked to their tracking issues.
+- `ROADMAP.md` reordered around the trust layer and the safe-release wedge.
+  Adds Phase 3 (menu-bar card status and physical card lifecycle), a Portable
+  Core and Archive phase, audio and consistency analysis, and the three
+  remaining Phase 0 trust gates: destination-path containment, independent
+  per-destination state, and the full-content verification default.
+
+### Fixed (documentation)
+- Corrected contradictory keyboard-shortcut documentation. The README listed
+  two different mappings; the accurate one matches `ClipVaultApp.swift`
+  (5 = Favorite/Best Keep, 4 = Keep, 3 = Maybe, 2 = Maybe-Low, 1 = Reject,
+  0 = Unrated).
+- Resolved a conflict between the roadmap and the product plan over
+  transcription. It is a local, on-device capability, not an opt-in cloud
+  feature.
+- Documented that `MHLReportService` is implemented and tested but not yet
+  reachable from the UI, rather than implying MHL export ships today.
 
 ### Fixed
 - Failed ingests now keep `ingestIncomplete` set, and canceling a resumed
