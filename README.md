@@ -39,6 +39,8 @@ git tag v1.0.0 && git push origin v1.0.0
 
 The `Release SlateBox` GitHub Actions workflow builds a Release app, runs the test suite, packages a DMG, and publishes a GitHub Release with the DMG attached. Signing and notarization run automatically when the repository secrets `MACOS_CERTIFICATE_BASE64`, `MACOS_CERTIFICATE_PASSWORD`, `APPLE_ID`, `APPLE_TEAM_ID`, and `APPLE_APP_SPECIFIC_PASSWORD` are configured; without them the workflow still publishes an unsigned DMG for testing (right-click → Open on first launch). Changes are tracked in `CHANGELOG.md`.
 
+DMG builds can use **Help → Check for Updates…**, which queries GitHub Releases for a newer version (manual check only; no Sparkle auto-update).
+
 ## Help menu
 
 - **Welcome** reopens the first-launch onboarding walkthrough.

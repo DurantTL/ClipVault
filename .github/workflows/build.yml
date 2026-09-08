@@ -25,9 +25,13 @@ jobs:
           xcodebuild -version
           xcode-select -p
 
-      - name: Generate icons if script exists
+      - name: Generate placeholder icons if missing
         run: |
-          if [ -f Scripts/generate_app_icon.py ]; then
+          ICON_DIR="ClipVault/Assets.xcassets/AppIcon.appiconset"
+          if compgen -G "$ICON_DIR"/*.png > /dev/null; then
+            echo "Using committed App Icon PNGs in $ICON_DIR"
+          elif [ -f Scripts/generate_app_icon.py ]; then
+            echo "No committed PNGs; generating placeholders"
             python3 Scripts/generate_app_icon.py
           fi
 
