@@ -1,3 +1,5 @@
+import Foundation
+
 extension IngestService {
   /// Continues an incomplete project using the same streamed-copy and verification
   /// guarantees as a new ingest. Existing completed destination files are verified

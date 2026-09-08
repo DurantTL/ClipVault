@@ -1,3 +1,5 @@
+import Foundation
+
 extension IngestService {
   func placeholderClip(
     for video: SourceVideo,

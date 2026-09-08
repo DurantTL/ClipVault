@@ -1,3 +1,5 @@
+import Foundation
+
 extension IngestService {
   func ingest(
     name: String, shootName: String, source: URL, destination: URL, videos: [SourceVideo], bookmarks: (Data?, Data?),
