@@ -110,3 +110,9 @@ Still manual only (needs real media, hardware, or relaunch): thumbnail generatio
 - [ ] Clip Report / Keep List / Reject List CSVs export
 - [ ] Verification and Analysis report CSVs export
 - [ ] Source files are untouched after export
+
+## MHL reports (#67)
+
+- After a **strong** ingest/verify, confirm `Clip.checksum` is persisted (verification CSV / inspector).
+- Export MHL (service / follow-up UI): report files land under the project `.clipvault-cache/reports/` (or chosen export folder) - **never** on the source card.
+- Fast-only verifies must not produce an MHL success artifact; incomplete/failed clips must not appear as hashed entries.
