@@ -4,6 +4,13 @@
 
 SlateBox is a native macOS SwiftUI app for safe video ingest, preview, culling, and folder sorting. It copies video files from an SD card or source folder to a destination project folder, verifies the copies, generates thumbnails, and lets users review and sort the copied media without touching the original source.
 
+## Privacy & Support
+
+- [Privacy Policy](docs/privacy.md) — local-first processing, no cloud AI, face-data limits (App Store Privacy Policy URL will point at a hosted copy of this page).
+- [Support](docs/support.md) — contact, diagnostics, requirements (App Store Support URL will point at a hosted copy of this page).
+
+Public brand name is still TBD (candidates include Cullect, TakeHarbor, SlateBox, ClipVault). On-disk project identifiers keep the stable `clipvault` spelling; see `NAMING.md` and `AppBrand.swift`.
+
 
 ## System requirements and performance
 
