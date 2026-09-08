@@ -1,6 +1,6 @@
-
-# Generated local placeholder app icons (binary files are intentionally not committed)
-ClipVault/Assets.xcassets/AppIcon.appiconset/*.png
+# Local-only generated icons may still be produced by Scripts/generate_app_icon.py;
+# committed final App Icon PNGs live in AppIcon.appiconset and ARE tracked.
+# (Do not ignore ClipVault/Assets.xcassets/AppIcon.appiconset/*.png)
 
 # macOS
 .DS_Store
