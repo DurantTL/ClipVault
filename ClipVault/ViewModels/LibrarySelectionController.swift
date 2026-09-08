@@ -7,7 +7,7 @@ import Foundation
 final class LibrarySelectionController {
   private(set) var selectionAnchorID: UUID?
 
-  var activeSelectionIDs(selectedClipID: UUID?, selectedClipIDs: Set<UUID>) -> Set<UUID> {
+  func activeSelectionIDs(selectedClipID: UUID?, selectedClipIDs: Set<UUID>) -> Set<UUID> {
     selectedClipIDs.isEmpty ? Set(selectedClipID.map { [$0] } ?? []) : selectedClipIDs
   }
 
