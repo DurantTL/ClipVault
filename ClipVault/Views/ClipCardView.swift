@@ -25,7 +25,7 @@ struct ClipCardView: View {
         VStack {
           HStack {
             Spacer()
-            VerificationBadge(status: clip.verificationStatus)
+            DestinationVerificationBadge(clip: clip)
           }
           Spacer()
           if hovering {
@@ -160,6 +160,25 @@ struct StarRatingView: View {
             onRate?(star == rating ? 0 : star)
           }
       }
+    }
+  }
+}
+
+/// Shows per-destination verification when a clip has backups; otherwise the
+/// single verification badge.
+struct DestinationVerificationBadge: View {
+  let clip: Clip
+
+  var body: some View {
+    if let text = clip.destinationBadgeText {
+      Label(text, systemImage: clip.hasDestinationAttention ? "exclamationmark.triangle.fill" : "checkmark.seal.fill")
+        .font(.caption2.bold())
+        .padding(.horizontal, 7)
+        .padding(.vertical, 4)
+        .background(.thinMaterial, in: Capsule())
+        .padding(8)
+    } else {
+      VerificationBadge(status: clip.verificationStatus)
     }
   }
 }

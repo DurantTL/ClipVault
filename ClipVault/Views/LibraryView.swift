@@ -23,6 +23,8 @@ struct LibraryView: View {
         }
         if viewModel.project.ingestStatus != .complete {
           partialBanner
+        } else if viewModel.backupsNeedingRetry > 0 || viewModel.isRetryingBackups {
+          backupBanner
         }
         if let progress = viewModel.exportProgress {
           exportBanner(progress)
@@ -266,6 +268,26 @@ struct LibraryView: View {
     .padding(.horizontal, 16)
     .padding(.vertical, 10)
     .background(Color.red.opacity(0.10))
+  }
+
+  private var backupBanner: some View {
+    HStack(spacing: 12) {
+      Label(
+        "\(viewModel.backupsNeedingRetry) clip\(viewModel.backupsNeedingRetry == 1 ? "" : "s") missing a verified backup copy.",
+        systemImage: "exclamationmark.triangle.fill"
+      )
+      .foregroundStyle(.orange)
+      Spacer()
+      if viewModel.isRetryingBackups {
+        ProgressView()
+          .controlSize(.small)
+      }
+      Button("Retry Backups") { viewModel.retryBackups() }
+        .disabled(viewModel.isRetryingBackups)
+    }
+    .padding(.horizontal, 16)
+    .padding(.vertical, 10)
+    .background(Color.orange.opacity(0.12))
   }
 
   private var partialBanner: some View {

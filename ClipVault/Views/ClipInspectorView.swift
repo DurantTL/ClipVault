@@ -61,7 +61,13 @@ struct ClipInspectorView: View {
       InfoRow("Resolution", "\(clip.width.map(String.init) ?? "?") × \(clip.height.map(String.init) ?? "?")")
       InfoRow("Frame Rate", clip.frameRate.map { String(format: "%.2f", $0) } ?? "?")
       InfoRow("Codec", clip.codec ?? "Unavailable")
-      InfoRow("Verification", clip.verificationStatus.rawValue.capitalized)
+      if clip.destinationRecords.isEmpty {
+        InfoRow("Verification", clip.verificationStatus.rawValue.capitalized)
+      } else {
+        ForEach(clip.destinationRecords) { record in
+          InfoRow(record.role.label, record.statusText)
+        }
+      }
       InfoRow("Audio", clip.hasAudio == true ? "Has Audio" : "No Audio / Unknown")
       InfoRow("Shot Time", clip.effectiveShotTime.map { DateFormatter.localizedString(from: $0, dateStyle: .medium, timeStyle: .medium) } ?? "Unavailable")
       InfoRow("Shot Time Source", clip.manualShotTime == nil ? clip.shotTimeSource.label : ShotTimeSource.manual.label)

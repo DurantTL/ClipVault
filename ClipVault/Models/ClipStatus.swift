@@ -147,6 +147,58 @@ struct DestinationCopyRecord: Codable, Equatable, Identifiable {
   }
 }
 
+extension VerificationMethod {
+  /// User-facing wording. A size comparison is never described as a checksum.
+  var label: String {
+    switch self {
+    case .none: return "not verified"
+    case .sizeCheck: return "size check"
+    case .sha256: return "SHA256"
+    }
+  }
+}
+
+extension DestinationCopyRecord {
+  /// One-line status for the inspector, e.g. "Verified (SHA256)".
+  var statusText: String {
+    switch verificationState {
+    case .verified: return "Verified (\(verificationMethod.label))"
+    case .failed: return errorMessage.map { "Failed — \($0)" } ?? "Failed"
+    case .copied: return "Copied, not yet verified"
+    case .pending: return copyState == .copying ? "Copying…" : "Pending"
+    }
+  }
+}
+
+extension Clip {
+  /// Compact badge text when the clip has more than one destination, e.g.
+  /// "2/3 copies verified". `nil` when only the primary is tracked, in which
+  /// case the single verification badge is enough.
+  var destinationBadgeText: String? {
+    guard destinationRecords.count > 1 else { return nil }
+    let verified = verifiedDestinationCount
+    let total = destinationRecords.count
+    return verified == total ? "\(total) copies verified" : "\(verified)/\(total) copies verified"
+  }
+
+  /// True when any tracked destination failed or is not yet verified.
+  var hasDestinationAttention: Bool {
+    destinationRecords.contains { !$0.isVerified }
+  }
+}
+
+extension ClipVaultProject {
+  /// Clips with a verified primary that still lack a verified copy on one of
+  /// the configured backup destinations.
+  func clipsMissingBackups(configured: Set<DestinationRole>) -> Int {
+    guard !configured.isEmpty else { return 0 }
+    return clips.filter { clip in
+      clip.verificationStatus == .verified
+        && configured.contains { clip.destinationRecord(for: $0)?.isVerified != true }
+    }.count
+  }
+}
+
 enum VerificationMode: String, Codable, CaseIterable, Identifiable {
   case fast, strong
   var id: String { rawValue }

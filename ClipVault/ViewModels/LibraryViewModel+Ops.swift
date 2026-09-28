@@ -91,6 +91,32 @@ extension LibraryViewModel {
     }
   }
 
+  /// Clips whose primary is verified but that still lack a verified copy on a
+  /// configured backup destination.
+  var backupsNeedingRetry: Int {
+    let mode = UserDefaults.standard.string(forKey: "backupTransferMode") ?? "Primary only"
+    return project.clipsMissingBackups(configured: IngestService.configuredBackupRoles(mode: mode))
+  }
+
+  func retryBackups() {
+    guard !isRetryingBackups else { return }
+    Task {
+      isRetryingBackups = true
+      operationError = nil
+      canRetryProjectSave = false
+      defer { isRetryingBackups = false }
+      do {
+        project = try await ingestService.retryBackups(project: project, settings: AppSettings()) { _ in }
+        let remaining = backupsNeedingRetry
+        if remaining > 0 {
+          operationError = "\(remaining) clip\(remaining == 1 ? "" : "s") still need a backup copy. Reconnect the backup destination, then try again."
+        }
+      } catch {
+        operationError = StorageRecovery.message(for: error, operation: .backup)
+      }
+    }
+  }
+
   func revealProject() {
     NSWorkspace.shared.activateFileViewerSelecting([security.projectFolderURL(for: project)])
   }
