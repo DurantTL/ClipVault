@@ -73,6 +73,32 @@ final class PathValidationTests: XCTestCase {
     XCTAssertFalse(FileManager.default.fileExists(atPath: root.deletingLastPathComponent().appendingPathComponent("escape").path))
   }
 
+  // Uses a made-up top-level path so the result does not depend on which
+  // directories exist (or are symlinked) on the machine running the tests.
+  func testContainmentIsCaseInsensitive() {
+    let volume = URL(fileURLWithPath: "/ClipVaultTestVolume/Project")
+    XCTAssertTrue(SafeFilename.isContained(URL(fileURLWithPath: "/CLIPVAULTTESTVOLUME/project/Clip.mp4"), in: volume))
+    XCTAssertFalse(SafeFilename.isContained(URL(fileURLWithPath: "/ClipVaultTestVolume/Project2/Clip.mp4"), in: volume))
+  }
+
+  func testContainmentTreatsComposedAndDecomposedNamesAsEqual() {
+    let composed = URL(fileURLWithPath: "/ClipVaultTestVolume/Caf\u{00E9}")
+    let decomposed = URL(fileURLWithPath: "/ClipVaultTestVolume/Cafe\u{0301}/Clip.mp4")
+    XCTAssertTrue(SafeFilename.isContained(decomposed, in: composed))
+  }
+
+  func testThumbnailDirectoriesStayInsideTheirAccessRoot() {
+    let projectFolder = URL(fileURLWithPath: "/ClipVaultTestVolume/Project")
+    let custom = URL(fileURLWithPath: "/ClipVaultTestVolume/Thumbs")
+    for location in ProjectThumbnailStorageLocation.allCases {
+      let resolved = StoragePreferences.projectThumbnailDirectory(
+        location: location, projectID: UUID(), projectFolder: projectFolder, customFolder: custom)
+      XCTAssertTrue(
+        SafeFilename.isContained(resolved.directoryURL, in: resolved.accessURL),
+        "\(location) thumbnails escape their access root")
+    }
+  }
+
   func testContainmentFollowsSymlinks() throws {
     let outside = FileManager.default.temporaryDirectory
       .appendingPathComponent("clipvault-outside-\(UUID().uuidString)", isDirectory: true)
