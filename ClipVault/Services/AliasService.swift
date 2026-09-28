@@ -42,6 +42,7 @@ final class AliasService {
     }
 
     do {
+      try SafeFilename.assertContained(folder, in: aliasesFolder(in: projectFolder))
       try fileManager.createDirectory(at: folder, withIntermediateDirectories: true)
     } catch {
       summary.failedCount = items.count

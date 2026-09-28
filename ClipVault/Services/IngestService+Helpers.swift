@@ -16,7 +16,10 @@ extension IngestService {
     let outputFilename = outputFilename(for: video, projectName: projectName, sequence: sequence, rename: rename)
     let cleanShootName = SafeFilename.safeFolderName(shootName)
     let flatRelativePath = cleanShootName.isEmpty ? outputFilename : "\(cleanShootName)/\(outputFilename)"
-    let rel = preserveSourceStructure && !rename ? video.relativePath : flatRelativePath
+    var rel = preserveSourceStructure && !rename ? video.relativePath : flatRelativePath
+    if !SafeFilename.isContained(projectFolder.appendingPathComponent(rel), in: projectFolder) {
+      rel = outputFilename
+    }
     let destURL = SafeFilename.uniqueURL(
       for: projectFolder.appendingPathComponent(rel),
       reserving: &reservedDestinationPaths
@@ -129,6 +132,7 @@ extension IngestService {
             .appendingPathComponent(projectFolder.lastPathComponent, isDirectory: true)
             .appendingPathComponent(relativePath)
         )
+        try SafeFilename.assertContained(destination, in: root)
         try FileManager.default.createDirectory(
           at: destination.deletingLastPathComponent(),
           withIntermediateDirectories: true

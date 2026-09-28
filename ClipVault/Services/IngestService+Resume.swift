@@ -59,6 +59,7 @@ extension IngestService {
           }
 
           do {
+            try SafeFilename.assertContained(destination, in: projectFolder)
             try FileManager.default.createDirectory(
               at: destination.deletingLastPathComponent(),
               withIntermediateDirectories: true

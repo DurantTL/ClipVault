@@ -13,6 +13,7 @@ final class FileMoveService {
     try security.withAccess(to: projectFolder) {
       let targetDir = projectFolder.appendingPathComponent(
         SafeFilename.safeFolderName(folder), isDirectory: true)
+      try SafeFilename.assertContained(targetDir, in: projectFolder)
       try FileManager.default.createDirectory(at: targetDir, withIntermediateDirectories: true)
       let from = URL(fileURLWithPath: clip.currentPath)
       let to = SafeFilename.uniqueURL(for: targetDir.appendingPathComponent(clip.currentFilename))

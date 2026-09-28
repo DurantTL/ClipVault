@@ -70,6 +70,31 @@ final class IngestServiceTests: XCTestCase {
     return (project, service)
   }
 
+  func testIngestRejectsTraversalProjectNameAndWritesNothingOutside() async throws {
+    let videos = [try addSourceVideo("C0001.MP4")]
+    let service = IngestService()
+    do {
+      _ = try await service.ingest(
+        name: "../Escaped",
+        shootName: "",
+        source: sourceRoot,
+        destination: destinationRoot,
+        videos: videos,
+        bookmarks: (nil, nil),
+        settings: makeSettings(),
+        cameraCardMetadata: IngestCameraCardMetadata(),
+        progress: { _ in }
+      )
+      XCTFail("Expected a path validation error")
+    } catch let error as PathValidationError {
+      XCTAssertEqual(error, .invalidCharacters("Project name"))
+    }
+    XCTAssertFalse(
+      FileManager.default.fileExists(atPath: directory.appendingPathComponent("Escaped").path))
+    let contents = try FileManager.default.contentsOfDirectory(atPath: destinationRoot.path)
+    XCTAssertTrue(contents.isEmpty)
+  }
+
   func testIngestCopiesVerifiesAndStaysReopenable() async throws {
     let videos = [
       try addSourceVideo("C0001.MP4"),

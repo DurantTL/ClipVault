@@ -54,6 +54,25 @@ final class PathValidationTests: XCTestCase {
     XCTAssertFalse(SafeFilename.isContained(URL(fileURLWithPath: root.path + "-sibling/x"), in: root))
   }
 
+  func testAssertContainedThrowsWhenEscaping() {
+    XCTAssertNoThrow(try SafeFilename.assertContained(root.appendingPathComponent("a/b"), in: root))
+    XCTAssertThrowsError(try SafeFilename.assertContained(root.appendingPathComponent("../b"), in: root)) {
+      XCTAssertEqual($0 as? PathValidationError, .escapesDestination)
+    }
+  }
+
+  func testAliasFolderNameCannotEscapeAliasesFolder() throws {
+    let media = root.appendingPathComponent("clip.mp4")
+    try Data([1]).write(to: media)
+    let clip = Clip(
+      originalSourcePath: "/src/clip.mp4", originalFilename: "clip.mp4",
+      currentPath: media.path, currentFilename: "clip.mp4", relativePath: "clip.mp4", fileSize: 1)
+    let summary = AliasService().createAliases(
+      named: "../../escape", for: [(clip: clip, mediaURL: media)], projectFolder: root)
+    XCTAssertTrue(SafeFilename.isContained(summary.aliasesFolder, in: root.appendingPathComponent("Aliases")))
+    XCTAssertFalse(FileManager.default.fileExists(atPath: root.deletingLastPathComponent().appendingPathComponent("escape").path))
+  }
+
   func testContainmentFollowsSymlinks() throws {
     let outside = FileManager.default.temporaryDirectory
       .appendingPathComponent("clipvault-outside-\(UUID().uuidString)", isDirectory: true)

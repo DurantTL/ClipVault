@@ -83,6 +83,11 @@ enum SafeFilename {
     return path == rootPath || path.lowercased().hasPrefix((rootPath + "/").lowercased())
   }
 
+  /// Throws `PathValidationError.escapesDestination` unless `url` resolves inside `root`.
+  static func assertContained(_ url: URL, in root: URL) throws {
+    guard isContained(url, in: root) else { throw PathValidationError.escapesDestination }
+  }
+
   private static func resolvedPath(_ url: URL) -> String {
     var existing = url.standardizedFileURL
     var trailing: [String] = []

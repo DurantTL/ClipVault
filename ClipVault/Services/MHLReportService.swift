@@ -111,6 +111,7 @@ final class MHLReportService {
           let filename = "\(safeProject)_\(safeLabel)_\(stamp).mhl"
           let target = SafeFilename.uniqueURL(for: outputRoot.appendingPathComponent(filename))
 
+          try SafeFilename.assertContained(target, in: outputRoot)
           try Self.assertSafeOutputDirectory(
             target.deletingLastPathComponent(),
             clips: clips
