@@ -25,6 +25,13 @@ jobs:
     # Pinned so releases are not affected by silent runner image changes.
     runs-on: macos-15
 
+    # The `secrets` context is not available in step-level `if:` conditions, so
+    # presence flags are computed here (the env context allows secrets) and the
+    # steps test `env.HAS_*`. Only booleans are exposed, never the secret values.
+    env:
+      HAS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE_BASE64 != '' }}
+      HAS_NOTARY_CREDENTIALS: ${{ secrets.MACOS_CERTIFICATE_BASE64 != '' && secrets.APPLE_ID != '' && secrets.APPLE_TEAM_ID != '' && secrets.APPLE_APP_SPECIFIC_PASSWORD != '' }}
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -78,7 +85,7 @@ jobs:
             test
 
       - name: Import signing certificate
-        if: ${{ secrets.MACOS_CERTIFICATE_BASE64 != '' }}
+        if: env.HAS_CERTIFICATE == 'true'
         env:
           MACOS_CERTIFICATE_BASE64: ${{ secrets.MACOS_CERTIFICATE_BASE64 }}
           MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
@@ -96,7 +103,7 @@ jobs:
           rm "$RUNNER_TEMP/certificate.p12"
 
       - name: Sign app (Developer ID, hardened runtime)
-        if: ${{ secrets.MACOS_CERTIFICATE_BASE64 != '' }}
+        if: env.HAS_CERTIFICATE == 'true'
         run: |
           codesign --force --options runtime --timestamp \
             --entitlements ClipVault/ClipVault.entitlements \
@@ -118,7 +125,7 @@ jobs:
         # Notarization requires a Developer ID-signed app, so the certificate
         # gates this step too; notary credentials alone must not break the
         # unsigned-DMG fallback.
-        if: ${{ secrets.MACOS_CERTIFICATE_BASE64 != '' && secrets.APPLE_ID != '' && secrets.APPLE_TEAM_ID != '' && secrets.APPLE_APP_SPECIFIC_PASSWORD != '' }}
+        if: env.HAS_NOTARY_CREDENTIALS == 'true'
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
@@ -134,10 +141,8 @@ jobs:
       - name: Publish GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
-          # Presence flags only; the secret values themselves stay scoped to
-          # the import and notarize steps.
-          SIGNED: ${{ secrets.MACOS_CERTIFICATE_BASE64 != '' }}
-          NOTARIZED: ${{ secrets.MACOS_CERTIFICATE_BASE64 != '' && secrets.APPLE_ID != '' && secrets.APPLE_TEAM_ID != '' && secrets.APPLE_APP_SPECIFIC_PASSWORD != '' }}
+          SIGNED: ${{ env.HAS_CERTIFICATE }}
+          NOTARIZED: ${{ env.HAS_NOTARY_CREDENTIALS }}
         run: |
           if [ "$SIGNED" = "true" ]; then
             SIGNING_NOTE="This build is Developer ID signed."
