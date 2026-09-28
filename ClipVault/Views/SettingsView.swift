@@ -107,7 +107,7 @@ struct SettingsView: View {
       settingsCard("Ingest Defaults") {
         settingRow(
           "Verification mode",
-          description: "Fast compares file sizes. Strong verification also checks file contents."
+          description: "Fast compares file sizes only: it catches missing or truncated copies but not corruption that keeps the file length. Strong SHA256 compares file contents and is required for MHL reports."
         ) {
           Picker("", selection: $settings.verificationModeRaw) {
             ForEach(VerificationMode.allCases) { Text($0.label).tag($0.rawValue) }

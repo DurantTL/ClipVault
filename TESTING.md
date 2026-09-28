@@ -109,6 +109,9 @@ Still manual only (needs real media, hardware, or relaunch): thumbnail generatio
 - [ ] Exporting with no matching clips shows an explanation instead of doing nothing
 - [ ] Clip Report / Keep List / Reject List CSVs export
 - [ ] Verification and Analysis report CSVs export
+- [ ] Verification Report CSV shows a `verification method` column (`size check` / `SHA256`) and per-backup status
+- [ ] Clip cards read `Verified · size check` in Fast mode and `Verified · SHA256` in Strong mode
+- [ ] MHL export (once wired to the UI, #67) writes no entry for a backup that was only size checked
 - [ ] Source files are untouched after export
 
 ## MHL reports (#67)
@@ -116,3 +119,11 @@ Still manual only (needs real media, hardware, or relaunch): thumbnail generatio
 - After a **strong** ingest/verify, confirm `Clip.checksum` is persisted (verification CSV / inspector).
 - Export MHL (service / follow-up UI): report files land under the project `.clipvault-cache/reports/` (or chosen export folder) - **never** on the source card.
 - Fast-only verifies must not produce an MHL success artifact; incomplete/failed clips must not appear as hashed entries.
+
+## Verification throughput (fill in on real media)
+
+Not yet measured. On a Mac with representative 4K60 10-bit media, ingest the same card in **Fast size check** and **Strong SHA256** and record copy+verify throughput here (chip, source/destination media, file sizes, MB/s for each mode). Do not estimate.
+
+| Date | Mac | Source → destination | Fast (MB/s) | Strong SHA256 (MB/s) |
+|---|---|---|---|---|
+| | | | | |

@@ -57,6 +57,11 @@ All notable changes to this project are documented here. The format follows
   (`defaults write <bundle id> previewDebugLogging -bool YES` to enable).
 
 ### Changed
+- Verification stays on the fast size check by default, but the guarantee is now
+  explicit everywhere: clip cards read "Verified · size check" or
+  "Verified · SHA256", the Verification Report CSV gains method and per-backup
+  columns, and MHL export lists a destination only for clips whose copy there
+  was verified with SHA256.
 - All user-visible brand strings flow through `AppBrand`; hidden on-disk
   format identifiers are frozen regardless of future product renames.
 - Settings toggles without an implementation are hidden until their features

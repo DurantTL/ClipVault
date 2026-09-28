@@ -177,6 +177,18 @@ struct DestinationVerificationBadge: View {
         .padding(.vertical, 4)
         .background(.thinMaterial, in: Capsule())
         .padding(8)
+    } else if clip.verificationStatus == .verified {
+      // Say which guarantee this is: a size check is not a content check.
+      let isChecksum = clip.primaryVerificationMethodLabel == VerificationMethod.sha256.label
+      Label(
+        "Verified · \(clip.primaryVerificationMethodLabel)",
+        systemImage: isChecksum ? "checkmark.seal.fill" : "checkmark.circle"
+      )
+      .font(.caption2.bold())
+      .padding(.horizontal, 7)
+      .padding(.vertical, 4)
+      .background(.thinMaterial, in: Capsule())
+      .padding(8)
     } else {
       VerificationBadge(status: clip.verificationStatus)
     }

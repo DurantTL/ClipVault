@@ -181,6 +181,16 @@ extension Clip {
     return verified == total ? "\(total) copies verified" : "\(verified)/\(total) copies verified"
   }
 
+  /// How the primary copy was verified, in words that never call a size
+  /// comparison a checksum: "SHA256", "size check", or "not verified".
+  var primaryVerificationMethodLabel: String {
+    guard verificationStatus == .verified else { return VerificationMethod.none.label }
+    if let record = destinationRecord(for: .primary), record.isVerified {
+      return record.verificationMethod.label
+    }
+    return (checksum ?? "").isEmpty ? VerificationMethod.sizeCheck.label : VerificationMethod.sha256.label
+  }
+
   /// True when any tracked destination failed or is not yet verified.
   var hasDestinationAttention: Bool {
     destinationRecords.contains { !$0.isVerified }

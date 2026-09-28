@@ -5,6 +5,10 @@ import Foundation
 struct MHLDestination: Equatable, Sendable {
   var label: String
   var rootURL: URL
+  /// Which copy this root holds. When set, only clips whose record for that
+  /// destination is SHA256-verified are listed; a backup that was only size
+  /// checked never gets a hash entry. `nil` keeps the legacy behavior.
+  var role: DestinationRole? = nil
 }
 
 struct MHLExportOptions: Equatable, Sendable {
@@ -63,6 +67,29 @@ final class MHLReportService {
     return true
   }
 
+  /// Per-destination eligibility: the destination's own record must be verified
+  /// with SHA256 and carry a checksum. Primary falls back to the aggregate
+  /// fields for clips that predate per-destination records.
+  static func isEligible(_ clip: Clip, for role: DestinationRole) -> Bool {
+    guard let record = clip.destinationRecord(for: role) else {
+      return role == .primary && isEligible(clip)
+    }
+    return record.isVerified && record.verificationMethod == .sha256 && !(record.checksum ?? "").isEmpty
+  }
+
+  /// Entries for one destination's MHL file, using that destination's checksum.
+  static func entries(for destination: MHLDestination, from clips: [Clip], legacyEligible: [Clip]) -> [Clip] {
+    guard let role = destination.role else { return legacyEligible }
+    return clips.compactMap { clip in
+      guard isEligible(clip, for: role) else { return nil }
+      var entry = clip
+      if let checksum = clip.destinationRecord(for: role)?.checksum, !checksum.isEmpty {
+        entry.checksum = checksum
+      }
+      return entry
+    }
+  }
+
   func generate(
     project: ClipVaultProject,
     clips: [Clip],
@@ -96,10 +123,15 @@ final class MHLReportService {
         for destination in destinations {
           if Task.isCancelled { throw MHLReportError.canceled }
 
+          let destinationClips = Self.entries(for: destination, from: clips, legacyEligible: eligible)
+          // Never write an empty (or dishonest) file for a destination that has
+          // no hash-verified copies.
+          if destinationClips.isEmpty { continue }
+
           let xml = Self.buildClassicMHLXML(
             projectName: project.name,
             destinationLabel: destination.label,
-            clips: eligible,
+            clips: destinationClips,
             destinationRoot: destination.rootURL,
             createdAt: options.now,
             hostname: options.hostname,
@@ -121,7 +153,7 @@ final class MHLReportService {
             MHLExportFileSummary(
               destinationLabel: destination.label,
               url: target,
-              entryCount: eligible.count
+              entryCount: destinationClips.count
             )
           )
         }
