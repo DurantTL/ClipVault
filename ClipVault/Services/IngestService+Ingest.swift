@@ -10,8 +10,12 @@ extension IngestService {
     self.copyService.isPaused = { [weak self] in self?.isPausedNow ?? false }
     return try await self.security.withAccessAsync(to: source) {
       try await self.security.withAccessAsync(to: destination) {
+        let safeName = try SafeFilename.validatedComponent(name, label: "Project name")
         let projectFolder = SafeFilename.uniqueURL(
-          for: destination.appendingPathComponent(name, isDirectory: true))
+          for: destination.appendingPathComponent(safeName, isDirectory: true))
+        guard SafeFilename.isContained(projectFolder, in: destination) else {
+          throw PathValidationError.escapesDestination
+        }
         try FileManager.default.createDirectory(
           at: projectFolder, withIntermediateDirectories: true)
         let bm = try? SecurityScopedBookmarkManager().bookmark(for: projectFolder)
@@ -24,7 +28,7 @@ extension IngestService {
               for: video,
               source: source,
               projectFolder: projectFolder,
-              projectName: name,
+              projectName: safeName,
               shootName: shootName,
               sequence: idx + 1,
               rename: settings.renameFilesDuringIngest,
@@ -35,7 +39,7 @@ extension IngestService {
           )
         }
         var project = ClipVaultProject(
-          name: name,
+          name: safeName,
           sourceBookmarkData: bookmarks.0,
           destinationBookmarkData: bookmarks.1,
           projectFolderBookmarkData: bm,

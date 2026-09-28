@@ -1,7 +1,7 @@
 import AVKit
 import Foundation
 
-final class PlayerViewModel: ObservableObject {
+@MainActor final class PlayerViewModel: ObservableObject {
   @Published var player: AVPlayer?
   @Published var errorMessage: String?
   private let assetCache = NSCache<NSURL, AVURLAsset>()
@@ -48,6 +48,7 @@ final class PlayerViewModel: ObservableObject {
     if let error = item.error {
       errorMessage = error.localizedDescription
     }
+    guard Log.previewDebugEnabled else { return }
     print("""
     Preview load: filename=\(clip.currentFilename), resolvedURL=\(url.path), fileExists=\(exists), copyStatus=\(clip.copyStatus.rawValue), verificationStatus=\(clip.verificationStatus.rawValue), thumbnailStatus=\(clip.thumbnailStatus.rawValue), avPlayerError=\(item.error?.localizedDescription ?? "none")
     """)

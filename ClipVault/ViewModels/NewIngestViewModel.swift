@@ -78,11 +78,28 @@ import Foundation
     refreshSources()
   }
 
+  /// Actionable message when the project or shoot name is unsafe; nil when valid.
+  var nameValidationError: String? {
+    do {
+      _ = try SafeFilename.validatedComponent(projectName, label: "Project name")
+      if !shootName.trimmingCharacters(in: .whitespaces).isEmpty {
+        _ = try SafeFilename.validatedComponent(shootName, label: "Shoot name")
+      }
+      return nil
+    } catch {
+      return error.localizedDescription
+    }
+  }
+
   var finalOutputURL: URL? {
-    guard let destinationURL else { return nil }
-    var url = destinationURL.appendingPathComponent(projectName, isDirectory: true)
-    if !shootName.trimmingCharacters(in: .whitespaces).isEmpty {
-      url.appendPathComponent(SafeFilename.safeFolderName(shootName), isDirectory: true)
+    guard let destinationURL, nameValidationError == nil,
+      let name = try? SafeFilename.validatedComponent(projectName)
+    else { return nil }
+    var url = destinationURL.appendingPathComponent(name, isDirectory: true)
+    if !shootName.trimmingCharacters(in: .whitespaces).isEmpty,
+      let shoot = try? SafeFilename.validatedComponent(shootName)
+    {
+      url.appendPathComponent(shoot, isDirectory: true)
     }
     return url
   }
@@ -184,6 +201,10 @@ import Foundation
   func start(settings: AppSettings) async -> ClipVaultProject? {
     guard let source = sourceURL, let destination = destinationURL else { return nil }
     error = nil
+    if let nameError = nameValidationError {
+      error = nameError
+      return nil
+    }
     guard hasSufficientDestinationCapacity else {
       error = destinationCapacityMessage
         ?? "The destination does not have enough free space for the selected clips."
