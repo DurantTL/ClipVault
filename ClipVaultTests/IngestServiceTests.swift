@@ -95,6 +95,53 @@ final class IngestServiceTests: XCTestCase {
     XCTAssertTrue(contents.isEmpty)
   }
 
+  func testRetryBackupsCopiesOnlyMissingBackupsAndKeepsPrimaryVerified() async throws {
+    let settings = makeSettings()
+    // AppSettings is backed by UserDefaults, so put the user's values back.
+    let previous = (
+      settings.backupTransferMode, settings.backupDestination1Path,
+      settings.backupDestination1BookmarkBase64
+    )
+    defer {
+      settings.backupTransferMode = previous.0
+      settings.backupDestination1Path = previous.1
+      settings.backupDestination1BookmarkBase64 = previous.2
+    }
+    let backupRoot = directory.appendingPathComponent("Backup", isDirectory: true)
+    settings.backupTransferMode = "Primary + Backup 1"
+    settings.backupDestination1Path = backupRoot.path
+    settings.backupDestination1BookmarkBase64 = ""
+
+    // Backup folder is missing at ingest time, so the backup fails but the
+    // primary must stay verified.
+    let (project, service) = try await ingest([try addSourceVideo("C0001.MP4")], settings: settings)
+    let first = try XCTUnwrap(project.clips.first)
+    XCTAssertEqual(first.verificationStatus, .verified)
+    XCTAssertEqual(first.destinationRecord(for: .primary)?.verificationState, .verified)
+    XCTAssertEqual(first.destinationRecord(for: .backup1)?.verificationState, .failed)
+    XCTAssertEqual(first.errorMessage?.hasPrefix("Primary verified. Backup warning:"), true)
+
+    // Reconnect the backup and retry: only the backup is copied.
+    try FileManager.default.createDirectory(at: backupRoot, withIntermediateDirectories: true)
+    let repaired = try await service.retryBackups(project: project, settings: settings, progress: { _ in })
+    let fixed = try XCTUnwrap(repaired.clips.first)
+    XCTAssertEqual(fixed.destinationRecord(for: .backup1)?.verificationState, .verified)
+    XCTAssertEqual(fixed.destinationRecord(for: .primary)?.verificationState, .verified)
+    XCTAssertEqual(fixed.verifiedDestinationCount, 2)
+    XCTAssertNil(fixed.errorMessage, "The stale backup warning is cleared once the backup verifies")
+    let projectFolderName = URL(fileURLWithPath: repaired.projectFolderPath).lastPathComponent
+    let backedUp = backupRoot.appendingPathComponent(projectFolderName).appendingPathComponent("C0001.MP4")
+    XCTAssertTrue(FileManager.default.fileExists(atPath: backedUp.path))
+
+    // A second retry must not re-copy a verified backup.
+    let stamp = fixed.destinationRecord(for: .backup1)?.updatedAt
+    let again = try await service.retryBackups(project: repaired, settings: settings, progress: { _ in })
+    XCTAssertEqual(again.clips.first?.destinationRecord(for: .backup1)?.updatedAt, stamp)
+    let copies = try FileManager.default.contentsOfDirectory(
+      atPath: backupRoot.appendingPathComponent(projectFolderName).path)
+    XCTAssertEqual(copies, ["C0001.MP4"])
+  }
+
   func testIngestCopiesVerifiesAndStaysReopenable() async throws {
     let videos = [
       try addSourceVideo("C0001.MP4"),

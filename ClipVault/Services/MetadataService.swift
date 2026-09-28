@@ -30,7 +30,11 @@ final class MetadataService {
         }
       } catch {
         clip.previewUnavailable = true
-        clip.errorMessage = "Copied and verified — preview unavailable on this Mac."
+        // Never replace an existing message (e.g. a backup warning) with this
+        // informational one; `previewUnavailable` already records the state.
+        if clip.errorMessage == nil {
+          clip.errorMessage = "Copied and verified — preview unavailable on this Mac."
+        }
       }
       do {
         let tracks = try await asset.loadTracks(withMediaType: .video)

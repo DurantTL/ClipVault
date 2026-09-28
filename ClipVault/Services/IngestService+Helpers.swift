@@ -77,11 +77,24 @@ extension IngestService {
     return "\(safeProject)-\(formatter.string(from: date))-\(String(format: "%04d", sequence)).\(video.url.pathExtension)"
   }
 
+  /// Backup destinations the current settings ask for.
+  static func configuredBackupRoles(for settings: AppSettings) -> Set<DestinationRole> {
+    switch settings.backupTransferMode {
+    case "Primary + Backup 1": return [.backup1]
+    case "Primary + Backup 1 + Backup 2": return [.backup1, .backup2]
+    default: return []
+    }
+  }
+
+  /// Copies the verified primary to the configured backups. `roles` limits the
+  /// work to specific destinations (used by resume so a verified backup is never
+  /// re-copied); `nil` means every configured backup.
   func copyBackupsIfNeeded(
     primaryFile: URL,
     projectFolder: URL,
     relativePath: String,
     settings: AppSettings,
+    roles: Set<DestinationRole>? = nil,
     progress: @escaping @MainActor (IngestProgress) -> Void
   ) async throws -> [BackupCopyResult] {
     typealias BackupConfiguration = (path: String, bookmark: String, persistKey: String)
@@ -113,6 +126,7 @@ extension IngestService {
     var results: [BackupCopyResult] = []
     for (index, backup) in backups.enumerated() {
       let role: DestinationRole = index == 0 ? .backup1 : .backup2
+      if let roles, !roles.contains(role) { continue }
       let label = role.label
       guard !backup.path.isEmpty else {
         results.append(BackupCopyResult(role: role, rootPath: "", warning: "\(label) is not configured."))
@@ -183,6 +197,76 @@ extension IngestService {
       }
     }
     return results
+  }
+}
+
+extension IngestService {
+  /// Copies only the backups that are missing or failed for clips whose primary
+  /// is verified, updating just those destinations' records. Verified
+  /// destinations are never re-copied. Returns early (leaving remaining clips
+  /// untouched) if the user cancels.
+  func retryIncompleteBackups(
+    project: inout ClipVaultProject,
+    projectFolder: URL,
+    settings: AppSettings,
+    progress: @escaping @MainActor (IngestProgress) -> Void
+  ) async throws {
+    let configured = Self.configuredBackupRoles(for: settings)
+    guard !configured.isEmpty else { return }
+    let warningPrefix = "Primary verified. Backup warning:"
+
+    for index in project.clips.indices {
+      if isCancelledNow { return }
+      var clip = project.clips[index]
+      guard clip.verificationStatus == .verified else { continue }
+      let missing = configured.filter { clip.destinationRecord(for: $0)?.isVerified != true }
+      guard !missing.isEmpty else { continue }
+      let primaryFile = URL(fileURLWithPath: clip.currentPath)
+      guard FileManager.default.fileExists(atPath: primaryFile.path) else { continue }
+
+      let results: [BackupCopyResult]
+      do {
+        results = try await copyBackupsIfNeeded(
+          primaryFile: primaryFile,
+          projectFolder: projectFolder,
+          relativePath: clip.relativePath,
+          settings: settings,
+          roles: missing,
+          progress: progress
+        )
+      } catch is CancellationError {
+        return
+      }
+      for result in results { clip.setDestinationRecord(result.record()) }
+      if let warning = results.combinedWarning {
+        clip.errorMessage = "\(warningPrefix) \(warning)"
+      } else if clip.errorMessage?.hasPrefix(warningPrefix) == true {
+        // Every requested backup is verified now; drop the stale warning.
+        clip.errorMessage = nil
+      }
+      project.clips[index] = clip
+      try store.save(project)
+    }
+  }
+
+  /// Retries incomplete backups on their own, without touching primary copies,
+  /// so a finished project with a backup warning can be repaired.
+  func retryBackups(
+    project: ClipVaultProject,
+    settings: AppSettings,
+    progress: @escaping @MainActor (IngestProgress) -> Void
+  ) async throws -> ClipVaultProject {
+    resetControlState()
+    copyService.isCancelled = { [weak self] in self?.isCancelledNow ?? false }
+    copyService.isPaused = { [weak self] in self?.isPausedNow ?? false }
+    let projectFolder = security.projectFolderURL(for: project)
+    return try await security.withAccessAsync(to: projectFolder) {
+      var updated = project
+      try await self.retryIncompleteBackups(
+        project: &updated, projectFolder: projectFolder, settings: settings, progress: progress)
+      try self.store.save(updated)
+      return updated
+    }
   }
 }
 

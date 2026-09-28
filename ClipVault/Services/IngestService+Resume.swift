@@ -115,6 +115,13 @@ extension IngestService {
           if resumed.ingestStatus == .canceled { break }
         }
 
+        // Primary copies are settled; now copy only the backups that are still
+        // missing or failed (verified destinations are left alone).
+        if resumed.ingestStatus != .canceled, !self.isCancelledNow {
+          try await self.retryIncompleteBackups(
+            project: &resumed, projectFolder: projectFolder, settings: settings, progress: progress)
+        }
+
         let wasCanceled = resumed.ingestStatus == .canceled || self.isCancelledNow
         self.refreshCounts(&resumed)
         if wasCanceled {
