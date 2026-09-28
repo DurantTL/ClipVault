@@ -8,6 +8,10 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- Library and inspector show per-destination status: clip cards with backups
+  show "n/m copies verified", the inspector lists each destination with its
+  verification method (size check vs SHA256), and a "Retry Backups" banner
+  repairs finished projects that are missing a verified backup.
 - Resume now copies only the backup destinations that are missing or failed
   for clips with a verified primary, never re-copying a verified destination,
   and clears a stale backup warning once the backup verifies. Also available

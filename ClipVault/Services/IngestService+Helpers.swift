@@ -79,7 +79,11 @@ extension IngestService {
 
   /// Backup destinations the current settings ask for.
   static func configuredBackupRoles(for settings: AppSettings) -> Set<DestinationRole> {
-    switch settings.backupTransferMode {
+    configuredBackupRoles(mode: settings.backupTransferMode)
+  }
+
+  static func configuredBackupRoles(mode: String) -> Set<DestinationRole> {
+    switch mode {
     case "Primary + Backup 1": return [.backup1]
     case "Primary + Backup 1 + Backup 2": return [.backup1, .backup2]
     default: return []

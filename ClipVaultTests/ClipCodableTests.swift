@@ -244,4 +244,67 @@ final class ClipCodableTests: XCTestCase {
     XCTAssertEqual(primary?.verificationMethod, VerificationMethod.none)
     XCTAssertEqual(primary?.errorMessage, "The destination is full.")
   }
+
+  // MARK: - Per-destination presentation
+
+  private func record(_ role: DestinationRole, verified: Bool, method: VerificationMethod = .sizeCheck) -> DestinationCopyRecord {
+    var record = DestinationCopyRecord(role: role)
+    record.copyState = verified ? .copied : .failed
+    record.verificationState = verified ? .verified : .failed
+    record.verificationMethod = verified ? method : .none
+    record.errorMessage = verified ? nil : "Backup 1 is unavailable."
+    return record
+  }
+
+  func testStatusTextNeverCallsSizeCheckAChecksum() {
+    XCTAssertEqual(record(.primary, verified: true, method: .sha256).statusText, "Verified (SHA256)")
+    XCTAssertEqual(record(.primary, verified: true, method: .sizeCheck).statusText, "Verified (size check)")
+    XCTAssertEqual(record(.backup1, verified: false).statusText, "Failed — Backup 1 is unavailable.")
+    var copying = DestinationCopyRecord(role: .backup2)
+    copying.copyState = .copying
+    XCTAssertEqual(copying.statusText, "Copying…")
+    XCTAssertEqual(DestinationCopyRecord(role: .backup2).statusText, "Pending")
+  }
+
+  func testBadgeTextOnlyAppearsWithMultipleDestinations() {
+    var clip = verifiedClip(checksum: nil)
+    clip.setDestinationRecord(record(.primary, verified: true))
+    XCTAssertNil(clip.destinationBadgeText, "Primary-only clips keep the single verification badge")
+    XCTAssertFalse(clip.hasDestinationAttention)
+
+    clip.setDestinationRecord(record(.backup1, verified: false))
+    XCTAssertEqual(clip.destinationBadgeText, "1/2 copies verified")
+    XCTAssertTrue(clip.hasDestinationAttention)
+
+    clip.setDestinationRecord(record(.backup1, verified: true))
+    XCTAssertEqual(clip.destinationBadgeText, "2 copies verified")
+    XCTAssertFalse(clip.hasDestinationAttention)
+  }
+
+  func testClipsMissingBackupsCountsOnlyVerifiedPrimariesLackingConfiguredBackups() {
+    var complete = verifiedClip(checksum: nil)
+    complete.setDestinationRecord(record(.primary, verified: true))
+    complete.setDestinationRecord(record(.backup1, verified: true))
+    var failedBackup = verifiedClip(checksum: nil)
+    failedBackup.setDestinationRecord(record(.primary, verified: true))
+    failedBackup.setDestinationRecord(record(.backup1, verified: false))
+    var noBackupYet = verifiedClip(checksum: nil)
+    noBackupYet.refreshPrimaryRecord(destinationPath: "/Projects/Event")
+    var primaryFailed = verifiedClip(checksum: nil)
+    primaryFailed.verificationStatus = .failed
+
+    let project = ClipVaultProject(
+      name: "Test", projectFolderPath: "/Projects/Event",
+      clips: [complete, failedBackup, noBackupYet, primaryFailed])
+
+    XCTAssertEqual(project.clipsMissingBackups(configured: [.backup1]), 2)
+    XCTAssertEqual(project.clipsMissingBackups(configured: [.backup1, .backup2]), 3)
+    XCTAssertEqual(project.clipsMissingBackups(configured: []), 0, "No backups configured means nothing is missing")
+  }
+
+  func testConfiguredBackupRolesFollowTransferMode() {
+    XCTAssertEqual(IngestService.configuredBackupRoles(mode: "Primary only"), [])
+    XCTAssertEqual(IngestService.configuredBackupRoles(mode: "Primary + Backup 1"), [.backup1])
+    XCTAssertEqual(IngestService.configuredBackupRoles(mode: "Primary + Backup 1 + Backup 2"), [.backup1, .backup2])
+  }
 }

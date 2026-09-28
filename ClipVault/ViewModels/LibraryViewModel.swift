@@ -108,6 +108,7 @@ struct BatchMetadataEdit {
   @Published var operationError: String?
   @Published internal(set) var canRetryProjectSave = false
   @Published internal(set) var isResumingIngest = false
+  @Published internal(set) var isRetryingBackups = false
 
   let store = ProjectStore()
   let mover = FileMoveService()
