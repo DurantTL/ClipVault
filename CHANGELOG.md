@@ -8,6 +8,11 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- Per-destination copy/verify records on every clip (primary, Backup 1,
+  Backup 2) with verification method, checksum, size, timestamp and error.
+  A backup failure never masks a verified primary, and a size-checked copy is
+  never labeled checksum-verified. Old projects derive the primary record from
+  their existing fields without data loss. (UI and resume-retry follow.)
 - Destination-capacity preflight with blocking for known insufficient space,
   low-space warnings, and a non-blocking advisory when a NAS cannot report capacity.
 - Actionable recovery messages for disk-full, disconnected-volume,

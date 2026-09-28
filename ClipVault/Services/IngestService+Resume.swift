@@ -93,10 +93,12 @@ extension IngestService {
               clip.checksum = checksum
             }
             clip.errorMessage = nil
+            clip.refreshPrimaryRecord(destinationPath: projectFolder.path, method: VerificationMethod(outcome.mode))
           } catch is CancellationError {
             clip.copyStatus = .pending
             clip.verificationStatus = .pending
             clip.errorMessage = "Ingest canceled safely. Resume to continue this copy."
+            clip.refreshPrimaryRecord(destinationPath: projectFolder.path)
             resumed.ingestStatus = .canceled
             resumed.ingestIncomplete = true
             resumed.canResumeIngest = true
@@ -104,6 +106,7 @@ extension IngestService {
             clip.copyStatus = .failed
             clip.verificationStatus = .failed
             clip.errorMessage = StorageRecovery.message(for: error, operation: .resumeIngest)
+            clip.refreshPrimaryRecord(destinationPath: projectFolder.path)
           }
           resumed.clips[index] = clip
           completedBytes += clip.expectedFileSize

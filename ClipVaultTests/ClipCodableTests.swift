@@ -96,4 +96,144 @@ final class ClipCodableTests: XCTestCase {
     XCTAssertEqual(decoded.automaticTags, [])
     XCTAssertEqual(decoded.customNotes, "")
   }
+
+  // MARK: - Per-destination records
+
+  private func verifiedClip(checksum: String?) -> Clip {
+    var clip = Clip(
+      originalSourcePath: "/Volumes/CARD/A001.MP4", originalFilename: "A001.MP4",
+      currentPath: "/Projects/Event/A001.MP4", currentFilename: "A001.MP4",
+      relativePath: "A001.MP4", fileSize: 4096)
+    clip.copyStatus = .copied
+    clip.verificationStatus = .verified
+    clip.checksum = checksum
+    return clip
+  }
+
+  func testDestinationRecordsRoundTrip() throws {
+    var clip = verifiedClip(checksum: "abc123")
+    clip.refreshPrimaryRecord(destinationPath: "/Projects/Event", method: .sha256)
+    var backup = DestinationCopyRecord(role: .backup1)
+    backup.destinationPath = "/Volumes/Backup"
+    backup.copyState = .copied
+    backup.verificationState = .verified
+    backup.verificationMethod = .sizeCheck
+    backup.byteSize = 4096
+    clip.setDestinationRecord(backup)
+
+    let decoded = try decoder().decode(Clip.self, from: try encoder().encode(clip))
+
+    XCTAssertEqual(decoded.destinationRecords, clip.destinationRecords)
+    XCTAssertEqual(decoded.destinationRecord(for: .primary)?.verificationMethod, .sha256)
+    XCTAssertEqual(decoded.destinationRecord(for: .backup1)?.verificationMethod, .sizeCheck)
+    XCTAssertEqual(decoded.verifiedDestinationCount, 2)
+  }
+
+  func testLegacyVerifiedClipWithChecksumDerivesShaPrimaryOnly() throws {
+    let json = """
+    {
+      "id": "44444444-4444-4444-4444-444444444444",
+      "originalSourcePath": "/Volumes/CARD/A003.MP4",
+      "originalFilename": "A003.MP4",
+      "currentPath": "/Projects/Event/A003.MP4",
+      "relativePath": "A003.MP4",
+      "fileSize": 2048,
+      "copyStatus": "copied",
+      "verificationStatus": "verified",
+      "checksum": "deadbeef"
+    }
+    """.data(using: .utf8)!
+
+    let decoded = try decoder().decode(Clip.self, from: json)
+
+    XCTAssertEqual(decoded.destinationRecords.count, 1)
+    let primary = try XCTUnwrap(decoded.destinationRecord(for: .primary))
+    XCTAssertTrue(primary.isVerified)
+    XCTAssertEqual(primary.verificationMethod, .sha256)
+    XCTAssertEqual(primary.checksum, "deadbeef")
+    XCTAssertEqual(primary.byteSize, 2048)
+    XCTAssertNil(decoded.destinationRecord(for: .backup1), "No backup state is invented for old projects")
+    // Aggregate fields are untouched by the migration.
+    XCTAssertEqual(decoded.verificationStatus, .verified)
+    XCTAssertEqual(decoded.checksum, "deadbeef")
+  }
+
+  func testLegacyVerifiedClipWithoutChecksumIsLabeledSizeCheck() throws {
+    let json = """
+    {
+      "originalSourcePath": "/Volumes/CARD/A004.MP4",
+      "originalFilename": "A004.MP4",
+      "currentPath": "/Projects/Event/A004.MP4",
+      "relativePath": "A004.MP4",
+      "fileSize": 1024,
+      "verificationStatus": "verified"
+    }
+    """.data(using: .utf8)!
+
+    let primary = try XCTUnwrap(try decoder().decode(Clip.self, from: json).destinationRecord(for: .primary))
+
+    XCTAssertTrue(primary.isVerified)
+    XCTAssertEqual(primary.verificationMethod, .sizeCheck)
+    XCTAssertNil(primary.checksum)
+  }
+
+  func testLegacyClipWithNoDestinationPathHasNoRecords() throws {
+    let json = """
+    { "originalSourcePath": "/Volumes/CARD/A005.MP4", "relativePath": "A005.MP4", "fileSize": 1 }
+    """.data(using: .utf8)!
+
+    XCTAssertTrue(try decoder().decode(Clip.self, from: json).destinationRecords.isEmpty)
+  }
+
+  func testBackupFailureNeverDowngradesVerifiedPrimary() {
+    var clip = verifiedClip(checksum: nil)
+    clip.refreshPrimaryRecord(destinationPath: "/Projects/Event", method: .sizeCheck)
+
+    let failed = BackupCopyResult(role: .backup1, rootPath: "/Volumes/Backup", warning: "Backup 1 is unavailable.")
+    clip.setDestinationRecord(failed.record())
+
+    XCTAssertEqual(clip.destinationRecord(for: .primary)?.verificationState, .verified)
+    XCTAssertEqual(clip.destinationRecord(for: .backup1)?.verificationState, .failed)
+    XCTAssertEqual(clip.destinationRecord(for: .backup1)?.errorMessage, "Backup 1 is unavailable.")
+    XCTAssertEqual(clip.verifiedDestinationCount, 1)
+  }
+
+  func testVerifiedPrimaryDoesNotImplyVerifiedBackup() {
+    var clip = verifiedClip(checksum: "abc")
+    clip.refreshPrimaryRecord(destinationPath: "/Projects/Event")
+    XCTAssertNil(clip.destinationRecord(for: .backup1))
+    XCTAssertEqual(clip.verifiedDestinationCount, 1)
+  }
+
+  func testBackupRecordNeverLabelsSizeCheckAsChecksum() {
+    let outcome = VerificationOutcome(mode: .fast, bytes: 10, checksum: nil)
+    let record = BackupCopyResult(role: .backup2, rootPath: "/B", byteSize: 10, outcome: outcome).record()
+    XCTAssertEqual(record.verificationMethod, .sizeCheck)
+    XCTAssertNil(record.checksum)
+
+    let strong = VerificationOutcome(mode: .strong, bytes: 10, checksum: "ff")
+    let strongRecord = BackupCopyResult(role: .backup2, rootPath: "/B", byteSize: 10, outcome: strong).record()
+    XCTAssertEqual(strongRecord.verificationMethod, .sha256)
+    XCTAssertEqual(strongRecord.checksum, "ff")
+  }
+
+  func testBackupWarningIsNotStoredAsPrimaryError() {
+    var clip = verifiedClip(checksum: nil)
+    clip.errorMessage = "Primary verified. Backup warning: Backup 1 is unavailable."
+    clip.refreshPrimaryRecord(destinationPath: "/Projects/Event")
+    XCTAssertNil(clip.destinationRecord(for: .primary)?.errorMessage)
+  }
+
+  func testRefreshPrimaryRecordFollowsFailure() {
+    var clip = verifiedClip(checksum: nil)
+    clip.copyStatus = .failed
+    clip.verificationStatus = .failed
+    clip.errorMessage = "The destination is full."
+    clip.refreshPrimaryRecord(destinationPath: "/Projects/Event")
+    let primary = clip.destinationRecord(for: .primary)
+    XCTAssertEqual(primary?.copyState, .failed)
+    XCTAssertEqual(primary?.verificationState, .failed)
+    XCTAssertEqual(primary?.verificationMethod, VerificationMethod.none)
+    XCTAssertEqual(primary?.errorMessage, "The destination is full.")
+  }
 }
