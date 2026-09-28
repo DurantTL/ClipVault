@@ -106,23 +106,27 @@ extension IngestService {
             if let checksum = outcome.checksum, !checksum.isEmpty {
               clip.checksum = checksum
             }
-            do {
-              try await self.copyBackupsIfNeeded(
-                primaryFile: destURL,
-                projectFolder: projectFolder,
-                relativePath: clip.relativePath,
-                settings: settings,
-                progress: progress
-              )
-            } catch is CancellationError {
-              throw CancellationError()
-            } catch {
-              clip.errorMessage = "Primary verified. Backup warning: \(error.localizedDescription)"
+            // Record the verified primary before touching backups so a backup
+            // problem can never obscure it.
+            clip.refreshPrimaryRecord(
+              destinationPath: projectFolder.path, method: VerificationMethod(outcome.mode))
+            // Only cancellation propagates; backup problems come back as results.
+            let backupResults = try await self.copyBackupsIfNeeded(
+              primaryFile: destURL,
+              projectFolder: projectFolder,
+              relativePath: clip.relativePath,
+              settings: settings,
+              progress: progress
+            )
+            for result in backupResults { clip.setDestinationRecord(result.record()) }
+            if let warning = backupResults.combinedWarning {
+              clip.errorMessage = "Primary verified. Backup warning: \(warning)"
             }
           } catch is CancellationError {
             clip.verificationStatus = .pending
             clip.errorMessage = "Ingest canceled safely. Resume to continue this copy."
             clip.copyStatus = .pending
+            clip.refreshPrimaryRecord(destinationPath: projectFolder.path)
             project.clips[idx] = clip
             project.ingestIncomplete = true
             project.ingestStatus = .canceled
@@ -134,6 +138,7 @@ extension IngestService {
             clip.copyStatus = .failed
             clip.verificationStatus = .failed
             clip.errorMessage = StorageRecovery.message(for: error, operation: .ingest)
+            clip.refreshPrimaryRecord(destinationPath: projectFolder.path)
           }
           if clip.verificationStatus == .verified {
             await self.metadata.enrich(&clip)

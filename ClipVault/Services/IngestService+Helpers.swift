@@ -83,7 +83,7 @@ extension IngestService {
     relativePath: String,
     settings: AppSettings,
     progress: @escaping @MainActor (IngestProgress) -> Void
-  ) async throws {
+  ) async throws -> [BackupCopyResult] {
     typealias BackupConfiguration = (path: String, bookmark: String, persistKey: String)
     let backups: [BackupConfiguration]
     switch settings.backupTransferMode {
@@ -110,11 +110,12 @@ extension IngestService {
       backups = []
     }
 
-    var warnings: [String] = []
+    var results: [BackupCopyResult] = []
     for (index, backup) in backups.enumerated() {
-      let label = "Backup \(index + 1)"
+      let role: DestinationRole = index == 0 ? .backup1 : .backup2
+      let label = role.label
       guard !backup.path.isEmpty else {
-        warnings.append("\(label) is not configured.")
+        results.append(BackupCopyResult(role: role, rootPath: "", warning: "\(label) is not configured."))
         continue
       }
       guard let root = StoragePreferences.backupURL(
@@ -122,7 +123,9 @@ extension IngestService {
         bookmarkBase64: backup.bookmark,
         persistKey: backup.persistKey
       ), FileManager.default.fileExists(atPath: root.path) else {
-        warnings.append("\(label) is unavailable. The primary copy remains verified.")
+        results.append(BackupCopyResult(
+          role: role, rootPath: backup.path,
+          warning: "\(label) is unavailable. The primary copy remains verified."))
         continue
       }
 
@@ -165,25 +168,58 @@ extension IngestService {
           message: "Verifying \(label)"
         ))
         let verificationMode: VerificationMode = resumedFromPartial ? .strong : settings.verificationMode
-        _ = try await self.verifier.verify(
+        let outcome = try await self.verifier.verify(
           source: primaryFile,
           destination: destination,
           mode: verificationMode
         )
+        results.append(BackupCopyResult(role: role, rootPath: root.path, byteSize: size, outcome: outcome))
       } catch is CancellationError {
         throw CancellationError()
       } catch {
-        warnings.append(StorageRecovery.message(for: error, operation: .backup))
+        results.append(BackupCopyResult(
+          role: role, rootPath: root.path,
+          warning: StorageRecovery.message(for: error, operation: .backup)))
       }
     }
-
-    if !warnings.isEmpty {
-      throw BackupTransferWarnings(messages: warnings)
-    }
+    return results
   }
 }
 
-private struct BackupTransferWarnings: LocalizedError {
-  let messages: [String]
-  var errorDescription: String? { messages.joined(separator: " ") }
+/// Outcome of copying one clip to one backup destination. `warning` is set when
+/// the backup did not complete; the primary copy is unaffected either way.
+struct BackupCopyResult {
+  var role: DestinationRole
+  var rootPath: String
+  var byteSize: Int64 = 0
+  var outcome: VerificationOutcome?
+  var warning: String?
+
+  /// Per-destination record for this result. Never labels a size check as
+  /// checksum verification.
+  func record(now: Date = Date()) -> DestinationCopyRecord {
+    var record = DestinationCopyRecord(role: role)
+    record.destinationPath = rootPath
+    record.byteSize = byteSize
+    record.updatedAt = now
+    if let outcome, warning == nil {
+      record.copyState = .copied
+      record.verificationState = .verified
+      record.checksum = outcome.checksum
+      record.verificationMethod = outcome.checksum == nil ? .sizeCheck : .sha256
+    } else {
+      record.copyState = .failed
+      record.verificationState = .failed
+      record.errorMessage = warning
+    }
+    return record
+  }
+}
+
+extension Array where Element == BackupCopyResult {
+  /// Joined backup warnings in the wording ingest has always stored, or nil.
+  var combinedWarning: String? {
+    let warnings = compactMap(\.warning)
+    return warnings.isEmpty ? nil : warnings.joined(separator: " ")
+  }
 }

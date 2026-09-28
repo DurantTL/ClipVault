@@ -83,6 +83,8 @@ struct Clip: Identifiable, Codable, Equatable, Transferable {
   var thumbnailErrorMessage: String?
   var errorMessage: String?
   var previewUnavailable: Bool = false
+  /// One record per destination holding a copy (primary, Backup 1, Backup 2).
+  var destinationRecords: [DestinationCopyRecord] = []
 
   var title: String = ""
   var description: String = ""
@@ -155,7 +157,7 @@ struct Clip: Identifiable, Codable, Equatable, Transferable {
     case whiteBalanceKelvin, whiteBalanceTint, whiteBalanceConfidence, whiteBalanceSource
     case largestFaceCoveragePercent, bestFaceFrameTime, possibleGroupShot, lowFaceVisibility
     case facePartiallyVisible, uniqueFaceConfidence, shakeScore, motionScore, highMotion
-    case verified
+    case verified, destinationRecords
   }
 
   init(
@@ -295,6 +297,14 @@ struct Clip: Identifiable, Codable, Equatable, Transferable {
     shakeScore = try c.decodeIfPresent(Double.self, forKey: .shakeScore)
     motionScore = try c.decodeIfPresent(Double.self, forKey: .motionScore)
     highMotion = try c.decodeIfPresent(Bool.self, forKey: .highMotion) ?? false
+    if let records = try c.decodeIfPresent([DestinationCopyRecord].self, forKey: .destinationRecords) {
+      destinationRecords = records
+    } else {
+      // Projects saved before per-destination tracking: the aggregate fields
+      // only ever described the primary copy, so derive just that record.
+      // Backup state was never recorded, so none is invented.
+      destinationRecords = currentPath.isEmpty ? [] : [primaryRecordFromAggregateFields()]
+    }
   }
 
   func encode(to encoder: Encoder) throws {
@@ -395,6 +405,54 @@ struct Clip: Identifiable, Codable, Equatable, Transferable {
     try c.encodeIfPresent(shakeScore, forKey: .shakeScore)
     try c.encodeIfPresent(motionScore, forKey: .motionScore)
     try c.encode(highMotion, forKey: .highMotion)
+    try c.encode(destinationRecords, forKey: .destinationRecords)
+  }
+
+  func destinationRecord(for role: DestinationRole) -> DestinationCopyRecord? {
+    destinationRecords.first { $0.role == role }
+  }
+
+  /// Number of destinations that hold a verified copy of this clip.
+  var verifiedDestinationCount: Int { destinationRecords.filter(\.isVerified).count }
+
+  /// Inserts or replaces the record for `record.role` only. Other destinations'
+  /// records (in particular a verified primary) are never touched.
+  mutating func setDestinationRecord(_ record: DestinationCopyRecord) {
+    if let index = destinationRecords.firstIndex(where: { $0.role == record.role }) {
+      destinationRecords[index] = record
+    } else {
+      destinationRecords.append(record)
+    }
+  }
+
+  /// Rebuilds the primary record from the aggregate fields (`copyStatus`,
+  /// `verificationStatus`, `checksum`), which describe the primary copy only.
+  /// A backup warning left in `errorMessage` is not a primary error.
+  mutating func refreshPrimaryRecord(destinationPath: String? = nil, method: VerificationMethod? = nil) {
+    var record = primaryRecordFromAggregateFields()
+    record.destinationPath = destinationPath ?? destinationRecord(for: .primary)?.destinationPath ?? ""
+    if record.verificationState == .verified, record.checksum == nil {
+      record.verificationMethod = method ?? .sizeCheck
+    }
+    record.updatedAt = Date()
+    setDestinationRecord(record)
+  }
+
+  private func primaryRecordFromAggregateFields() -> DestinationCopyRecord {
+    var record = DestinationCopyRecord(role: .primary)
+    record.copyState = copyStatus
+    record.verificationState = verificationStatus
+    record.byteSize = fileSize > 0 ? fileSize : expectedFileSize
+    if verificationStatus == .verified {
+      // A stored checksum means strong verification; otherwise only the size
+      // was ever compared, and it is labeled that way.
+      record.checksum = checksum
+      record.verificationMethod = checksum == nil ? .sizeCheck : .sha256
+    }
+    if let message = errorMessage, !message.hasPrefix("Primary verified. Backup warning:") {
+      record.errorMessage = message
+    }
+    return record
   }
 
   var effectiveShotTime: Date? { manualShotTime ?? shotStartTime ?? capturedAt ?? createdAt ?? modifiedAt }
