@@ -8,6 +8,10 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- Resume now copies only the backup destinations that are missing or failed
+  for clips with a verified primary, never re-copying a verified destination,
+  and clears a stale backup warning once the backup verifies. Also available
+  as `IngestService.retryBackups` for finished projects (UI to follow).
 - Per-destination copy/verify records on every clip (primary, Backup 1,
   Backup 2) with verification method, checksum, size, timestamp and error.
   A backup failure never masks a verified primary, and a size-checked copy is
