@@ -39,6 +39,11 @@ All notable changes to this project are documented here. The format follows
   published GitHub Release.
 
 ### Fixed
+- MHL export no longer falls back to a bare filename when a clip's path inside
+  the destination can't be determined; it stops with a clear error instead, and
+  rejects absolute or `..` paths. Removed a stray probe file from the repo root.
+- The privacy page and README now document the one network request (manual
+  Check for Updates) and the sandbox entitlements, including `network.client`.
 - New Ingest refuses a destination that is inside the source folder, or on the
   same card/removable volume as a detected camera card, with a visible message
   and a disabled Start button; the ingest service refuses it too. Nothing is

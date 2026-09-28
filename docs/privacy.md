@@ -65,7 +65,7 @@ See also [Support](support.md).
 
 ## Third-party services
 
-SlateBox’s core workflow is offline. If future optional features contact the network (for example a manual “Check for Updates” against GitHub Releases), those will be described here before they ship. Today there is no Durant Logic cloud backend for ingest or analysis.
+SlateBox’s core workflow is offline. The one network request the app can make is the manual **Help → Check for Updates…** action, which asks GitHub’s public Releases API (`api.github.com`) for the latest published release. It runs only when you choose it, sends no project, media, or personal data (the request carries a generic `ClipVault-UpdateCheck` user agent, and GitHub sees your IP address as it would for any web request), and never downloads or installs anything by itself (if an update exists, **View Release** only opens the release page in your browser when you click it). This is why the app declares the sandbox network-client entitlement. Any future optional feature that contacts the network will be described here before it ships. There is no Durant Logic cloud backend for ingest or analysis.
 
 Folders managed by iCloud Drive, Dropbox, Google Drive, or OneDrive are treated as ordinary local folders when you point SlateBox at them; SlateBox does not implement direct provider upload APIs in the current product.
 

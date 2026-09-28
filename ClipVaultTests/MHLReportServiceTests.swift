@@ -81,7 +81,7 @@ final class MHLReportServiceTests: XCTestCase {
     var failedWithJunk = failed
     failedWithJunk.checksum = "deadbeef"
 
-    let xml = MHLReportService.buildClassicMHLXML(
+    let xml = try MHLReportService.buildClassicMHLXML(
       projectName: "MHL Demo",
       destinationLabel: "Primary",
       clips: [verified, failedWithJunk, pending],
@@ -100,6 +100,62 @@ final class MHLReportServiceTests: XCTestCase {
     XCTAssertFalse(xml.contains("BAD.MP4"))
     XCTAssertFalse(xml.contains("WAIT.MP4"))
     XCTAssertFalse(xml.contains("deadbeef"))
+  }
+
+  // MARK: - Relative path is never guessed
+
+  private func clipWithoutRelativePath(currentPath: String) throws -> Clip {
+    var clip = try makeClip(name: "A001.MP4", content: "x", status: .verified, checksum: "abc")
+    clip.relativePath = ""
+    clip.destinationRelativePath = ""
+    clip.currentPath = currentPath
+    return clip
+  }
+
+  func testRelativePathDerivedFromCurrentPathInsideDestination() throws {
+    let clip = try clipWithoutRelativePath(
+      currentPath: projectFolder.appendingPathComponent("Day1/A001.MP4").path)
+    XCTAssertEqual(try MHLReportService.relativePath(for: clip, destinationRoot: projectFolder), "Day1/A001.MP4")
+  }
+
+  func testRelativePathThrowsInsteadOfFallingBackToFilename() throws {
+    let clip = try clipWithoutRelativePath(currentPath: "/Somewhere/Else/A001.MP4")
+    XCTAssertThrowsError(try MHLReportService.relativePath(for: clip, destinationRoot: projectFolder)) {
+      XCTAssertEqual($0 as? MHLReportError, .unresolvedPath("A001.MP4"))
+    }
+    let noPath = try clipWithoutRelativePath(currentPath: "")
+    XCTAssertThrowsError(try MHLReportService.relativePath(for: noPath, destinationRoot: projectFolder))
+  }
+
+  func testRelativePathRejectsAbsoluteAndTraversalEntries() throws {
+    for bad in ["/abs/A001.MP4", "../A001.MP4", "Day1/../../A001.MP4", "Day1//A001.MP4"] {
+      var clip = try makeClip(name: "A001.MP4", content: "x", status: .verified, checksum: "abc")
+      clip.destinationRelativePath = bad
+      XCTAssertThrowsError(
+        try MHLReportService.relativePath(for: clip, destinationRoot: projectFolder), "\(bad)")
+    }
+    var backslashes = try makeClip(name: "A001.MP4", content: "x", status: .verified, checksum: "abc")
+    backslashes.destinationRelativePath = "Day1\\A001.MP4"
+    XCTAssertEqual(
+      try MHLReportService.relativePath(for: backslashes, destinationRoot: projectFolder), "Day1/A001.MP4")
+  }
+
+  func testGenerateWritesNothingWhenAPathCannotBeResolved() async throws {
+    var clip = try clipWithoutRelativePath(currentPath: "/Somewhere/Else/A001.MP4")
+    clip.checksum = sha256Hex(Data("x".utf8))
+    let project = try makeProject(clips: [clip])
+    do {
+      _ = try await service.generate(
+        project: project, clips: project.clips,
+        destinations: [MHLDestination(label: "Primary", rootURL: projectFolder)],
+        options: MHLExportOptions(
+          now: Date(timeIntervalSince1970: 1_800_000_000),
+          outputDirectory: reportsDir, hostname: "test-host", appVersion: "1.0"))
+      XCTFail("Expected unresolvedPath")
+    } catch let error as MHLReportError {
+      XCTAssertEqual(error, .unresolvedPath("A001.MP4"))
+    }
+    XCTAssertTrue(try FileManager.default.contentsOfDirectory(atPath: reportsDir.path).isEmpty)
   }
 
   func testRefusesWhenOnlyFastVerifyDataExists() async {
