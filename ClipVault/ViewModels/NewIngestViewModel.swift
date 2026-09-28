@@ -91,8 +91,20 @@ import Foundation
     }
   }
 
+  /// Message when the chosen destination is on the source card (or inside the
+  /// source folder); nil when the destination is safe. Start Ingest stays
+  /// disabled while this is set.
+  var destinationConflictError: String? {
+    guard let sourceURL, let destinationURL else { return nil }
+    return SourceDestinationGuard.conflict(
+      source: sourceURL,
+      destination: destinationURL,
+      sourceLooksLikeCard: detectedCardType != .generic
+    )?.localizedDescription
+  }
+
   var finalOutputURL: URL? {
-    guard let destinationURL, nameValidationError == nil,
+    guard let destinationURL, nameValidationError == nil, destinationConflictError == nil,
       let name = try? SafeFilename.validatedComponent(projectName)
     else { return nil }
     var url = destinationURL.appendingPathComponent(name, isDirectory: true)
@@ -203,6 +215,10 @@ import Foundation
     error = nil
     if let nameError = nameValidationError {
       error = nameError
+      return nil
+    }
+    if let conflict = destinationConflictError {
+      error = conflict
       return nil
     }
     guard hasSufficientDestinationCapacity else {

@@ -73,6 +73,40 @@ final class PathValidationTests: XCTestCase {
     XCTAssertFalse(FileManager.default.fileExists(atPath: root.deletingLastPathComponent().appendingPathComponent("escape").path))
   }
 
+  // MARK: - Destination vs. source guard
+
+  func testDestinationInsideSourceIsRefused() {
+    let card = URL(fileURLWithPath: "/ClipVaultTestVolume/CARD")
+    XCTAssertEqual(
+      SourceDestinationGuard.conflict(
+        source: card, destination: card.appendingPathComponent("PRIVATE/Out"), sourceLooksLikeCard: false),
+      .destinationOnSource)
+    XCTAssertEqual(
+      SourceDestinationGuard.conflict(source: card, destination: card, sourceLooksLikeCard: false),
+      .destinationOnSource, "The source folder itself is not a valid destination")
+  }
+
+  func testUnrelatedDestinationIsAllowed() {
+    let card = URL(fileURLWithPath: "/ClipVaultTestVolume/CARD")
+    XCTAssertNil(SourceDestinationGuard.conflict(
+      source: card, destination: URL(fileURLWithPath: "/ClipVaultTestVolume/Projects"), sourceLooksLikeCard: false))
+    // A sibling that merely shares a name prefix is not inside the source.
+    XCTAssertNil(SourceDestinationGuard.conflict(
+      source: card, destination: URL(fileURLWithPath: "/ClipVaultTestVolume/CARD2/Out"), sourceLooksLikeCard: false))
+  }
+
+  func testNonexistentVolumesNeverCountAsSharedRemovableVolume() {
+    XCTAssertFalse(SourceDestinationGuard.sharesRemovableVolume(
+      source: URL(fileURLWithPath: "/ClipVaultTestVolume/A"),
+      destination: URL(fileURLWithPath: "/ClipVaultTestVolume/B")))
+  }
+
+  func testGuardMessageIsActionable() {
+    XCTAssertEqual(
+      PathValidationError.destinationOnSource.errorDescription,
+      "The destination is on the source card. Choose a folder on a different drive so nothing is ever written to the card.")
+  }
+
   // Uses a made-up top-level path so the result does not depend on which
   // directories exist (or are symlinked) on the machine running the tests.
   func testContainmentIsCaseInsensitive() {

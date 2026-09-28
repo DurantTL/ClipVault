@@ -95,6 +95,33 @@ final class IngestServiceTests: XCTestCase {
     XCTAssertTrue(contents.isEmpty)
   }
 
+  func testIngestRefusesDestinationInsideSourceAndWritesNothingToIt() async throws {
+    let videos = [try addSourceVideo("C0001.MP4")]
+    let insideSource = sourceRoot.appendingPathComponent("Ingests", isDirectory: true)
+    try FileManager.default.createDirectory(at: insideSource, withIntermediateDirectories: true)
+    let before = try FileManager.default.contentsOfDirectory(atPath: sourceRoot.path).sorted()
+
+    do {
+      _ = try await IngestService().ingest(
+        name: "Ingest Test",
+        shootName: "",
+        source: sourceRoot,
+        destination: insideSource,
+        videos: videos,
+        bookmarks: (nil, nil),
+        settings: makeSettings(),
+        cameraCardMetadata: IngestCameraCardMetadata(),
+        progress: { _ in }
+      )
+      XCTFail("Expected the destination-on-source error")
+    } catch let error as PathValidationError {
+      XCTAssertEqual(error, .destinationOnSource)
+    }
+
+    XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: sourceRoot.path).sorted(), before)
+    XCTAssertTrue(try FileManager.default.contentsOfDirectory(atPath: insideSource.path).isEmpty)
+  }
+
   func testRetryBackupsCopiesOnlyMissingBackupsAndKeepsPrimaryVerified() async throws {
     let settings = makeSettings()
     // AppSettings is backed by UserDefaults, so put the user's values back.

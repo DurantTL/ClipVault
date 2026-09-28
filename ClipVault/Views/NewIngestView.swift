@@ -302,6 +302,11 @@ struct NewIngestView: View {
             vm.destinationCapacityStatus == .insufficient ? Color.red : Color.orange
           )
         }
+        if let conflict = vm.destinationConflictError {
+          Label(conflict, systemImage: "exclamationmark.octagon.fill")
+            .font(.caption)
+            .foregroundStyle(Color.red)
+        }
         statusArea
         Spacer(minLength: 8)
         Button("Start Ingest") {
@@ -319,6 +324,7 @@ struct NewIngestView: View {
             || vm.selectedVideos.isEmpty
             || vm.projectName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             || vm.nameValidationError != nil
+            || vm.destinationConflictError != nil
             || vm.destinationURL == nil
             || !vm.hasSufficientDestinationCapacity
         )

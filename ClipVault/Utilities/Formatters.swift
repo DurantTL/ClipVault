@@ -109,6 +109,7 @@ enum PathValidationError: LocalizedError, Equatable {
   case invalidCharacters(String)
   case tooLong(String)
   case escapesDestination
+  case destinationOnSource
 
   var errorDescription: String? {
     switch self {
@@ -117,9 +118,49 @@ enum PathValidationError: LocalizedError, Equatable {
       return "\(label) can't contain / \\ : control characters, or start with ~."
     case .tooLong(let label): return "\(label) is too long."
     case .escapesDestination: return "That name would place files outside the chosen destination."
+    case .destinationOnSource:
+      return "The destination is on the source card. Choose a folder on a different drive so nothing is ever written to the card."
     }
   }
 }
+
+/// Keeps ingest from writing onto the media it is copying from. Sources are
+/// never modified, so a destination on the source itself is refused up front.
+enum SourceDestinationGuard {
+  /// The destination is the source folder or somewhere inside it.
+  static func destinationIsInsideSource(source: URL, destination: URL) -> Bool {
+    SafeFilename.isContained(destination, in: source)
+  }
+
+  /// Both folders are on the same removable or ejectable volume (a card or
+  /// external drive). `false` when either volume cannot be determined.
+  static func sharesRemovableVolume(source: URL, destination: URL) -> Bool {
+    let keys: Set<URLResourceKey> = [.volumeURLKey, .volumeIsRemovableKey, .volumeIsEjectableKey]
+    guard let sourceValues = try? source.resourceValues(forKeys: keys),
+      let destinationValues = try? destination.resourceValues(forKeys: keys),
+      let sourceVolume = sourceValues.volume,
+      let destinationVolume = destinationValues.volume,
+      sourceVolume.standardizedFileURL.path == destinationVolume.standardizedFileURL.path
+    else { return false }
+    return sourceValues.volumeIsRemovable == true || sourceValues.volumeIsEjectable == true
+  }
+
+  /// `sourceLooksLikeCard` limits the same-volume rule to detected camera-card
+  /// layouts, so copying between two folders of an ordinary external drive
+  /// is still allowed.
+  static func conflict(
+    source: URL, destination: URL, sourceLooksLikeCard: Bool
+  ) -> PathValidationError? {
+    if destinationIsInsideSource(source: source, destination: destination) {
+      return .destinationOnSource
+    }
+    if sourceLooksLikeCard, sharesRemovableVolume(source: source, destination: destination) {
+      return .destinationOnSource
+    }
+    return nil
+  }
+}
+
 enum Log {
   static func info(_ msg: String) { print("[\(AppBrand.appName)] \(msg)") }
   /// Verbose preview diagnostics; off unless `defaults write <bundle id> previewDebugLogging -bool YES`.
