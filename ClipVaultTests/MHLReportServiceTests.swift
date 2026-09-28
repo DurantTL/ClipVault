@@ -136,6 +136,77 @@ final class MHLReportServiceTests: XCTestCase {
     XCTAssertTrue(written.filter { $0.hasSuffix(".mhl") }.isEmpty, "must not write a fake success MHL")
   }
 
+  private func backupRecord(verified: Bool, method: VerificationMethod, checksum: String?) -> DestinationCopyRecord {
+    var record = DestinationCopyRecord(role: .backup1)
+    record.copyState = verified ? .copied : .failed
+    record.verificationState = verified ? .verified : .failed
+    record.verificationMethod = verified ? method : .none
+    record.checksum = checksum
+    return record
+  }
+
+  func testSizeCheckedBackupIsNeverListedInItsMHL() async throws {
+    let payload = "primary-copy"
+    let digest = sha256Hex(Data(payload.utf8))
+    var clip = try makeClip(name: "A001.MP4", content: payload, status: .verified, checksum: digest)
+    clip.refreshPrimaryRecord(destinationPath: projectFolder.path)
+    clip.setDestinationRecord(backupRecord(verified: true, method: .sizeCheck, checksum: nil))
+    let project = try makeProject(clips: [clip])
+
+    let summary = try await service.generate(
+      project: project,
+      clips: project.clips,
+      destinations: [
+        MHLDestination(label: "Primary", rootURL: projectFolder, role: .primary),
+        MHLDestination(label: "Backup 1", rootURL: projectFolder, role: .backup1),
+      ],
+      options: MHLExportOptions(
+        now: Date(timeIntervalSince1970: 1_800_000_000),
+        outputDirectory: reportsDir, hostname: "test-host", appVersion: "1.0")
+    )
+
+    XCTAssertEqual(summary.writtenFiles.map(\.destinationLabel), ["Primary"])
+  }
+
+  func testHashVerifiedBackupIsListedWithItsOwnChecksum() async throws {
+    let payload = "primary-copy"
+    let digest = sha256Hex(Data(payload.utf8))
+    var clip = try makeClip(name: "A001.MP4", content: payload, status: .verified, checksum: digest)
+    clip.refreshPrimaryRecord(destinationPath: projectFolder.path, method: .sha256)
+    clip.setDestinationRecord(backupRecord(verified: true, method: .sha256, checksum: digest))
+    let project = try makeProject(clips: [clip])
+
+    let summary = try await service.generate(
+      project: project,
+      clips: project.clips,
+      destinations: [
+        MHLDestination(label: "Primary", rootURL: projectFolder, role: .primary),
+        MHLDestination(label: "Backup 1", rootURL: projectFolder, role: .backup1),
+      ],
+      options: MHLExportOptions(
+        now: Date(timeIntervalSince1970: 1_800_000_000),
+        outputDirectory: reportsDir, hostname: "test-host", appVersion: "1.0")
+    )
+
+    XCTAssertEqual(summary.writtenFiles.count, 2)
+    XCTAssertEqual(summary.writtenFiles.map(\.entryCount), [1, 1])
+  }
+
+  func testPerRoleEligibility() throws {
+    let digest = "abc123"
+    var clip = try makeClip(name: "A001.MP4", content: "x", status: .verified, checksum: digest)
+    // Predates per-destination records: primary falls back to aggregate fields.
+    XCTAssertTrue(MHLReportService.isEligible(clip, for: .primary))
+    XCTAssertFalse(MHLReportService.isEligible(clip, for: .backup1), "No backup record means no backup entry")
+
+    clip.setDestinationRecord(backupRecord(verified: true, method: .sizeCheck, checksum: nil))
+    XCTAssertFalse(MHLReportService.isEligible(clip, for: .backup1))
+    clip.setDestinationRecord(backupRecord(verified: false, method: .sha256, checksum: digest))
+    XCTAssertFalse(MHLReportService.isEligible(clip, for: .backup1))
+    clip.setDestinationRecord(backupRecord(verified: true, method: .sha256, checksum: digest))
+    XCTAssertTrue(MHLReportService.isEligible(clip, for: .backup1))
+  }
+
   func testGenerateWritesMHLUnderProjectReportsNotSourceCard() async throws {
     let payload = "primary-copy"
     let digest = sha256Hex(Data(payload.utf8))

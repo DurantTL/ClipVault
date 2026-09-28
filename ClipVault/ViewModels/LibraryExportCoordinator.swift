@@ -234,6 +234,9 @@ final class LibraryExportCoordinator {
         CSVColumn("checksum", { $0.checksum ?? "" }),
         CSVColumn("copy status", { $0.copyStatus.rawValue }),
         CSVColumn("verification status", { $0.verificationStatus.rawValue }),
+        CSVColumn("verification method", { $0.primaryVerificationMethodLabel }),
+        CSVColumn("backup 1", { $0.destinationRecord(for: .backup1)?.statusText ?? "" }),
+        CSVColumn("backup 2", { $0.destinationRecord(for: .backup2)?.statusText ?? "" }),
         CSVColumn("error", { $0.errorMessage ?? "" })
       ] + paths
     case .analysis:

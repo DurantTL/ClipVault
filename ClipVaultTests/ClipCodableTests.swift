@@ -307,4 +307,19 @@ final class ClipCodableTests: XCTestCase {
     XCTAssertEqual(IngestService.configuredBackupRoles(mode: "Primary + Backup 1"), [.backup1])
     XCTAssertEqual(IngestService.configuredBackupRoles(mode: "Primary + Backup 1 + Backup 2"), [.backup1, .backup2])
   }
+
+  func testPrimaryVerificationMethodLabelIsUnambiguous() {
+    var clip = verifiedClip(checksum: nil)
+    XCTAssertEqual(clip.primaryVerificationMethodLabel, "size check", "No checksum means only sizes were compared")
+    clip.checksum = "abc"
+    XCTAssertEqual(clip.primaryVerificationMethodLabel, "SHA256")
+    clip.verificationStatus = .failed
+    XCTAssertEqual(clip.primaryVerificationMethodLabel, "not verified")
+    clip.verificationStatus = .pending
+    XCTAssertEqual(clip.primaryVerificationMethodLabel, "not verified")
+
+    var recorded = verifiedClip(checksum: nil)
+    recorded.refreshPrimaryRecord(destinationPath: "/P", method: .sizeCheck)
+    XCTAssertEqual(recorded.primaryVerificationMethodLabel, "size check")
+  }
 }

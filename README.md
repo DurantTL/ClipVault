@@ -118,7 +118,13 @@ Each clip is classified as New, Already at Destination, Already in Project, Alre
 | **Fast size check** (default) | Copied file size matches the source | Does not reread the card |
 | **Strong SHA256** | Byte-level hash of source and destination | Reads both source and destination; slow for large 4K60 10-bit files |
 
-> **Known gap:** the shipping default is a size check, which cannot detect corruption that preserves file length. Full-content verification by default — hashing the source once during the copy rather than in a second pass — is tracked in [#92](https://github.com/DurantTL/ClipVault/issues/92) and gates any paid trust claim. Reports and exports must never describe a size-checked copy as checksum-verified.
+**Decision (#92):** the default stays **Fast size check**. It is quick and does not reread the card, but it cannot detect corruption that preserves file length. To keep that trade-off honest:
+
+- Every clip records which method verified each copy (size check or SHA256), and the library, inspector, and Verification Report CSV say so. A size-checked copy is never labeled as checksum-verified.
+- MHL reports only list copies verified with SHA256, per destination; a backup that was only size checked gets no hash entry.
+- Choose **Strong SHA256** in Settings when you need content-level proof (for example before formatting a card or delivering an MHL).
+
+Hashing the source once during the copy, so strong verification no longer needs a second pass over the card, is still open in [#92](https://github.com/DurantTL/ClipVault/issues/92).
 
 ## Library, culling, and review
 
