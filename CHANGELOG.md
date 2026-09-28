@@ -26,6 +26,9 @@ All notable changes to this project are documented here. The format follows
   published GitHub Release.
 
 ### Fixed
+- Destination containment is now asserted for backups, resume, alias folders,
+  physical-sort moves, edit-folder exports, and MHL report output, not only
+  the primary ingest folder.
 - Project and shoot names are validated (no `..`, separators, `~`, control
   characters) and ingest asserts the project folder stays inside the chosen
   destination; Start Ingest is blocked with a clear message otherwise.

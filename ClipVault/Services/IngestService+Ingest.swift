@@ -77,6 +77,7 @@ extension IngestService {
               message: self.isPausedNow ? "Paused" : "Copying"))
           var clip = project.clips[idx]
           let destURL = URL(fileURLWithPath: clip.currentPath)
+          try SafeFilename.assertContained(destURL, in: projectFolder)
           clip.copyStatus = .copying
           project.clips[idx] = clip
           self.refreshCounts(&project)

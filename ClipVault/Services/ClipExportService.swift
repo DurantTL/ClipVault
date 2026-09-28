@@ -46,6 +46,7 @@ final class ClipExportService {
         }
         let target = SafeFilename.uniqueURL(for: destination.appendingPathComponent(item.mediaURL.lastPathComponent))
         do {
+          try SafeFilename.assertContained(target, in: destination)
           try FileManager.default.copyItem(at: item.mediaURL, to: target)
           summary.copiedCount += 1
           summary.totalBytesCopied += item.clip.fileSize
