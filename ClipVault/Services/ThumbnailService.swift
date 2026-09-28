@@ -42,6 +42,7 @@ actor ThumbnailService {
       try await security.withAccessAsync(to: mediaURL) {
         try await security.withAccessAsync(to: storage.accessURL) {
           let cache = storage.directoryURL
+          try SafeFilename.assertContained(cache, in: storage.accessURL)
           try FileManager.default.createDirectory(at: cache, withIntermediateDirectories: true)
 
           let dest = cache

@@ -97,7 +97,9 @@ enum SafeFilename {
     }
     var resolved = existing.resolvingSymlinksInPath()
     for part in trailing { resolved.appendPathComponent(part) }
-    let path = resolved.standardizedFileURL.path
+    // Canonical (NFC) form so composed and decomposed spellings of the same
+    // name compare equal, as they do on APFS/HFS+.
+    let path = resolved.standardizedFileURL.path.precomposedStringWithCanonicalMapping
     return path.count > 1 && path.hasSuffix("/") ? String(path.dropLast()) : path
   }
 }
