@@ -84,4 +84,58 @@ final class ClipExportServiceTests: XCTestCase {
     XCTAssertTrue(summary.message.contains("1 skipped"))
     XCTAssertTrue(summary.message.contains(destination.path))
   }
+
+  // MARK: - Verified export
+
+  func testExportIsVerifiedAndLeavesNoPartialFiles() async throws {
+    let item = try makeMedia(named: "A001.MP4", content: "verified export")
+
+    let summary = await service.copyClips([item], to: destination, verificationMode: .fast) { _ in }
+
+    XCTAssertEqual(summary.copiedCount, 1)
+    XCTAssertEqual(summary.verificationMethod, "size check")
+    XCTAssertTrue(summary.message.contains("verified by size check"))
+    let names = try FileManager.default.contentsOfDirectory(atPath: destination.path)
+    XCTAssertEqual(names, ["A001.MP4"], "no .clipvault-partial or manifest files may remain")
+  }
+
+  func testStrongExportReportsSHA256AndCopiesIdenticalBytes() async throws {
+    let payload = String(repeating: "0123456789", count: 5_000)
+    let item = try makeMedia(named: "A001.MP4", content: payload)
+
+    let summary = await service.copyClips([item], to: destination, verificationMode: .strong) { _ in }
+
+    XCTAssertEqual(summary.copiedCount, 1)
+    XCTAssertEqual(summary.verificationMethod, "SHA256")
+    XCTAssertEqual(try String(contentsOf: destination.appendingPathComponent("A001.MP4")), payload)
+  }
+
+  func testNothingCopiedMeansNoVerificationClaim() async throws {
+    let missing = try makeMedia(named: "GONE.MP4", content: "gone")
+    try FileManager.default.removeItem(at: missing.mediaURL)
+
+    let summary = await service.copyClips([missing], to: destination) { _ in }
+
+    XCTAssertEqual(summary.copiedCount, 0)
+    XCTAssertNil(summary.verificationMethod)
+    XCTAssertFalse(summary.message.contains("verified"))
+  }
+
+  func testUnverifiedCopyIsSetAsideNotDeletedOrOverwritten() throws {
+    let bad = destination.appendingPathComponent("A001.MP4")
+    try Data("corrupt".utf8).write(to: bad)
+
+    let first = ClipExportService.setAsideUnverified(bad)
+
+    XCTAssertEqual(first.lastPathComponent, "A001.MP4.unverified")
+    XCTAssertFalse(FileManager.default.fileExists(atPath: bad.path), "must not stay under its media name")
+    XCTAssertEqual(try String(contentsOf: first), "corrupt", "the file is kept, not deleted")
+
+    // A second failure for the same name must not overwrite the first.
+    try Data("corrupt again".utf8).write(to: bad)
+    let second = ClipExportService.setAsideUnverified(bad)
+    XCTAssertNotEqual(second, first)
+    XCTAssertEqual(try String(contentsOf: first), "corrupt")
+    XCTAssertEqual(try String(contentsOf: second), "corrupt again")
+  }
 }
