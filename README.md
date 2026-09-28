@@ -281,6 +281,18 @@ SlateBox is sandboxed:
 - Persisted bookmarks are refreshed while their security scope is active. A grant is re-requested only when a volume remounts at a path the saved bookmark does not cover.
 - Stale bookmarks self-heal: when a file server or volume is renamed, the bookmark is re-created from the resolved location and persisted.
 
+### Sandbox entitlements
+
+| Entitlement | Why |
+|---|---|
+| `com.apple.security.app-sandbox` | The app is sandboxed. |
+| `com.apple.security.files.user-selected.read-write` | Folders you choose for destinations, backups, and exports. |
+| `com.apple.security.files.bookmarks.app-scope` | Security-scoped bookmarks so grants survive relaunch. |
+| `com.apple.security.files.removable-media.read-only` | Read-only access to SD cards and other removable volumes. |
+| `com.apple.security.network.client` | Only for the manual **Check for Updates…** request to GitHub Releases. Nothing else uses the network; see [`docs/privacy.md`](docs/privacy.md). |
+
+`ClipVault/ClipVault.entitlements` is the source of truth; update this table whenever it changes.
+
 ## Project files
 
 Each project folder contains a hidden `.clipvault-project.json` metadata file. **Open Existing Project** accepts either the project folder or the hidden JSON file. Recent projects are stored as metadata-file paths and show a friendly error when an external SSD or NAS volume is unavailable.

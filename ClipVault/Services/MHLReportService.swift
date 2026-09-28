@@ -41,9 +41,12 @@ enum MHLReportError: LocalizedError, Equatable {
   case noEligibleClips
   case canceled
   case forbiddenSourceWrite(String)
+  case unresolvedPath(String)
 
   var errorDescription: String? {
     switch self {
+    case .unresolvedPath(let filename):
+      return "Could not determine where \(filename) sits inside the destination, so no MHL was written. A hash list must not name a wrong path."
     case .noEligibleClips:
       return "No strongly verified clips with SHA256 checksums are available for an MHL report. Run strong verification first."
     case .canceled:
@@ -128,7 +131,7 @@ final class MHLReportService {
           // no hash-verified copies.
           if destinationClips.isEmpty { continue }
 
-          let xml = Self.buildClassicMHLXML(
+          let xml = try Self.buildClassicMHLXML(
             projectName: project.name,
             destinationLabel: destination.label,
             clips: destinationClips,
@@ -186,7 +189,7 @@ final class MHLReportService {
     createdAt: Date,
     hostname: String,
     appVersion: String
-  ) -> String {
+  ) throws -> String {
     let iso = ISO8601DateFormatter()
     iso.formatOptions = [.withInternetDateTime]
     var lines: [String] = []
@@ -203,7 +206,7 @@ final class MHLReportService {
     lines.append("  </creatorinfo>")
 
     for clip in clips where isEligible(clip) {
-      let relative = relativePath(for: clip, destinationRoot: destinationRoot)
+      let relative = try relativePath(for: clip, destinationRoot: destinationRoot)
       let checksum = clip.checksum ?? ""
       lines.append("  <hash>")
       lines.append("    <file>\(xmlEscape(relative))</file>")
@@ -221,16 +224,26 @@ final class MHLReportService {
     return lines.joined(separator: "\n")
   }
 
-  static func relativePath(for clip: Clip, destinationRoot: URL) -> String {
+  /// Path of the clip relative to the destination root. This is a proof
+  /// artifact, so it throws instead of guessing (for example a bare filename)
+  /// when the path cannot be established or is not a plain relative path.
+  static func relativePath(for clip: Clip, destinationRoot: URL) throws -> String {
     let preferred = clip.destinationRelativePath.isEmpty ? clip.relativePath : clip.destinationRelativePath
-    if !preferred.isEmpty { return preferred.replacingOccurrences(of: "\\", with: "/") }
+    if !preferred.isEmpty {
+      let normalized = preferred.replacingOccurrences(of: "\\", with: "/")
+      let parts = normalized.split(separator: "/", omittingEmptySubsequences: false)
+      guard !normalized.hasPrefix("/"), !parts.contains(".."), !parts.contains("") else {
+        throw MHLReportError.unresolvedPath(clip.currentFilename)
+      }
+      return normalized
+    }
 
     let rootPath = destinationRoot.standardizedFileURL.path
     let clipPath = URL(fileURLWithPath: clip.currentPath).standardizedFileURL.path
-    if clipPath.hasPrefix(rootPath + "/") {
+    if !clip.currentPath.isEmpty, clipPath.hasPrefix(rootPath + "/") {
       return String(clipPath.dropFirst(rootPath.count + 1))
     }
-    return clip.currentFilename
+    throw MHLReportError.unresolvedPath(clip.currentFilename)
   }
 
   /// Hard safety: never write MHL under a clip's source path or its `/Volumes/...` card root.
