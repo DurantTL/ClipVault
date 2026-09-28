@@ -120,6 +120,14 @@ final class ClipCodableTests: XCTestCase {
     backup.verificationMethod = .sizeCheck
     backup.byteSize = 4096
     clip.setDestinationRecord(backup)
+    // Project JSON stores dates to the whole second (ISO 8601), so pin the
+    // timestamps instead of comparing sub-second `Date()` values.
+    let fixedDate = Date(timeIntervalSince1970: 1_700_000_000)
+    clip.destinationRecords = clip.destinationRecords.map { record in
+      var pinned = record
+      pinned.updatedAt = fixedDate
+      return pinned
+    }
 
     let decoded = try decoder().decode(Clip.self, from: try encoder().encode(clip))
 
