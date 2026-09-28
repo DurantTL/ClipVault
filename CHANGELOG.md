@@ -26,6 +26,8 @@ All notable changes to this project are documented here. The format follows
   published GitHub Release.
 
 ### Fixed
+- Added `LibraryViewModel` unit tests covering filters, sorting, rating/cull
+  sync, multi-select edits, persistence, and edit-folder export scopes.
 - Destination containment is now asserted for backups, resume, alias folders,
   physical-sort moves, edit-folder exports, and MHL report output, not only
   the primary ingest folder.
