@@ -318,6 +318,7 @@ struct NewIngestView: View {
             || preflight.isRunning
             || vm.selectedVideos.isEmpty
             || vm.projectName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || vm.nameValidationError != nil
             || vm.destinationURL == nil
             || !vm.hasSufficientDestinationCapacity
         )

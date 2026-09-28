@@ -2,7 +2,8 @@ import AppKit
 import Foundation
 
 struct RecentProjectSummary: Identifiable {
-  let id = UUID()
+  /// Stable across launches and rebuilds: identity is the project path.
+  var id: String { path }
   let path: String
   let project: ClipVaultProject?
 

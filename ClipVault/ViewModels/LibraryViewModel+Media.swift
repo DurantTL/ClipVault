@@ -78,6 +78,7 @@ extension LibraryViewModel {
   func logPreviewFailure(for clip: Clip, reason: String, avPlayerError: Error? = nil) {
     let url = resolvedMediaURL(for: clip)
     let exists = url.map { FileManager.default.fileExists(atPath: $0.path) } ?? false
+    guard Log.previewDebugEnabled else { return }
     print("""
     Preview failure: filename=\(clip.currentFilename), reason=\(reason), resolvedURL=\(url?.path ?? "nil"), fileExists=\(exists), copyStatus=\(clip.copyStatus.rawValue), verificationStatus=\(clip.verificationStatus.rawValue), thumbnailStatus=\(clip.thumbnailStatus.rawValue), avPlayerError=\(avPlayerError?.localizedDescription ?? "none")
     """)

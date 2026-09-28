@@ -25,6 +25,14 @@ All notable changes to this project are documented here. The format follows
   signing and notarization when secrets are configured, DMG packaging, and a
   published GitHub Release.
 
+### Fixed
+- Project and shoot names are validated (no `..`, separators, `~`, control
+  characters) and ingest asserts the project folder stays inside the chosen
+  destination; Start Ingest is blocked with a clear message otherwise.
+- Recent project rows now have a stable, path-based identity.
+- `PlayerViewModel` is `@MainActor`; preview debug logging is off by default
+  (`defaults write <bundle id> previewDebugLogging -bool YES` to enable).
+
 ### Changed
 - All user-visible brand strings flow through `AppBrand`; hidden on-disk
   format identifiers are frozen regardless of future product renames.
