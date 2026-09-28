@@ -5,6 +5,10 @@ extension IngestService {
     name: String, shootName: String, source: URL, destination: URL, videos: [SourceVideo], bookmarks: (Data?, Data?),
     settings: AppSettings, cameraCardMetadata: IngestCameraCardMetadata, progress: @escaping @MainActor (IngestProgress) -> Void
   ) async throws -> ClipVaultProject {
+    // Refuse before anything is created: never write into the source folder.
+    if SourceDestinationGuard.destinationIsInsideSource(source: source, destination: destination) {
+      throw PathValidationError.destinationOnSource
+    }
     self.resetControlState()
     self.copyService.isCancelled = { [weak self] in self?.isCancelledNow ?? false }
     self.copyService.isPaused = { [weak self] in self?.isPausedNow ?? false }

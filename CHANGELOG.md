@@ -39,6 +39,10 @@ All notable changes to this project are documented here. The format follows
   published GitHub Release.
 
 ### Fixed
+- New Ingest refuses a destination that is inside the source folder, or on the
+  same card/removable volume as a detected camera card, with a visible message
+  and a disabled Start button; the ingest service refuses it too. Nothing is
+  ever written onto the source.
 - A backup warning on a clip is no longer overwritten by the "preview
   unavailable" message when metadata reading fails.
 - Thumbnail generation asserts its storage directory stays inside the granted
