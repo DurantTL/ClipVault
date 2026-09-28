@@ -35,6 +35,8 @@ All notable changes to this project are documented here. The format follows
   published GitHub Release.
 
 ### Fixed
+- A backup warning on a clip is no longer overwritten by the "preview
+  unavailable" message when metadata reading fails.
 - Thumbnail generation asserts its storage directory stays inside the granted
   access root; containment comparison now treats composed/decomposed Unicode
   names as equal, with tests for case-insensitive and Unicode paths.
