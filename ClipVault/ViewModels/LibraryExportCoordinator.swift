@@ -53,7 +53,7 @@ final class LibraryExportCoordinator {
     }
     let panel = NSOpenPanel()
     panel.title = "Choose Edit Folder"
-    panel.message = "\(AppBrand.appName) will copy \(clips.count) clip\(clips.count == 1 ? "" : "s") (\(scope.label)) into this folder. Nothing is moved or overwritten."
+    panel.message = "\(AppBrand.appName) will copy \(clips.count) clip\(clips.count == 1 ? "" : "s") (\(scope.label)) into this folder. Nothing is moved or overwritten, and each copy is verified after it is written."
     panel.prompt = "Copy Here"
     panel.canChooseDirectories = true
     panel.canChooseFiles = false

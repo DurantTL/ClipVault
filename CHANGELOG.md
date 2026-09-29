@@ -39,6 +39,11 @@ All notable changes to this project are documented here. The format follows
   published GitHub Release.
 
 ### Fixed
+- Edit-folder exports now use the same streaming copy as ingest and verify each
+  copy (using the Verification mode from Settings) before it counts. A copy that
+  fails verification is kept as `<name>.unverified` so an editor never imports
+  it as good media, canceled or failed exports leave no partial files, and the
+  summary says which method verified the copies.
 - MHL export no longer falls back to a bare filename when a clip's path inside
   the destination can't be determined; it stops with a clear error instead, and
   rejects absolute or `..` paths. Removed a stray probe file from the repo root.
